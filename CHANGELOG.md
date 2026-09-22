@@ -1,18 +1,17 @@
 # Changelog
 
-## 1.0.0 - 2026-09-22
+## EEPROM24Cxx 1.0.0 - 2026-09-22
 
 ### Added
 
-- TMP102 and TMP112 typed register driver with normal/extended temperature decoding,
-  conversion rates, shutdown/one-shot operation, thresholds and ALERT configuration.
-- Framework-neutral transport injection, passive health tracking, explicit recovery
-  and configuration verification.
-- Arduino and native ESP-IDF diagnostic examples with shared CLI conventions.
-- Native protocol/failure tests and archived TI reference material.
-- Native ESP-IDF PlatformIO project and support for arbitrary checkout folder names.
+- Zetta ZD24C02B default and explicit 24Cxx geometry profiles.
+- Framework-neutral, owner-polled EEPROM reads, page writes, fill and verification.
+- Typed transport outcomes, write-effect evidence, write-cycle handling and passive health.
+- Shared colored Arduino/native ESP-IDF diagnostic CLI, native tests and S2/S3 builds.
+- Manufacturer datasheets and source research with provenance and checksums.
 
-### Fixed
+### Changed
 
-- CLI configuration retained after rejected operations on an unbound or ended driver.
-- Shutdown-mode watch can resume a pending conversion after a transient read failure.
+- Corrected the library target from the mistakenly requested TMP102/TMP112
+  temperature sensors to 24Cxx EEPROM memory. The former API is removed;
+  its original commit remains in Git history.

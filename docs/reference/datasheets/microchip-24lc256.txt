@@ -1,0 +1,2808 @@
+--- PDF page 1 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 1
+24AA256/24LC256/24FC256
+Features
+• Single Supply with Operation Down to 1.7V for 
+24AA256 and 24FC256 Devices, 2.5V for 
+24LC256 Devices
+• Low-Power CMOS Technology:
+- Write current: 3 mA, maximum
+- Standby current: 1 µA maximum (I-temp.)
+• Two-Wire Serial Interface, I
+2C Compatible
+• Cascadable up to Eight Devices 
+• Schmitt Trigger Inputs for Noise Suppression
+• Output Slope Control to Eliminate Ground Bounce
+• 100 kHz, 400 kHz and 1 MHz Compatibility
+• Page Write Time: 5 ms, maximum
+• Self-Timed Erase/Write Cycle
+• 64-Byte Page Write Buffer
+• Hardware Write-Protect
+• ESD Protection >4000V
+• More than One Million Erase/Write Cycles
+• Data Retention >200 years
+• Factory Programming Available
+• RoHS Compliant
+• Temperature Ranges:
+• Automotive AEC-Q100 Qualified
+Packages
+• 8-Ball CSP , 8-Lead DFN, 8-Lead MSOP , 
+8-Lead PDIP , 8-Lead SOIC, 8-Lead SOIJ, 
+8-Lead TDFN, 8-Lead TSSOP and 
+5-Lead SOT-23
+Description
+The Microchip Technology Inc. 24XX256(1) is a 32K x 8
+(256-Kbit) Serial Electrically Erasable PROM
+(EEPROM), capable of operation across a broad volt-
+age range (1.7V to 5.5V). It has been developed for
+advanced, low-power applications such as personal
+communications or data acquisition. This device also
+has a page write capability of up to 64 bytes of data.
+This device is capable of both random and sequential
+reads up to the 256K boundary. Functional address
+lines allow up to eight devices on the same bus, for up
+to 2 Mbit address space.
+Package Types
+Device Selection Table
+Part Number V CC Range Maximum Clock 
+Frequency
+Temperature 
+Ranges Available Packages
+24AA256 1.7V-5.5V 400 kHz (1) I, E CS, MF, MS, P, SN, SM, MNY, ST
+24LC256 2.5V-5.5V 400 kHz I, E MF, MS, P, SN, SM, MNY, ST
+24FC256 1.7V-5.5V 1 MHz (2) I, E MF, MS, P, OT, SN, SM, MNY, ST
+Note 1: 100 kHz for VCC <2 . 5 V .
+2: 400 kHz for VCC <2 . 5 V .
+- Industrial (I): -40 C to +85C
+- Extended (E):  -40 C to +125C
+Note 1: 24XX256 is used in this document as a
+generic part number for the
+24AA256/24LC256/24FC256 devices.
+CSP 
+1 2 3
+45
+6 7 8
+VCC A1 A0
+WP A2
+SDA SCL V SS
+1
+2
+3
+4
+8
+7
+6
+5
+SOIC/SOIJ/TSSOPDFN/TDFN
+VSS
+WP
+SCL
+SDA
+VCC1
+2
+3
+4
+8
+7
+6
+5
+MSOP/PDIP
+WP
+SCL
+SDA
+VCC1
+2
+3
+4
+8
+7
+6
+5
+WP
+SCL
+SDA
+VCC1
+2
+3
+4
+8
+7
+6
+5
+A0
+A1
+A2
+VSS
+A0
+A1
+A2
+VSS
+A0
+A1
+A2
+24XX256
+24XX256
+24XX256
+Note 1: Pins A0 and A1 are no connects for the MSOP package only.
+(1)
+SCL
+VSS
+SDA
+WP
+VCC
+1
+2
+3
+5
+4
+   SOT-23
+256-Kbit I2C Serial EEPROM
+
+--- PDF page 2 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 2  1998-2022 Microchip Technology Inc. and its subsidiaries
+Block Diagram
+HV Generator
+EEPROM 
+Array
+Page Latches
+YDEC
+XDEC
+Sense Amp.
+R/W Control
+Memory
+Control
+Logic
+I/O
+Control
+Logic
+I/O
+A0 A1A2
+SDA
+SCL
+VCC
+VSS
+WP
+
+--- PDF page 3 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 3
+24AA256/24LC256/24FC256
+1.0 ELECTRICAL CHARACTERISTICS
+Absolute Maximum Ratings(†)
+VCC.............................................................................................................................................................................6.5V
+All inputs and outputs w.r.t. VSS ..........................................................................................................-0.6V to VCC +1.0V
+Storage temperature ...............................................................................................................................-65°C to +150°C
+Ambient temperature with power applied................................................................................................-40°C to +125°C
+ESD protection on all pins 4k V
+† NOTICE: Stresses above those listed under “Absolute Maxi mum Ratings” may cause permanent damage to the
+device. This is a stress rating only and functional operation of the device at these or any other conditions above those
+indicated in the operational listings of this specificati on is not implied. Exposure to Absolute Maximum Rating
+conditions for extended periods may affect device reliability.
+TABLE 1-1: DC CHARACTERISTICS
+DC CHARACTERISTICS Industrial (I): V CC = +1.7V to 5.5V T A = -40°C to +85°C
+Extended (E): V CC = +1.7V to 5.5V T A = -40°C to +125°C
+Param.
+No. Symbol Characteristic Minimum Maximum Units Conditions
+D1 V IH High-Level Input Voltage 0.7 V CC —V
+D2 V IL Low-Level Input Voltage —0 . 3  V CC VV CC  2.5V
+—0 . 2  V CC VV CC < 2.5V
+D3 V HYS Hysteresis of Schmitt Trigger 
+Inputs (SDA, SCL pins) 0.05 VCC —V V CC  2.5V (Note 1)
+D4 V OL Low-Level Output Voltage — 0.40 V IOL = 3.0 mA @ VCC = 4.5V
+IOL = 2.1 mA @ VCC = 2.5V
+D5 I LI Input Leakage Current — ±1 µA VIN = VSS or VCC, WP = VSS
+VIN = VSS or VCC, WP = VCC
+D6 I LO Output Leakage Current — ±1 µA V OUT = VSS or VCC
+D7 CIN, 
+COUT
+Pin Capacitance 
+(all inputs/outputs) —1 0 p F V
+CC = 5.0V (Note 1)
+TA = +25°C, FCLK = 1 MHz
+D8 I CC Read Operating Current — 400 µA V CC = 5.5V, SCL = 400 kHz
+D9 I CC Write — 3 mA V CC = 5.5V
+D10 I CCS Standby Current
+—1 µ A SDA = SCL = VCC =3 . 6 V
+A0, A1, A2, WP = VSS, I-Temp.
+—1 . 5 µ A SDA = SCL = VCC =5 . 5 V
+A0, A1, A2, WP = VSS, I-Temp.
+—5 µ A SDA = SCL = VCC =5 . 5 V
+A0, A1, A2, WP = VSS, E-Temp.
+Note 1: This parameter is periodically sampled and not 100% tested.
+
+--- PDF page 4 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 4  1998-2022 Microchip Technology Inc. and its subsidiaries
+TABLE 1-2: AC CHARACTERISTICS
+AC CHARACTERISTICS Industrial (I): V CC = +1.7V to 5.5V T A = -40°C to +85°C
+Extended (E): V CC = +1.7V to 5.5V T A = -40°C to +125°C
+Param.
+No. Symbol Characteristic Minimum Maximum Units Conditions
+1F CLK Clock Frequency
+—1 0 0 k H z 1 . 7 V   VCC  2.5V
+—4 0 0 k H z 2 . 5 V   VCC  5.5V
+—4 0 0 k H z 1 . 7 V   VCC  2.5V (24FC256)
+— 1000 kHz 2.5V  VCC  5.5V (24FC256)
+2T HIGH Clock High Time
+4000 — ns 1.7V  VCC  2.5V
+600 — ns 2.5V  VCC  5.5V
+600 — ns 1.7V  VCC  2.5V (24FC256)
+500 — ns 2.5V  VCC  5.5V (24FC256)
+3T LOW Clock Low Time
+4700 — ns 1.7V  VCC  2.5V
+1300 — ns 2.5V  VCC  5.5V
+1300 — ns 1.7V  VCC  2.5V (24FC256)
+500 — ns 2.5V  VCC  5.5V (24FC256)
+4T R SDA and SCL Rise Time
+— 1000 ns 1.7V  VCC  2.5V (Note 1)
+— 300 ns 2.5V  VCC  5.5V (Note 1)
+— 300 ns 1.7V  VCC  5.5V (24FC256) 
+(Note 1)
+5T F SDA and SCL Fall Time
+— 300 ns All except 24FC256 ( Note 1)
+— 100 ns 1.7V  VCC  5.5V (24FC256) 
+(Note 1)
+6T HD:STA Start Condition Hold Time
+4000 — ns 1.7V  VCC  2.5V
+600 — ns 2.5V  VCC  5.5V
+600 — ns 1.7V  VCC  2.5V (24FC256)
+250 — ns 2.5V  VCC  5.5V (24FC256)
+7T SU:STA Start Condition Setup Time
+4700 — ns 1.7V  VCC  2.5V
+600 — ns 2.5V  VCC  5.5V
+600 — ns 1.7V  VCC  2.5V (24FC256)
+250 — ns 2.5V  VCC  5.5V (24FC256)
+8T HD:DAT Data Input Hold Time 0 — ns Note 2
+9T SU:DAT Data Input Setup Time
+250 — ns 1.7V  VCC  2.5V
+100 — ns 2.5V  VCC  5.5V
+100 — ns 1.7V  VCC  5.5V (24FC256)
+10 T SU:STO Stop Condition Setup Time
+4000 — ns 1.7V  VCC  2.5V
+600 — ns 2.5V  VCC  5.5V
+600 — ns 1.7V  VCC  2.5V (24FC256)
+250 — ns 2.5V  VCC  5.5V (24FC256)
+Note 1: Not 100% tested. CB = total capacitance of one bus line in pF.
+2: As a transmitter, the device must provide an internal minimum delay time to bridge the undefined region 
+(minimum 300 ns) of the falling edge of SCL to avoid unintended generation of Start or Stop conditions.
+3: The combined TSP and VHYS specifications are due to new Schmitt Trigger inputs, which provide improved 
+noise spike suppression. This eliminates the need for a TI specification for standard operation.
+4: This parameter is not tested but ensured by characterization.
+
+--- PDF page 5 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 5
+24AA256/24LC256/24FC256
+11 T SU:WP WP Setup Time
+4000 — ns 1.7V  VCC  2.5V
+600 — ns 2.5V  VCC  5.5V
+600 — ns 1.7V  VCC  5.5V (24FC256)
+12 T HD:WP WP Hold Time
+4700 — ns 1.7V  VCC  2.5V
+1300 — ns 2.5V  VCC  5.5V
+1300 — ns 1.7V  VCC  5.5V (24FC256)
+13 T AA Output Valid from Clock 
+— 3500 ns 1.7 V  VCC  2.5V (Note 2)
+— 900 ns 2.5 V  VCC  5.5V (Note 2)
+— 900 ns 1.7V  VCC  2.5V (24FC256) 
+(Note 2)
+— 400 ns 2.5 V  VCC  5.5V (24FC256) 
+(Note 2)
+14 T BUF
+Bus Free Time: The time 
+the bus must be free before 
+a new transmission can 
+start
+4700 — ns 1.7V  VCC  2.5V
+1300 — ns 2.5V  VCC  5.5V
+1300 — ns 1.7V  VCC  2.5V (24FC256)
+500 — ns 2.5V  VCC  5.5V (24FC256)
+15 T OF
+Output fall time from VIH 
+minimum to VIL maximum 
+CB  100 pF 
+10 + 0.1CB
+250 ns All except 24FC256 ( Note 1)
+250 ns All except 24FC256 ( Note 1)
+16 T SP
+Input Filter Spike 
+Suppression 
+(SDA and SCL pins)
+—5 0 n s All except 24FC256 
+(Notes 1 and 3)
+17 T WC Write Cycle Time 
+(byte or page) —5 m s
+18 Endurance 1,000,000 — cycles + 25°C, 5.5V, Page mode (Note 4)
+TABLE 1-2: AC CHARACTERISTICS
+AC CHARACTERISTICS (Continued) Industrial (I): V CC = +1.7V to 5.5V T A = -40°C to +85°C
+Extended (E): V CC = +1.7V to 5.5V T A = -40°C to +125°C
+Param.
+No. Symbol Characteristic Mini mum Maximum Units Conditions
+Note 1: Not 100% tested. CB = total capacitance of one bus line in pF.
+2: As a transmitter, the device must provide an internal minimum delay time to bridge the undefined region 
+(minimum 300 ns) of the falling edge of SCL to avoid unintended generation of Start or Stop conditions.
+3: The combined TSP and VHYS specifications are due to new Schmitt Trigger inputs, which provide improved 
+noise spike suppression. This eliminates the need for a TI specification for standard operation.
+4: This parameter is not tested but ensured by characterization.
+
+--- PDF page 6 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 6  1998-2022 Microchip Technology Inc. and its subsidiaries
+FIGURE 1-1: BUS TIMING DATA
+(unprotected)
+(protected)
+SCL
+SDA
+IN
+SDA
+OUT
+WP
+5
+7
+6
+16
+3
+2
+89
+13
+D3 4
+10
+11 12
+14
+
+--- PDF page 7 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 7
+24AA256/24LC256/24FC256
+2.0 PIN DESCRIPTIONS
+The descriptions of the pins are listed in Table 2-1.
+2.1 A0, A1, A2 Chip Address Inputs
+The A0, A1 and A2 inputs are used by the 24XX256 for
+multiple device operations. The levels on these inputs
+are compared with the corresponding bits in the client
+address. The chip is selected if the compare is true.
+Up to eight devices (two for the MSOP package) may
+be connected to the same bus by using different Chip
+Select bit combinations. These inputs must be
+connected to either V
+CC or VSS.
+In most applications, the chip address inputs A0, A1
+and A2 are hard-wired to logic ‘ 0’ or logic ‘1’. For
+applications in which these pins are controlled by a
+microcontroller or other programmable device, the chip
+address pins must be driven to logic ‘ 0’ or logic ‘1’
+before normal device operation can proceed.
+2.2 Serial Data (SDA)
+This is a bidirectional pin used to transfer addresses
+and data into and out of the device. It is an open-drain
+terminal. Therefore, the SDA bus requires a pull-up
+resistor to V
+CC (typical 10 k  for 100 kHz, 2 k  for
+400 kHz and 1 MHz).
+For normal data transfer, SDA is allowed to change
+only during SCL low. Changes during SCL high are
+reserved for indicating the Start and Stop conditions.
+2.3 Serial Clock (SCL)
+This input is used to synchronize the data transfer to
+and from the device.
+2.4 Write-Protect (WP)
+This pin must be connected to either VSS or VCC. If tied
+to V SS, write operations are enabled. If tied to V CC,
+write operations are inhibit ed but read operations are
+not affected.
+TABLE 2-1: PIN FUNCTION TABLE
+Name CSP DFN (1) MSOP PDIP SOIC SOIJ TDFN (1) TSSOP SOT-23 Function
+A0 3 1 — 1 1 1 1 1 — User Configurable Chip Select
+A1 2 2 — 2 2 2 2 2 — User Configurable Chip Select
+A2 5 3 3 3 3 3 3 3 — User Configurable Chip Select
+VSS 8 444 4 44 4 2 G r o u n d
+SDA 6 5 5 5 5 5 5 5 3 Serial Address/Data I/O 
+SCL 7 6 6 6 6 6 6 6 1 Serial Clock
+WP 4 7 7 7 7 7 7 7 5 Write-Protect Input
+V
+CC 1 8 8 8 8 8 8 8 4 Power Supply
+Note 1: Exposed pad on DFN/TDFN can be connected to VSS or left floating.
+Note: For the MSOP package only, pins A0 and
+A1 are not connected.
+Note: For the SOT-23 package, Chip Address
+Inputs are not available and are not con-
+nected.
+
+--- PDF page 8 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 8  1998-2022 Microchip Technology Inc. and its subsidiaries
+3.0 FUNCTIONAL DESCRIPTION
+The 24XX256 supports a bidirectional two-wire bus and
+data transmission protocol. A device that sends data
+onto the bus is defined as a transmitter and a device
+receiving data as a receiver. The bus must be
+controlled by a host device which generates the Serial
+Clock (SCL), controls the bus access, and generates
+the Start and Stop conditions while the 24XX256 works
+as a client. Both host and client can operate as a
+transmitter or receiver, but the host device determines
+which mode is activated.
+4.0 BUS CHARACTERISTICS
+The following bus protocol has been defined:
+• Data transfer may be init iated only when the bus 
+is not busy.
+• During data transfer, the data line must remain 
+stable whenever the clock line is high. Changes in 
+the data line, while the clock line is high, will be 
+interpreted as a Start or Stop condition.
+Accordingly, the following bus conditions have been
+defined (Figure 4-1).
+4.1 Bus Not Busy (A)
+Both data and clock lines remain high.
+4.2 Start Data Transfer (B)
+A high-to-low transition of the SDA line while the clock
+(SCL) is high, determines a Start condition. All
+commands must be preceded by a Start condition.
+4.3 Stop Data Transfer (C)
+A low-to-high transition of the SDA line, while the clock
+(SCL) is high, determines a Stop condition. All
+operations must end with a Stop condition.
+4.4 Data Valid (D)
+The state of the data li ne represents valid data when,
+after a Start condition, the data line is stable for the
+duration of the high period of the clock signal.
+The data on the line must be changed during the low
+period of the clock signal. There is one bit of data per
+clock pulse.
+Each data transfer is initiated with a Start condition and
+terminated with a Stop conditi on. The number of the
+data bytes transferred between the Start and Stop
+conditions is determined by  the host device and is,
+theoretically, unlimited (although only the last 64 will be
+stored when doing a write operation). When an
+overwrite does occur it will replace data in a First-In
+First-Out (FIFO) principle.
+4.5 Acknowledge
+Each receiving device, when addressed, is obliged to
+generate an Acknowledge signal after the reception of
+each byte. The host device must generate an extra
+clock pulse which is associated with this Acknowledge
+bit.
+A device that acknowledges must pull down the SDA
+line during the Acknowledge clock pulse in such a way
+that the SDA line is stable-low during the high period of
+the Acknowledge-related clock pulse. Moreover, setup
+and hold times must be taken into account. During
+reads, a host must signal an end of data to the client by
+NOT generating an Acknowledge bit on the last byte
+that has been clocked out of the client. In this case, the
+client (24XX256) will leave the data line high to enable
+the host to generate the Stop condition.
+Note: The 24XX256 does not generate any
+Acknowledge bits if an internal
+programming cycle is in progress.
+
+--- PDF page 9 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 9
+24AA256/24LC256/24FC256
+FIGURE 4-1: DATA TRANSFER SEQUENCE ON THE SERIAL BUS 
+FIGURE 4-2: ACKNOWLEDGE TIMING 
+Address or
+Acknowledge
+Valid
+Data
+Allowed
+to Change
+Stop
+Condition
+Start
+Condition
+SCL
+SDA
+(A) (B) (D) (D) (C) (A)
+SCL 9876543211 2 3
+Transmitter must release the SDA line at this point,
+allowing the Receiver to pull the SDA line low to
+acknowledge the previous eight bits of data.
+Receiver must release the SDA line
+at this point so the Transmitter can
+continue sending data.
+Data from transmitterSDA
+Acknowledge
+Bit
+Data from transmitter
+
+--- PDF page 10 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 10  1998-2022 Microchip Technology Inc. and its subsidiaries
+5.0 DEVICE ADDRESSING
+A control byte is the first byte received following the
+Start condition from the host device. The control byte
+consists of a 4-bit control code. For the 24XX256, this
+is set as ‘1010’ binary for read and write operations.
+The next three bits of the control byte are the Chip
+Select bits (A2, A1, A0). The Chip Select bits allow the
+use of up to eight 24XX256 devices on the same bus
+and are used to select which device is accessed. The
+Chip Select bits in the control byte must correspond to
+the logic levels on the corresponding A2, A1 and A0
+pins for the device to respond. These bits, in effect, are
+the three Most Significant bits of the word address. The
+combination of the 4-bit control code and the next three
+bits are called the client address.
+For the MSOP package, the A0 and A1 pins are not
+connected. During device addressing, the A0 and A1
+Chip Select bits ( Figures 5-1 and 5-2) should be set
+to ‘0’. Only two 24XX256 MSOP packages can be
+connected to the same bus.
+For the SOT-23 package, the address pins are not
+available. During device addressing, the A0, A1 and A2
+Chip Selects bits should be set to ‘0’.
+The last bit of the control byte is the Read/Write
+ (R/W)
+bit and it defines the operation to be performed. When
+set to ‘1’, a read operation is selected. When set to ‘0’,
+a write operation is selected. The next two bytes
+received define the address of the first data byte
+(Figure 5-2). Because only A14…A0 are used, the
+upper address bits are a “don’t care.” The upper
+address bits are transferred first, followed by the Least
+Significant bits. 
+Following the Start condition, the 24XX256 monitors
+the SDA bus checking the device type identifier being
+transmitted. Upon receiving a ‘
+1010’ code and
+appropriate device select bits, the client device outputs
+an Acknowledge signal on the SDA line. Depending on
+the state of the R/W bit, the 24XX256 will select a read
+or write operation.
+FIGURE 5-1: CONTROL BYTE 
+FORMAT
+5.1 Contiguous Addressing Across 
+Multiple Devices
+The Chip Select bits A2, A1 and A0 can be used to
+expand the contiguous address space for up to 2-Mbit
+by adding up to eight 24XX256 devices on the same
+bus. In this case, software can use A0 of the control
+byte as address bit A15; A1 as address bit A16; and A2
+as address bit A17. It is not possible to sequentially
+read across device boundaries.
+The SOT-23 package does not support multiple device
+addressing on the same bus.
+For the MSOP package, up to two 24XX256 devices
+can be added for up to 512-Kbit of address space. In
+this case, software can use A2 of the control byte as
+address bit A17. Bits A0 (A15) and A1 (A16) of the
+control byte must always be set to a logic ‘ 0’ for the
+MSOP.
+FIGURE 5-2: ADDRESS SEQUENCE BIT ASSIGNMENTS
+10 1 0 A2 A1 A0S ACKR/W
+Control Code
+Chip Select
+Bits
+Client Address
+Acknowledge BitStart Bit
+Read/Write Bit
+1010 A
+2
+A
+1
+A
+0 R/W x A
+11
+A
+10
+A
+9
+A
+7
+A
+0
+A
+8 ••••••A
+12
+Control Byte Address High Byte Address Low Byte
+Control
+Code
+Chip
+Select
+Bits
+x = “don’t care” bit
+A
+13
+A
+14
+
+--- PDF page 11 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 11
+24AA256/24LC256/24FC256
+6.0 WRITE OPERATIONS
+6.1 Byte Write
+Following the Start condition from the host, the control
+code (four bits), the Chip Select (three bits) and the
+R/W
+ bit (which is a logic low) are clocked onto the bus
+by the host transmitter. This indicates to the addressed
+client receiver that the address high byte will follow
+after it has generated an Acknowledge bit during the
+ninth clock cycle. Therefore, the next byte transmitted
+by the host is the high-order  byte of the word address
+and will be written into t he Address Pointer of the
+24XX256. The next byte is the Least Significant
+Address Byte. After receiving another Acknowledge
+signal from the 24XX256, the host device will transmit
+the data word to be written into the addressed memory
+location. The 24XX256 acknowledges again and the
+host generates a Stop conditi on. This initiates the
+internal write cycle and dur ing this time, the 24XX256
+will not generate Acknowledge signals ( Figure 6-1). If
+an attempt is made to write to the array with the WP pin
+held high, the device will acknowledge the command
+but no write cycle will occur, no data will be written, and
+the device will immediately accept a new command.
+After a byte write command, the internal address
+counter will point to the address location following the
+one that was just written. 
+6.2 Page Write
+The write control byte, word address and the first data
+byte are transmitted to the 24XX256 in much the same
+way as in a byte write. The exception is that instead of
+generating a Stop condition, the host transmits up to
+63 additional bytes, which are temporarily stored in the
+on-chip page buffer, and will be written into memory
+once the host has transmitted a Stop condition. Upon
+receipt of each word, the six lower Address Pointer bits,
+which form the byte counter, are internally incremented
+by one. If the host should transmit more than 64-bytes
+prior to generating the Stop  condition, the address
+counter will roll over and the previously received data
+will be overwritten. As wit h the byte write operation,
+once the Stop condition is re ceived, an internal write
+cycle will begin ( Figure 6-2). If an attempt is made to
+write to the array with the WP pin held high, the device
+will acknowledge the command, but no write cycle will
+occur, no data will be written and the device will
+immediately accept a new command.
+6.3 Write Protection
+The WP pin allows the user to write-protect the entire
+array (0000-7FFF) when the pin is tied to V
+CC. If tied to
+VSS the write protection is disabled. The WP pin is
+sampled at the Stop bit for every write command
+(Figure 1-1). Toggling the WP pin after the Stop bit will
+have no effect on the execution of the write cycle. 
+Note: When doing a write of less than 64 bytes,
+the data in the rest of the page are
+refreshed along with the data bytes being
+written. This will force the entire page to
+endure a write cycle, for this reason
+endurance is specified per page.
+Note: Page write operations are limited to
+writing bytes within a single physical page,
+regardless of the number of bytes
+actually being written. Physical page
+boundaries start at addresses that are
+integer multiples of the page buffer size
+(or ‘page size’) and end at addresses that
+are integer multiples of page size – 1. If a
+page write command attempts to write
+across a physical page boundary, the
+result is that the data wrap around to the
+beginning of the current page (overwriting
+data previously stored there), instead of
+being written to the next page, as might be
+expected. It is, therefore, necessary for
+the application software to prevent page
+write operations that would attempt to
+cross a page boundary.
+
+--- PDF page 12 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 12  1998-2022 Microchip Technology Inc. and its subsidiaries
+FIGURE 6-1: BYTE WRITE
+FIGURE 6-2: PAGE WRITE
+7.0 ACKNOWLEDGE POLLING
+Since the device will not acknowledge during a write
+cycle, this can be used to determine when the cycle is
+complete (This feature can be used to maximize bus
+throughput). Once the Stop condition for a write
+command has been issued from the host, the device
+initiates the internally ti med write cycle. ACK polling
+can be initiated immediately. This involves the host
+sending a Start condition, fo llowed by the control byte
+for a write command (R/W
+= 0). If the device is still
+busy with the write cycle, then no ACK will be returned.
+If no ACK is returned, the Start bit and control byte must
+be resent. If the cycle is complete, then the device will
+return the ACK and the host can then proceed with the
+next read or write command. See Figure 7-1 for flow
+diagram.
+FIGURE 7-1: ACKNOWLEDGE 
+POLLING FLOW
+x
+Bus Activity
+Host
+SDA Line
+Bus Activity
+S
+T
+A
+R
+T
+Control
+Byte
+Address
+High Byte
+Address
+Low Byte Data
+S
+T
+O
+P
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+x = “don’t care” bit
+S 1010 0 A
+2
+A
+1
+A
+0 P
+x
+Bus Activity
+Host
+SDA Line
+Bus Activity
+S
+T
+A
+R
+T
+Control
+Byte
+Address
+High Byte
+Address
+Low Byte Data Byte 0
+S
+T
+O
+P
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+Data Byte 63
+A
+C
+K
+x = “don’t care” bit
+S 1010 0 A
+2
+A
+1
+A
+0 P
+Send
+Write Command
+Send Stop
+Condition to
+Initiate Write Cycle
+Send Start
+Send Control Byte
+with R/W = 0
+Did Device
+Acknowledge
+(ACK = 0)?
+Next
+Operation
+NO
+YES
+
+--- PDF page 13 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 13
+24AA256/24LC256/24FC256
+8.0 READ OPERATION
+Read operations are initiated in much the same way as
+write operations, with the exception that the R/W bit of
+the control byte is set to ‘1’. There are three basic types
+of read operations: current address read, random read
+and sequential read.
+8.1 Current Address Read
+The 24XX256 contains an address counter that
+maintains the address of the last word accessed,
+internally incremented by one. Therefore, if the
+previous read access was to address n (n is any legal
+address), the next current address read operation
+would access data from address n + 1. 
+Upon receipt of the control byte with R/W
+ bit set to ‘1’,
+the 24XX256 issues an Acknowledge and transmits the
+8-bit data word. The host will not acknowledge the
+transfer, but does generate a Stop condition and the
+24XX256 discontinues transmission (Figure 8-1).
+FIGURE 8-1: CURRENT ADDRESS 
+READ
+8.2 Random Read
+Random read operations allow the host to access any
+memory location in a random manner. To perform this
+type of read operation, the word address must first be
+set. This is done by sending the word address to the
+24XX256 as part of a write operation (R/W  bit set
+to ‘0’). Once the word addr ess is sent, the host
+generates a Start condition following the Acknowledge.
+This terminates the write operation, but not before the
+internal Address Pointer is  set. The host then issues
+the control byte again, but with the R/W bit set to a one.
+The 24XX256 will then issue an Acknowledge and
+transmit the 8-bit data word. The host will not
+acknowledge the transfer, though it does generate a
+Stop condition, which causes the 24XX256 to
+discontinue transmission ( Figure 8-2). After a random
+read command, the internal address counter will point
+to the address location following the one that was just
+read. 
+8.3 Sequential Read
+Sequential reads are initiated in the same way as a
+random read except that after the 24XX256 transmits
+the first data byte, the host issues an Acknowledge (as
+opposed to the Stop condition used in a random read).
+This Acknowledge directs the 24XX256 to transmit the
+next sequentially addressed 8-bit word ( Figure 8-3).
+Following the final byte transmitted to the host, the host
+will NOT generate an Acknowledge, but will generate a
+Stop condition. 
+To provide sequential reads, the 24XX256 contains an
+internal Address Pointer which is incremented by one
+at the completion of each  operation. This Address
+Pointer allows the entire memory contents to be serially
+read during one operation. The internal Address
+Pointer will automatically roll over from address 7FFF
+to address 0000 if the host acknowledges the byte
+received from the array address 7FFF.
+FIGURE 8-2: RANDOM READ
+Bus Activity
+Host
+SDA Line
+Bus Activity
+PS
+S
+T
+O
+P
+Control
+Byte
+S
+T
+A
+R
+T
+Data
+A
+C
+K
+N
+O
+A
+C
+K
+1100 AAA 1
+Byte
+210
+x
+Bus Activity 
+Host
+SDA Line
+Bus Activity
+A
+C
+K
+N
+O
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+S
+T
+O
+P
+S
+T
+A
+R
+T
+Control
+Byte
+Address
+High Byte
+Address
+Low Byte
+Control
+Byte
+Data
+Byte
+S
+T
+A
+R
+T
+x = “don’t care” bit
+S 1010 AAA 0210 S 1010 AAA 1210 P
+
+--- PDF page 14 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 14  1998-2022 Microchip Technology Inc. and its subsidiaries
+FIGURE 8-3: SEQUENTIAL READ
+Bus Activity
+Host
+SDA Line
+Bus Activity
+Control
+Byte Data (n) Data (n + 1) Data (n + 2) Data (n + x)
+N
+O
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+S
+T
+O
+P
+P
+
+--- PDF page 15 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 15
+24AA256/24LC256/24FC256
+9.0 PACKAGING INFORMATION
+9.1  Package Marking Information
+XXXXXXXX
+XXXXXNNN
+YYWW
+8-Lead PDIP (300 mil) Example
+8-Lead SOIC (3.90 mm) Example
+XXXXXXXX
+XXXXYYWW
+NNN
+24AA256
+I/P       13F
+2210
+24LC256I
+SN       2210
+13F
+3e
+3e
+8-Lead DFN-S Example
+XXXXXXX
+XXXXXXX
+YYWW
+24LC256
+I/MF
+2210
+13FNNN
+3e
+8-Lead MSOP Example
+XXXXXX
+YWWNNN
+4L256I
+21013F
+8-Lead Chip Scale
+XXX
+XYYW
+Example
+249
+113FWNNN
+A213
+8-Lead SOIJ (5.28 mm) Example
+24LC256
+221013F
+I/SM
+XXXXXXXX
+YYWWNNN
+XXXXXXXX 3e
+
+--- PDF page 16 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 16  1998-2022 Microchip Technology Inc. and its subsidiaries
+Package Marking Information (Continued)
+8-Lead TSSOP Example
+XXXX
+XYWW
+NNN
+4LD
+I210
+13F
+8-Lead TDFN Example
+XXX
+YWW
+EF4
+210
+13NN
+Part 
+No.
+1st Line Marking Codes
+CSP DFN MSOP SOIC SOIJ TDFN TSSOP SOT-23I-Temp. E-Temp.
+24AA256 249 24AA256 4A256T 24AA256T 24AA256 EF6 EF5 4AD —
+24LC256 — 24LC256 4L256T 24LC256T 24LC256 EF4 EF3 4LD —
+24FC256 — 24FC256 4F256T 24FC256T 24FC256 EF8 — 4FD
+AAFKYY
+Legend: XX...X Part number or part number code
+T Temperature (I, E)
+Y Year code (last digit of calendar year)
+YY Year code (last 2 digits of calendar year)
+WW Week code (week of January 1 is week ‘01’)
+NNN Alphanumeric traceability code (2 characters for small packages)
+  JEDEC
+® designator for Matte Tin (Sn)
+Note:    Standard OTP marking consists of Microchip part number, year code, week
+code and traceability code.
+Note: For very small packages with no room for the JEDEC ® designator
+   , the marking will only appear on the outer carton or reel label.
+Note: In the event the full Microchip part number  cannot be marked on one line, it will
+be carried over to the next line, thus limiting the number of available
+characters for customer-specific information.
+3e
+3e
+5-Lead SOT-23 Example
+AAFK22
+1013F
+XXXXYY
+WWNNN
+
+--- PDF page 17 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 17
+24AA256/24LC256/24FC256
+Note: For the most current package drawings, please see the Microchip Packaging Specification located at 
+http://www.microchip.com/packaging
+
+--- PDF page 18 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 18  1998-2022 Microchip Technology Inc. and its subsidiaries
+Note: For the most current package drawings, please see the Microchip Packaging Specification located at 
+http://www.microchip.com/packaging
+
+--- PDF page 19 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 19
+24AA256/24LC256/24FC256
+Note: For the most current package drawings, please see the Microchip Packaging Specification located at 
+http://www.microchip.com/packaging
+
+--- PDF page 20 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 20  1998-2022 Microchip Technology Inc. and its subsidiaries
+/g37/g36
+/g19/g17/g20/g24/g38
+/g19/g17/g20/g24/g38
+/g19/g17/g20/g19/g38/g36/g37
+/g19/g17/g19/g24/g38
+/g11/g39/g36/g55/g56/g48/g3/g37/g12
+/g11/g39/g36/g55/g56/g48/g3/g36/g12
+/g38
+/g54/g40/g36/g55/g44/g49/g42
+/g51/g47/g36/g49/g40
+/g49/g50/g55/g40/g3/g20
+/g20/g21
+/g49
+/g21/g59
+/g55/g50/g51/g3/g57/g44/g40/g58
+/g54/g44/g39/g40/g3/g57/g44/g40/g58
+/g37/g50/g55/g55/g50/g48/g3/g57/g44/g40/g58
+/g49/g50/g55/g40/g3/g20
+/g20/g21
+/g49
+/g19/g17/g20/g19/g38/g36/g37
+/g19/g17/g20/g19/g38/g36/g37
+/g19/g17/g20/g19/g38
+/g19/g17/g19/g27/g38
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g3/g38/g19/g23/g16/g20/g21/g21/g3/g53/g72/g89/g3/g38/g3/g54/g75/g72/g72/g87/g3/g20/g3/g82/g73/g3/g21
+/g39
+/g40
+/g36
+/g11/g36/g22/g12
+/g27/g59/g3/g69
+/g72
+/g21/g59
+/g39/g21
+/g40/g21
+/g46
+/g47
+/g27/g59
+/g36/g20
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g27/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g39/g88/g68/g79/g3/g41/g79/g68/g87/g15/g3/g49/g82/g3/g47/g72/g68/g71/g3/g51/g68/g70/g78/g68/g74/g72/g3/g11/g48/g41/g12/g3/g16/g3/g25/g91/g24/g3/g80/g80/g3/g37/g82/g71/g92/g3/g62/g39/g41/g49/g16/g54/g64
+/g54/g68/g90/g3/g54/g76/g81/g74/g88/g79/g68/g87/g72/g71
+
+--- PDF page 21 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 21
+24AA256/24LC256/24FC256
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g3/g38/g19/g23/g16/g20/g21/g21/g3/g53/g72/g89/g3/g38/g3/g54/g75/g72/g72/g87/g3/g21/g3/g82/g73/g3/g21
+/g49/g88/g80/g69/g72/g85/g3/g82/g73/g3/g55/g72/g85/g80/g76/g81/g68/g79/g86
+/g50/g89/g72/g85/g68/g79/g79/g3/g43/g72/g76/g74/g75/g87
+/g55/g72/g85/g80/g76/g81/g68/g79/g3/g58/g76/g71/g87/g75
+/g50/g89/g72/g85/g68/g79/g79/g3/g58/g76/g71/g87/g75
+/g55/g72/g85/g80/g76/g81/g68/g79/g3/g47/g72/g81/g74/g87/g75
+/g40/g91/g83/g82/g86/g72/g71/g3/g51/g68/g71/g3/g58/g76/g71/g87/g75
+/g55/g72/g85/g80/g76/g81/g68/g79/g3/g55/g75/g76/g70/g78/g81/g72/g86/g86
+/g51/g76/g87/g70/g75
+/g54/g87/g68/g81/g71/g82/g73/g73
+/g56/g81/g76/g87/g86
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g3/g47/g76/g80/g76/g87/g86
+/g36/g20
+/g36
+/g69
+/g40/g21
+/g36/g22
+/g72
+/g47
+/g40
+/g49
+/g20/g17/g21/g26/g3/g37/g54/g38
+/g19/g17/g21/g19/g3/g53/g40/g41
+/g21/g17/g21/g19
+/g19/g17/g24/g19
+/g19/g17/g22/g19
+/g19/g17/g27/g19
+/g19/g17/g19/g19
+/g19/g17/g23/g19
+/g19/g17/g25/g19
+/g21/g17/g22/g19
+/g19/g17/g27/g24
+/g19/g17/g19/g21
+/g25/g17/g19/g19/g3/g37/g54/g38
+/g48/g44/g47/g47/g44/g48/g40/g55/g40/g53/g54
+/g48/g44/g49/g49/g50/g48
+/g27
+/g21/g17/g23/g19
+/g19/g17/g26/g24
+/g19/g17/g24/g19
+/g20/g17/g19/g19
+/g19/g17/g19/g24
+/g48/g36/g59
+/g46/g16/g19/g17/g21/g19 /g16
+/g53/g40/g41/g29/g3/g53/g72/g73/g72/g85/g72/g81/g70/g72/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g15/g3/g88/g86/g88/g68/g79/g79/g92/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g15/g3/g73/g82/g85/g3/g76/g81/g73/g82/g85/g80/g68/g87/g76/g82/g81/g3/g83/g88/g85/g83/g82/g86/g72/g86/g3/g82/g81/g79/g92/g17
+/g37/g54/g38/g29/g3/g37/g68/g86/g76/g70/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g17/g3/g55/g75/g72/g82/g85/g72/g87/g76/g70/g68/g79/g79/g92/g3/g72/g91/g68/g70/g87/g3/g89/g68/g79/g88/g72/g3/g86/g75/g82/g90/g81/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g86/g17
+/g20/g17
+/g22/g17
+/g23/g17
+/g49/g82/g87/g72/g86/g29
+/g51/g76/g81/g3/g20/g3/g89/g76/g86/g88/g68/g79/g3/g76/g81/g71/g72/g91/g3/g73/g72/g68/g87/g88/g85/g72/g3/g80/g68/g92/g3/g89/g68/g85/g92/g15/g3/g69/g88/g87/g3/g80/g88/g86/g87/g3/g69/g72/g3/g79/g82/g70/g68/g87/g72/g71/g3/g90/g76/g87/g75/g76/g81/g3/g87/g75/g72/g3/g75/g68/g87/g70/g75/g72/g71/g3/g68/g85/g72/g68/g17
+/g51/g68/g70/g78/g68/g74/g72/g3/g76/g86/g3/g86/g68/g90/g3/g86/g76/g81/g74/g88/g79/g68/g87/g72/g71
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g76/g81/g74/g3/g68/g81/g71/g3/g87/g82/g79/g72/g85/g68/g81/g70/g76/g81/g74/g3/g83/g72/g85/g3/g36/g54/g48/g40/g3/g60/g20/g23/g17/g24/g48
+/g55/g72/g85/g80/g76/g81/g68/g79/g16/g87/g82/g16/g40/g91/g83/g82/g86/g72/g71/g16/g51/g68/g71
+/g27/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g39/g88/g68/g79/g3/g41/g79/g68/g87/g15/g3/g49/g82/g3/g47/g72/g68/g71/g3/g51/g68/g70/g78/g68/g74/g72/g3/g11/g48/g41/g12/g3/g16/g3/g25/g91/g24/g3/g80/g80/g3/g37/g82/g71/g92/g3/g62/g39/g41/g49/g16/g54/g64
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g50/g89/g72/g85/g68/g79/g79/g3/g47/g72/g81/g74/g87/g75
+/g40/g91/g83/g82/g86/g72/g71/g3/g51/g68/g71/g3/g47/g72/g81/g74/g87/g75
+/g39
+/g39/g21 /g22/g17/g28/g19
+/g24/g17/g19/g19/g3/g37/g54/g38
+/g23/g17/g19/g19 /g23/g17/g20/g19
+/g54/g68/g90/g3/g54/g76/g81/g74/g88/g79/g68/g87/g72/g71
+/g21/g17 /g51/g68/g70/g78/g68/g74/g72/g3/g80/g68/g92/g3/g75/g68/g89/g72/g3/g82/g81/g72/g3/g82/g85/g72/g3/g80/g82/g85/g72/g3/g72/g91/g83/g82/g86/g72/g71/g3/g87/g76/g72/g3/g69/g68/g85/g86/g3/g68/g87/g3/g72/g81/g71/g86/g17
+
+--- PDF page 22 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 22  1998-2022 Microchip Technology Inc. and its subsidiaries
+/g53/g40/g38/g50/g48/g48/g40/g49/g39/g40/g39/g3/g47/g36/g49/g39/g3/g51/g36/g55/g55/g40/g53/g49
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g3/g47/g76/g80/g76/g87/g86
+/g56/g81/g76/g87/g86
+/g50/g83/g87/g76/g82/g81/g68/g79/g3/g38/g72/g81/g87/g72/g85/g3/g51/g68/g71/g3/g58/g76/g71/g87/g75
+/g50/g83/g87/g76/g82/g81/g68/g79/g3/g38/g72/g81/g87/g72/g85/g3/g51/g68/g71/g3/g47/g72/g81/g74/g87/g75
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g76/g87/g70/g75
+/g60/g21
+/g59/g21
+/g23/g17/g20/g19
+/g21/g17/g23/g19
+/g48/g44/g47/g47/g44/g48/g40/g55/g40/g53/g54
+/g20/g17/g21/g26/g3/g37/g54/g38
+/g48/g44/g49
+/g40
+/g48/g36/g59
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g47/g72/g81/g74/g87/g75/g3/g11/g59/g21/g19/g12
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g58/g76/g71/g87/g75/g3/g11/g59/g21/g19/g12
+/g60/g20
+/g59/g20
+/g20/g17/g20/g24
+/g19/g17/g23/g24
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g38/g19/g23/g16/g21/g20/g21/g21/g3/g53/g72/g89/g3/g38
+/g49/g50/g48
+/g27/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g39/g88/g68/g79/g3/g41/g79/g68/g87/g15/g3/g49/g82/g3/g47/g72/g68/g71/g3/g51/g68/g70/g78/g68/g74/g72/g3/g11/g48/g41/g12/g3/g16/g3/g25/g91/g24/g3/g80/g80/g3/g37/g82/g71/g92/g3/g62/g39/g41/g49/g16/g54/g64
+/g54/g44/g47/g46/g3/g54/g38/g53/g40/g40/g49
+/g20/g21
+/g27
+/g38
+/g40
+/g59/g20
+/g60/g20
+/g42/g20
+/g60/g21
+/g59/g21
+/g38/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g54/g83/g68/g70/g76/g81/g74 /g24/g17/g25/g19
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g87/g82/g3/g38/g72/g81/g87/g72/g85/g3/g51/g68/g71/g3/g11/g59/g21/g19/g12 /g42/g20 /g19/g17/g21/g19
+/g55/g75/g72/g85/g80/g68/g79/g3/g57/g76/g68/g3/g39/g76/g68/g80/g72/g87/g72/g85 /g57
+/g55/g75/g72/g85/g80/g68/g79/g3/g57/g76/g68/g3/g51/g76/g87/g70/g75 /g40/g57
+/g19/g17/g22/g19
+/g20/g17/g19/g19
+/g145/g57
+/g40/g57
+/g40/g57
+/g37/g54/g38/g29/g3/g37/g68/g86/g76/g70/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g17/g3/g55/g75/g72/g82/g85/g72/g87/g76/g70/g68/g79/g79/g92/g3/g72/g91/g68/g70/g87/g3/g89/g68/g79/g88/g72/g3/g86/g75/g82/g90/g81/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g86/g17
+/g49/g82/g87/g72/g86/g29
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g76/g81/g74/g3/g68/g81/g71/g3/g87/g82/g79/g72/g85/g68/g81/g70/g76/g81/g74/g3/g83/g72/g85/g3/g36/g54/g48/g40/g3/g60/g20/g23/g17/g24/g48
+/g41/g82/g85/g3/g69/g72/g86/g87/g3/g86/g82/g79/g71/g72/g85/g76/g81/g74/g3/g85/g72/g86/g88/g79/g87/g86/g15/g3/g87/g75/g72/g85/g80/g68/g79/g3/g89/g76/g68/g86/g15/g3/g76/g73/g3/g88/g86/g72/g71/g15/g3/g86/g75/g82/g88/g79/g71/g3/g69/g72/g3/g73/g76/g79/g79/g72/g71/g3/g82/g85/g3/g87/g72/g81/g87/g72/g71/g3/g87/g82/g3/g68/g89/g82/g76/g71/g3/g86/g82/g79/g71/g72/g85/g3/g79/g82/g86/g86/g3/g71/g88/g85/g76/g81/g74
+/g85/g72/g73/g79/g82/g90/g3/g83/g85/g82/g70/g72/g86/g86
+/g20/g17
+/g21/g17
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g54/g68/g90/g3/g54/g76/g81/g74/g88/g79/g68/g87/g72/g71
+
+--- PDF page 23 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 23
+24AA256/24LC256/24FC256
+TOP VIEW
+VIEW A–A
+SIDE VIEW
+Note:
+http://www.microchip.com/packaging
+For the most current package drawings, please see the Microchip Packaging Specification located at
+8-Lead Plastic Micro Small Outline Package (MS) - 3x3 mm Body  [MSOP]
+Microchip Technology Drawing C04-111-MS Rev D
+A
+B
+0.25 C
+2X 4 TIPS
+0.25 C A-B D
+A
+A
+0.20 H
+2X
+0.20 H
+12
+N
+SEE DETAIL B
+NOTE 1
+C
+0.10 C
+H
+8X
+8X b
+e
+D
+D
+2
+E
+2
+E
+E1
+2
+E1
+A A2
+A1
+SEATING
+PLANE
+2X
+Sheet 1 of 2
+D
+
+--- PDF page 24 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 24  1998-2022 Microchip Technology Inc. and its subsidiaries
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+REF: Reference Dimension, usually without tolerance, for information purposes only.
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+1.
+2.
+Pin 1 visual index feature may vary, but must be located within the hatched area.
+Dimensioning and tolerancing per ASME Y14.5M
+Sheet 2 of 2
+C
+SEATING
+PLANE
+H
+Number of Terminals
+Overall Height
+Terminal Width
+Overall Width
+Terminal Length
+Molded Package Width
+Molded Package Thickness
+Pitch
+Standoff
+Units
+Dimension Limits
+A1
+A
+b
+E1
+A2
+e
+L
+E
+N
+0.65 BSC
+0.85
+0.40
+0.22
+–
+0.00
+–
+0.60
+–
+–
+MILLIMETERS
+MIN NOM
+8
+0.80
+0.40
+1.10
+0.15
+MAX
+L1 0.95 REFFootprint
+Overall Length D 3.00 BSC
+Terminal Thickness c 0 . 0 8–0 . 2 3
+R
+R1
+ș
+ș1
+–0.07 –Lead Bend Radius
+–0.07 –Lead Bend Radius
+–0° 8°Foot Angle
+–5° 15°Mold Draft Angle
+0.75 0.95
+4.90 BSC
+3.00 BSC
+DETAIL B
+ș
+c
+4X ș1
+4X ș1
+L
+(L1)
+R
+R1
+3.
+Dimensions D and E1 do not include mold flash or protrusions. Mold flash or
+protrusions shall not exceed 0.15mm per side.
+8-Lead Plastic Micro Small Outline Package (MS) - 3x3 mm Body  [MSOP]
+Microchip Technology Drawing C04-111-MS Rev D
+
+--- PDF page 25 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 25
+24AA256/24LC256/24FC256
+RECOMMENDED LAND PATTERN
+Dimension Limits
+Units
+Contact Pitch
+MILLIMETERS
+0.65 BSC
+MIN
+E
+MAX
+Contact Pad Length (X8)
+Contact Pad Width (X8)
+Y
+X
+1.45
+0.45
+NOM
+CContact Pad Spacing 4.40
+Contact Pad to Contact Pad (X4) G1 2.95
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+Dimensioning and tolerancing per ASME Y14.5M1.
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+E
+C
+Contact Pad to Contact Pad (X6) GX 0.20
+X
+Y
+G1
+GX
+SILK SCREEN
+8-Lead Plastic Micro Small Outline Package (MS) - 3x3 mm Body  [MSOP]
+Microchip Technology Drawing C04-2111-MS Rev D
+
+--- PDF page 26 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 26  1998-2022 Microchip Technology Inc. and its subsidiaries
+B
+A
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+Microchip Technology Drawing No. C04-018-P Rev F Sheet 1 of 2
+8-Lead Plastic Dual In-Line (P) - 300 mil Body [PDIP]
+eB
+E
+A
+A1
+A2
+L
+8X b
+8X b1
+E1
+c
+C
+PLANE
+.010 C
+12
+N
+D
+NOTE 1
+TOP VIEW
+END VIEWSIDE VIEW
+e
+
+--- PDF page 27 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 27
+24AA256/24LC256/24FC256
+Microchip Technology Drawing No. C04-018-P Rev F Sheet 2 of 2
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+8-Lead Plastic Dual In-Line (P) - 300 mil Body [PDIP]
+Units INCHES
+Dimension Limits MIN NOM MAX
+Number of Pins N 8
+Pitch e .100 BSC
+Top to Seating Plane A - - .210
+Molded Package Thickness A2 .115 .130 .195
+Base to Seating Plane A1 .015
+Shoulder to Shoulder Width E .290 .310 .325
+Molded Package Width E1 .240 .250 .280
+Overall Length D .348 .365 .400
+Tip to Seating Plane L .115 .130 .150
+Lead Thickness c .008 .010 .015
+Upper Lead Width b1 .040 .060 .070
+Lower Lead Width b .014 .018 .022
+Overall Row Spacing eB - - .430
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+3.
+1.
+protrusions shall not exceed .010" per side.
+2.
+4.
+Notes:
+§
+--
+Dimensions D and E1 do not include mold flash or protrusions.  Mold flash or
+Pin 1 visual index feature may vary, but must be located within the hatched area.
+§ Significant Characteristic
+Dimensioning and tolerancing per ASME Y14.5M
+e
+DATUM A DATUM A
+e
+b
+e
+2
+b
+e
+2
+ALTERNATE LEAD DESIGN
+(NOTE 5)
+5. Lead design above seating plane may vary, based on assembly vendor.
+
+--- PDF page 28 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 28  1998-2022 Microchip Technology Inc. and its subsidiaries
+0.25 C A–B D
+C
+SEATING
+PLANE
+TOP VIEW
+SIDE VIEW
+VIEW A–A
+0.10 C
+0.10 C
+Microchip Technology Drawing No. C04-057-SN Rev J Sheet 1 of 2
+8X
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+8-Lead Plastic Small Outline (SN) - Narrow, 3.90 mm (.150 In.) Body [SOIC]
+1 2
+N
+h
+h
+A1
+A2A
+A
+B
+e
+D
+E
+E
+2E1
+2
+E1
+NOTE 5
+NOTE 5
+NX b
+0.10 C A–B
+2X
+H
+ ș
+c
+ ș2
+4X ș1
+4X ș1
+(L1)
+L
+R1
+R
+VIEW C
+SEE VIEW C
+NOTE 1
+D
+0.10 C A–B
+2X
+0.10 C A–B
+2X
+
+--- PDF page 29 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 29
+24AA256/24LC256/24FC256
+Microchip Technology Drawing No. C04-057-SN Rev J Sheet 2 of 2
+8-Lead Plastic Small Outline (SN) - Narrow, 3.90 mm (.150 In.) Body [SOIC]
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+protrusions shall not exceed 0.15mm per side.
+3. Dimensions D and E1 do not include mold flash or protrusions.  Mold flash or
+REF: Reference Dimension, usually without tolerance, for information purposes only.
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+1. Pin 1 visual index feature may vary, but must be located within the hatched area.
+2. § Significant Characteristic
+4. Dimensioning and tolerancing per ASME Y14.5M
+Notes:
+5. Datums A & B to be determined at Datum H.
+Foot Angle 0° – 8°
+8°–0°Lead Angle
+0.51–0.31bLead Width
+0.25–0.17cLead Thickness
+1.27–0.40LFoot Length
+0.50–0.25hChamfer (Optional)
+4.90 BSCDOverall Length
+3.90 BSCE1Molded Package Width
+6.00 BSCEOverall Width
+0.25–0.10A1Standoff
+-–1.25A2Molded Package Thickness
+1.75––AOverall Height
+1.27 BSCePitch
+8NNumber of Pins
+MAXNOMMINDimension Limits
+MILLIMETERSUnits
+§
+Footprint L1 1.04 REF
+Mold Draft Angle 5° – 15°
+ș
+ș1
+ș2
+––0.07R1Lead Bend Radius
+––0.07RLead Bend Radius
+
+--- PDF page 30 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 30  1998-2022 Microchip Technology Inc. and its subsidiaries
+RECOMMENDED LAND PATTERN
+Microchip Technology Drawing C04-2057-SN Rev J
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+Dimensioning and tolerancing per ASME Y14.5M1.
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+Dimension Limits
+Units
+CContact Pad Spacing
+Contact Pitch
+MILLIMETERS
+1.27 BSC
+MIN
+E
+MAX
+5.40
+Contact Pad Length (X8)
+Contact Pad Width (X8)
+Y1
+X1
+1.55
+0.60
+NOM
+E
+X1
+C
+Y1
+SILK SCREEN
+8-Lead Plastic Small Outline (SN) - Narrow, 3.90 mm (.150 In.) Body [SOIC]
+
+--- PDF page 31 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 31
+24AA256/24LC256/24FC256
+TOP VIEW
+VIEW A–A
+SIDE VIEW
+Sheet 1 of 2
+Note:
+http://www.microchip.com/packaging
+For the most current package drawings, please see the Microchip Packaging Specification located at
+8-Lead Plastic Small Outline (SM) - Medium, 5.28 mm (.208 Inch) Body  [SOIJ]
+Microchip Technology Drawing C04-056 Rev D
+A
+B
+D
+C
+SEATING
+PLANE
+0.20 C
+2X 4 TIPS
+0.10 C
+18X
+0.25 C A-B D
+A
+A
+0.10 C D
+2X
+0.10 C A-B
+12
+N
+SEE DETAIL B
+0.10 C
+NOTE 1
+D
+EE1
+e
+E1
+2
+E
+2
+2X
+A A2
+A1 8X b
+
+--- PDF page 32 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 32  1998-2022 Microchip Technology Inc. and its subsidiaries
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+REF: Reference Dimension, usually without tolerance, for information purposes only.
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+1.
+2.
+Pin 1 visual index feature may vary, but must be located within the hatched area.
+Dimensioning and tolerancing per ASME Y14.5M
+Sheet 2 of 2
+C
+SEATING
+PLANE
+Number of Terminals
+Overall Height
+Terminal Width
+Overall Width
+Terminal Length
+Molded Package Width
+Molded Package Thickness
+Pitch
+Standoff   §
+Units
+Dimension Limits
+A1
+A
+b
+E1
+A2
+e
+L
+E
+N
+1.27 BSC
+–
+0.51
+0.36
+1.77
+0.05
+–
+–
+–
+–
+MILLIMETERS
+MIN NOM
+8
+0.76
+0.51
+2.03
+0.25
+MAX
+Overall Length D 5.26 BSC
+Terminal Thickness c 0 . 1 5–0 . 2 5
+ș1 –0° 8°Foot Angle
+ș2 –Lead Angle
+1.75 1.98
+ș3 –Mold Draft Angle
+7.94 BSC
+5.25 BSC
+8°
+15°
+0°
+–
+8-Lead Plastic Small Outline (SM) - Medium, 5.28 mm (.208 Inch) Body  [SOIJ]
+Microchip Technology Drawing C04-056 Rev D
+DETAIL B
+Dimensions D and E1 do not include mold flash or protrusions.  Mold flash or
+§ – Significant Characteristic
+protrusions shall not exceed 0.25mm per side.
+SOIJ – JEITA/EIAJ Standard, Formerly called SOIC
+3.
+4.
+5.
+ș3
+c
+ș2
+4X ș1
+4X ș1
+L
+
+--- PDF page 33 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 33
+24AA256/24LC256/24FC256
+RECOMMENDED LAND PATTERN
+Dimension Limits
+Units
+Contact Pitch
+MILLIMETERS
+1.27 BSC
+MIN
+E
+MAX
+Contact Pad Length (X8)
+Contact Pad Width (X8)
+Y
+X
+1.70
+0.65
+NOM
+ZOverall Width 9.00
+Contact Pad to Contact Pad (X6) G2 0.62
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+Dimensioning and tolerancing per ASME Y14.5M1.
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+8-Lead Plastic Small Outline (SM) - Medium, 5.28 mm (.208 Inch) Body  [SOIJ]
+Contact Pad to Contact Pad (X4) G1 5.60
+Microchip Technology Drawing C04-2056 Rev D
+CContact Pad Spacing 7.30
+E
+X
+Y
+G2
+C Z
+SILK
+SCREEN
+G1
+
+--- PDF page 34 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 34  1998-2022 Microchip Technology Inc. and its subsidiaries
+BA
+0.15 C
+0.15 C
+0.10 C A B
+0.05 C
+(DATUM B)
+(DATUM A)
+C
+SEATING
+PLANE
+NOTE 1
+12
+N
+2X
+TOP VIEW
+SIDE VIEW
+BOTTOM VIEW
+NOTE 1
+12
+N
+0.10 C A B
+0.10 C A B
+0.10 C
+0.08 C
+Microchip Technology Drawing No. C04-129-MN Rev E Sheet 1 of 2
+2X
+8X
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+8-Lead Plastic Dual Flat, No Lead Package (MN) – 2x3x0.8 mm Body [TDFN]
+D
+E
+D2
+E2
+A
+(A3)
+A1
+e
+8X b
+L
+K
+With 1.4x1.3 mm Exposed Pad (JEDEC Package type WDFN)
+
+--- PDF page 35 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 35
+24AA256/24LC256/24FC256
+Microchip Technology Drawing No. C04-129-MN Rev E Sheet 2 of 2
+8-Lead Plastic Dual Flat, No Lead Package (MN) – 2x3x0.8 mm Body [TDFN]
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+NOM
+MILLIMETERS
+0.50 BSC
+2.00 BSC
+3.00 BSC
+0.20 REF
+1. Pin 1 visual index feature may vary, but must be located within the hatched area.
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+REF: Reference Dimension, usually without tolerance, for information purposes only.
+Contact-to-Exposed Pad
+Contact Thickness
+Exposed Pad Width
+Exposed Pad Length
+4. Dimensioning and tolerancing per ASME Y14.5M
+3. Package is saw singulated
+2. Package may have one or more exposed tie bars at ends.
+Notes:
+Contact Width
+Overall Width
+Overall Length
+Contact Length
+Standoff
+Number of Pins
+Overall Height
+Pitch
+K 0.20
+Units
+N
+e
+A
+Dimension Limits
+D
+A3
+A1
+b
+D2
+E2
+E
+L
+0.20
+1.35
+1.25
+0.25
+0.00
+0.70
+MIN
+--
+0.25
+0.30
+1.30
+1.40
+1.35
+0.30
+0.45
+1.45
+8
+0.75
+0.02
+0.05
+0.80
+MAX
+With 1.4x1.3 mm Exposed Pad (JEDEC Package type WDFN)
+
+--- PDF page 36 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 36  1998-2022 Microchip Technology Inc. and its subsidiaries
+RECOMMENDED LAND PATTERN
+Dimension Limits
+Units
+Optional Center Pad Width
+Optional Center Pad Length
+Contact Pitch
+Y2
+X2
+1.50
+1.60
+MILLIMETERS
+0.50 BSC
+MIN
+E
+MAX
+Contact Pad Length (X8)
+Contact Pad Width (X8)
+Y1
+X1
+0.85
+0.25
+Microchip Technology Drawing No. C04-129-MN Rev. B
+NOM
+8-Lead Plastic Dual Flat, No Lead Package (MN) – 2x3x0.8 mm Body [TDFN]
+12
+8
+CContact Pad Spacing 2.90
+Thermal Via Diameter V
+Thermal Via Pitch EV
+0.30
+1.00
+BSC: Basic Dimension. Theoretically exact value shown without tolerances.
+Notes:
+Dimensioning and tolerancing per ASME Y14.5M
+For best soldering results, thermal vias, if used, should be filled or tented to avoid solder loss during
+reflow process
+1.
+2.
+For the most current package drawings, please see the Microchip Packaging Specification located at
+http://www.microchip.com/packaging
+Note:
+C
+E
+X1
+Y1
+Y2
+X2
+EV
+EV
+ØV
+SILK SCREEN
+With 1.4x1.3 mm Exposed Pad (JEDEC Package type WDFN)
+
+--- PDF page 37 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 37
+24AA256/24LC256/24FC256
+ & % $
+)RUWKHPRVWFXUUHQWSDFNDJHGUDZLQJVSOHDVHVHHWKH0LFURFKLS3DFNDJLQJ6SHFLILFDWLRQORFDWHGDW
+KWWSZZZPLFURFKLSFRPSDFNDJLQJ
+1RWH
+%$
+'$780%
+'$780$
+
+1
+7239,(:
+6,'(9,(:
+(
+ & % $
+&
+6($7,1*
+3/$1(
+'
+$
+;E
+(
+H
+$
+$
+$ &
+;
+$
+9,(:$$
+/
++
+/
+ &
+F
+/HDG3ODVWLF7KLQ6KULQN6PDOO2XWOLQH67PP%RG\>76623@
+0LFURFKLS7HFKQRORJ\'UDZLQJ&5HY&6KHHWRI
+
+--- PDF page 38 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 38  1998-2022 Microchip Technology Inc. and its subsidiaries
+0LFURFKLS7HFKQRORJ\'UDZLQJ&5HY&6KHHWRI
+/HDG3ODVWLF7KLQ6KULQN6PDOO2XWOLQH67PP%RG\>76623@
+)RUWKHPRVWFXUUHQWSDFNDJHGUDZLQJVSOHDVHVHHWKH0LFURFKLS3DFNDJLQJ6SHFLILFDWLRQORFDWHGDW
+KWWSZZZPLFURFKLSFRPSDFNDJLQJ
+1RWH
+E/HDG:LGWK
+)RRW$QJOH
+F/HDG7KLFNQHVV
+/)RRW/HQJWK
+'2YHUDOO/HQJWK
+(0ROGHG3DFNDJH:LGWK
+%6&(2YHUDOO:LGWK
+$6WDQGRII
+$0ROGHG3DFNDJH7KLFNQHVV
+$2YHUDOO+HLJKW
+%6&H3LWFK
+11XPEHURI3LQV
+0$;1200,1'LPHQVLRQ/LPLWV
+0,//,0(7(568QLWV
+3LQYLVXDOLQGH[IHDWXUHPD\YDU\EXWPXVWEHORFDWHGZLWKLQWKHKDWFKHGDUHD
+'LPHQVLRQLQJDQGWROHUDQFLQJSHU$60(<0
+%6&%DVLF'LPHQVLRQ7KHRUHWLFDOO\H[DFWYDOXHVKRZQZLWKRXWWROHUDQFHV
+5()5HIHUHQFH'LPHQVLRQXVXDOO\ZLWKRXWWROHUDQFHIRULQIRUPDWLRQSXUSRVHVRQO\
+'LPHQVLRQV'DQG(GRQRWLQFOXGHPROGIODVKRUSURWUXVLRQV0ROGIODVKRU
+SURWUXVLRQVVKDOOQRWH[FHHGPPSHUVLGH
+Notes:
+)RRWSULQW / 5()
+
+--- PDF page 39 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 39
+24AA256/24LC256/24FC256
+5(&200(1'('/$1'3$77(51
+0LFURFKLS7HFKQRORJ\'UDZLQJ&5HY%
+/HDG3ODVWLF7KLQ6KULQN6PDOO2XWOLQH67PP%RG\>76623@
+6,/.6&5((1
+
+
+&
+(
+;
+<
+*
+%6&%DVLF'LPHQVLRQ7KHRUHWLFDOO\H[DFWYDOXHVKRZQZLWKRXWWROHUDQFHV
+1RWHV
+'LPHQVLRQLQJDQGWROHUDQFLQJSHU$60(<0
+)RUEHVWVROGHULQJUHVXOWVWKHUPDOYLDVLIXVHGVKRXOGEHILOOHGRUWHQWHGWRDYRLGVROGHUORVVGXULQJ
+UHIORZSURFHVV
+
+
+)RUWKHPRVWFXUUHQWSDFNDJHGUDZLQJVSOHDVHVHHWKH0LFURFKLS3DFNDJLQJ6SHFLILFDWLRQORFDWHGDW
+KWWSZZZPLFURFKLSFRPSDFNDJLQJ
+1RWH
+'LPHQVLRQ/LPLWV
+8QLWV
+&RQWDFW3LWFK
+0,//,0(7(56
+%6&
+0,1
+(
+0$;
+&RQWDFW3DG/HQJWK;
+&RQWDFW3DG:LGWK;
+<
+;
+
+
+120
+&&RQWDFW3DG6SDFLQJ 
+&RQWDFW3DGWR&HQWHU3DG; * 
+
+--- PDF page 40 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 40  1998-2022 Microchip Technology Inc. and its subsidiaries
+/g19/g17/g20/g24/g38/g39
+/g21/g59
+/g49/g50/g55/g40/g3/g20/g20/g21
+/g49
+/g55/g50/g51/g3/g57/g44/g40/g58
+/g54/g44/g39/g40/g3/g57/g44/g40/g58
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g38/g19/g23/g16/g19/g28/g20/g16/g50/g55/g3/g53/g72/g89/g3/g42/g3/g54/g75/g72/g72/g87/g3/g20/g3/g82/g73/g3/g21
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g19/g17/g21/g19/g38
+/g38
+/g54/g40/g36/g55/g44/g49/g42/g3/g51/g47/g36/g49/g40
+/g36/g36/g21
+/g36/g20
+/g72
+/g49/g59/g3/g69/g37
+/g19/g17/g21/g19/g38/g36/g16/g37/g39
+/g72/g20
+/g39
+/g40/g20
+/g40/g20/g18/g21
+/g40/g18/g21
+/g40
+/g39/g36
+/g19/g17/g21/g19/g38/g21/g59
+/g11/g39/g36/g55/g56/g48/g3/g39/g12
+/g11/g39/g36/g55/g56/g48/g3/g36/g16/g37/g12
+/g36
+/g36
+/g54/g40/g40/g3/g54/g43/g40/g40/g55/g3/g21
+/g24/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g54/g80/g68/g79/g79/g3/g50/g88/g87/g79/g76/g81/g72/g3/g55/g85/g68/g81/g86/g76/g86/g87/g82/g85/g3/g11/g50/g55/g12/g3/g3/g62/g54/g50/g55/g21/g22/g64
+
+--- PDF page 41 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 41
+24AA256/24LC256/24FC256
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g38/g19/g23/g16/g19/g28/g20/g16/g50/g55/g3/g53/g72/g89/g3/g42/g3/g54/g75/g72/g72/g87/g3/g21/g3/g82/g73/g3/g21
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g70
+/g47
+/g47/g20
+/g84
+/g57/g44/g40/g58/g3/g36/g16/g36
+/g54/g43/g40/g40/g55/g3/g20
+/g24/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g54/g80/g68/g79/g79/g3/g50/g88/g87/g79/g76/g81/g72/g3/g55/g85/g68/g81/g86/g76/g86/g87/g82/g85/g3/g11/g50/g55/g12/g3/g3/g62/g54/g50/g55/g21/g22/g64
+/g83/g85/g82/g87/g85/g88/g86/g76/g82/g81/g86/g3/g86/g75/g68/g79/g79/g3/g81/g82/g87/g3/g72/g91/g70/g72/g72/g71/g3/g19/g17/g21/g24/g80/g80/g3/g83/g72/g85/g3/g86/g76/g71/g72/g17
+/g20/g17
+/g37/g54/g38/g29/g3/g37/g68/g86/g76/g70/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g17/g3/g55/g75/g72/g82/g85/g72/g87/g76/g70/g68/g79/g79/g92/g3/g72/g91/g68/g70/g87/g3/g89/g68/g79/g88/g72/g3/g86/g75/g82/g90/g81/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g86/g17
+/g21/g17
+/g41/g82/g82/g87/g3/g36/g81/g74/g79/g72
+/g49/g88/g80/g69/g72/g85/g3/g82/g73/g3/g51/g76/g81/g86
+/g51/g76/g87/g70/g75
+/g50/g88/g87/g86/g76/g71/g72/g3/g79/g72/g68/g71/g3/g83/g76/g87/g70/g75
+/g50/g89/g72/g85/g68/g79/g79/g3/g43/g72/g76/g74/g75/g87
+/g48/g82/g79/g71/g72/g71/g3/g51/g68/g70/g78/g68/g74/g72/g3/g55/g75/g76/g70/g78/g81/g72/g86/g86
+/g54/g87/g68/g81/g71/g82/g73/g73
+/g50/g89/g72/g85/g68/g79/g79/g3/g58/g76/g71/g87/g75
+/g48/g82/g79/g71/g72/g71/g3/g51/g68/g70/g78/g68/g74/g72/g3/g58/g76/g71/g87/g75
+/g50/g89/g72/g85/g68/g79/g79/g3/g47/g72/g81/g74/g87/g75
+/g41/g82/g82/g87/g3/g47/g72/g81/g74/g87/g75
+/g41/g82/g82/g87/g83/g85/g76/g81/g87
+/g47/g72/g68/g71/g3/g55/g75/g76/g70/g78/g81/g72/g86/g86
+/g47/g72/g68/g71/g3/g58/g76/g71/g87/g75
+/g49/g82/g87/g72/g86/g29
+/g47/g20
+/g73
+/g69
+/g70
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g3/g47/g76/g80/g76/g87/g86
+/g40
+/g40/g20
+/g39
+/g47
+/g72/g20
+/g36
+/g36/g21
+/g36/g20
+/g56/g81/g76/g87/g86
+/g49
+/g72
+/g19/g131
+/g19/g17/g19/g27
+/g19/g17/g21/g19 /g16
+/g16
+/g16
+/g20/g19/g131
+/g19/g17/g21/g25
+/g19/g17/g24/g20
+/g48/g44/g47/g47/g44/g48/g40/g55/g40/g53/g54
+/g19/g17/g28/g24/g3/g37/g54/g38
+/g20/g17/g28/g19/g3/g37/g54/g38
+/g19/g17/g22/g19
+/g19/g17/g28/g19
+/g19/g17/g27/g28
+/g16
+/g19/g17/g25/g19/g3/g53/g40/g41
+/g21/g17/g28/g19/g3/g37/g54/g38
+/g16
+/g21/g17/g27/g19/g3/g37/g54/g38
+/g20/g17/g25/g19/g3/g37/g54/g38
+/g16
+/g16
+/g16
+/g48/g44/g49
+/g24
+/g49/g50/g48
+/g20/g17/g23/g24
+/g20/g17/g22/g19
+/g19/g17/g20/g24
+/g19/g17/g25/g19
+/g48/g36/g59
+/g53/g40/g41/g29/g3/g3/g53/g72/g73/g72/g85/g72/g81/g70/g72/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g15/g3/g88/g86/g88/g68/g79/g79/g92/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g15/g3/g73/g82/g85/g3/g76/g81/g73/g82/g85/g80/g68/g87/g76/g82/g81/g3/g83/g88/g85/g83/g82/g86/g72/g86/g3/g82/g81/g79/g92/g17
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g86/g3/g39/g3/g68/g81/g71/g3/g40/g20/g3/g71/g82/g3/g81/g82/g87/g3/g76/g81/g70/g79/g88/g71/g72/g3/g80/g82/g79/g71/g3/g73/g79/g68/g86/g75/g3/g82/g85/g3/g83/g85/g82/g87/g85/g88/g86/g76/g82/g81/g86/g17/g3/g48/g82/g79/g71/g3/g73/g79/g68/g86/g75/g3/g82/g85
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g76/g81/g74/g3/g68/g81/g71/g3/g87/g82/g79/g72/g85/g68/g81/g70/g76/g81/g74/g3/g83/g72/g85/g3/g36/g54/g48/g40/g3/g60/g20/g23/g17/g24/g48
+
+--- PDF page 42 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 42  1998-2022 Microchip Technology Inc. and its subsidiaries
+/g53/g40/g38/g50/g48/g48/g40/g49/g39/g40/g39/g3/g47/g36/g49/g39/g3/g51/g36/g55/g55/g40/g53/g49
+/g24/g16/g47/g72/g68/g71/g3/g51/g79/g68/g86/g87/g76/g70/g3/g54/g80/g68/g79/g79/g3/g50/g88/g87/g79/g76/g81/g72/g3/g55/g85/g68/g81/g86/g76/g86/g87/g82/g85/g3/g11/g50/g55/g12/g3/g3/g62/g54/g50/g55/g21/g22/g64
+/g41/g82/g85/g3/g87/g75/g72/g3/g80/g82/g86/g87/g3/g70/g88/g85/g85/g72/g81/g87/g3/g83/g68/g70/g78/g68/g74/g72/g3/g71/g85/g68/g90/g76/g81/g74/g86/g15/g3/g83/g79/g72/g68/g86/g72/g3/g86/g72/g72/g3/g87/g75/g72/g3/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g51/g68/g70/g78/g68/g74/g76/g81/g74/g3/g54/g83/g72/g70/g76/g73/g76/g70/g68/g87/g76/g82/g81/g3/g79/g82/g70/g68/g87/g72/g71/g3/g68/g87
+/g75/g87/g87/g83/g29/g18/g18/g90/g90/g90/g17/g80/g76/g70/g85/g82/g70/g75/g76/g83/g17/g70/g82/g80/g18/g83/g68/g70/g78/g68/g74/g76/g81/g74
+/g49/g82/g87/g72/g29
+/g37/g54/g38/g29/g3/g37/g68/g86/g76/g70/g3/g39/g76/g80/g72/g81/g86/g76/g82/g81/g17/g3/g55/g75/g72/g82/g85/g72/g87/g76/g70/g68/g79/g79/g92/g3/g72/g91/g68/g70/g87/g3/g89/g68/g79/g88/g72/g3/g86/g75/g82/g90/g81/g3/g90/g76/g87/g75/g82/g88/g87/g3/g87/g82/g79/g72/g85/g68/g81/g70/g72/g86/g17
+/g49/g82/g87/g72/g86/g29
+/g20/g17 /g39/g76/g80/g72/g81/g86/g76/g82/g81/g76/g81/g74/g3/g68/g81/g71/g3/g87/g82/g79/g72/g85/g68/g81/g70/g76/g81/g74/g3/g83/g72/g85/g3/g36/g54/g48/g40/g3/g60/g20/g23/g17/g24/g48
+/g48/g76/g70/g85/g82/g70/g75/g76/g83/g3/g55/g72/g70/g75/g81/g82/g79/g82/g74/g92/g3/g39/g85/g68/g90/g76/g81/g74/g3/g49/g82/g17/g3/g38/g19/g23/g16/g21/g19/g28/g20/g16/g50/g55/g3/g53/g72/g89/g3/g42
+/g39/g76/g80/g72/g81/g86/g76/g82/g81/g3/g47/g76/g80/g76/g87/g86
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g47/g72/g81/g74/g87/g75/g3/g11/g59/g24/g12
+/g50/g89/g72/g85/g68/g79/g79/g3/g58/g76/g71/g87/g75
+/g39/g76/g86/g87/g68/g81/g70/g72/g3/g37/g72/g87/g90/g72/g72/g81/g3/g51/g68/g71/g86
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g58/g76/g71/g87/g75/g3/g11/g59/g24/g12
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g76/g87/g70/g75
+/g38/g82/g81/g87/g68/g70/g87/g3/g51/g68/g71/g3/g54/g83/g68/g70/g76/g81/g74
+/g22/g17/g28/g19
+/g20/g17/g20/g19
+/g42
+/g61
+/g60
+/g20/g17/g26/g19
+/g19/g17/g25/g19
+/g48/g36/g59/g48/g44/g49
+/g38
+/g59
+/g40
+/g56/g81/g76/g87/g86
+/g49/g50/g48
+/g19/g17/g28/g24/g3/g37/g54/g38
+/g21/g17/g27/g19
+/g48/g44/g47/g47/g44/g48/g40/g55/g40/g53/g54
+/g39/g76/g86/g87/g68/g81/g70/g72/g3/g37/g72/g87/g90/g72/g72/g81/g3/g51/g68/g71/g86 /g42/g59 /g19/g17/g22/g24
+/g20
+/g24
+/g59
+/g60
+/g61/g38
+/g40
+/g42/g59
+/g42
+/g21
+/g54/g44/g47/g46/g3/g54/g38/g53/g40/g40/g49
+
+--- PDF page 43 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 43
+24AA256/24LC256/24FC256
+APPENDIX A: REVISION HISTORY
+Revision Y (07/2022)
+Added 5-Lead SOT-23 package. Updated MSOP,
+PDIP , SOIC and SOIJ package drawings.
+Revision X (10/2021)
+Replaced terminology “Master” and “Slave” with “Host”
+and “Client” respectively; Added Automotive Product
+Identification System; Up dated DFN, PDIP, SOIC,
+TDFN and TSSOP package drawings.
+Revision W (08/2019)
+Updated content throughout for clarification.
+Revision V (08/2018)
+Updated First Line Marking Codes table.
+Revision U (11/2013)
+Updated ICCS.
+Revision T (04/2013)
+Added TDFN Package.
+Revision S (12/2012)
+Revise Automotive E-temp.
+Revision R (07/2011)
+Added Chip Scale package.
+Revision Q (05/10)
+Revised Table 1-1, Table 1-2, Section 6.1; Updated
+Package Drawings.
+Revision P
+Revised Features; Changed 1.8V voltage to 1.7V;
+Replaced Package Drawings; Revised markings (8-lead
+SOIC); Revised Product ID System.
+Revision N
+Revised Sections 2.1 and 2.4. Removed 14-Lead
+TSSOP Package.
+Revision M
+Added 1.8V 400 kHz option for 24FC256.
+Revision L
+Corrections to Section 1.0, Electrical Characteristics.
+
+--- PDF page 44 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 44  1998-2022 Microchip Technology Inc. and its subsidiaries
+THE MICROCHIP WEBSITE
+Microchip provides online support via our website at
+www.microchip.com. This website is used as a means
+to make files and information easily available to
+customers. Accessible by using your favorite Internet
+browser, the website contains the following information:
+• Product Support – Data sheets and errata, 
+application notes and sample programs, design 
+resources, user’s guides and hardware support 
+documents, latest software releases and archived 
+software
+• General Technical Support – Frequently Asked 
+Questions (FAQ), technical support requests, 
+online discussion groups, Microchip consultant 
+program member listing
+• Business of Microchip – Product selector and 
+ordering guides, latest Microchip press releases, 
+listing of seminars and events, listings of 
+Microchip sales offices, distributors and factory 
+representatives
+CUSTOMER CHANGE NOTIFICATION 
+SERVICE
+Microchip’s customer notification service helps keep
+customers current on Microchip products. Subscribers
+will receive e-mail notification whenever there are
+changes, updates, revisions or errata related to a
+specified product family or development tool of interest.
+To register, access the Microchip website at
+www.microchip.com . Under “Support”, click on
+“Customer Change Notification” and follow the
+registration instructions.
+CUSTOMER SUPPORT
+Users of Microchip products can receive assistance
+through several channels:
+• Distributor or Representative
+• Local Sales Office
+• Field Application Engineer (FAE)
+• Technical Support
+Customers should contact their distributor,
+representative or Field Application Engineer (FAE) for
+support. Local sales offices are also available to help
+customers. A listing of sa les offices and locations is
+included in the back of this document.
+Technical support is available through the website
+at: http://microchip.com/support
+
+--- PDF page 45 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 45
+24AA256/24LC256/24FC256
+PRODUCT IDENTIFICATION SYSTEM (NON-AUTOMOTIVE)
+To order or obtain information, e.g., on pricing or delivery, refer to the factory or the listed sales office.
+Note 1: Tape and Reel identifier only appears in
+the catalog part number description.
+This identifier is used for ordering
+purposes and is not printed on the
+device package. Check with your
+Microchip Sales Office for package
+availability with the Tape and Reel
+option.
+2: 16K indicates 160K technology.
+   
+Device: 24AA256  = 1.7V, 256-Kbit I 2C Serial EEPROM
+24LC256  = 2.5V, 256-Kbit I 2C Serial EEPROM
+24FC256  = 1.7V, High-Speed, 256-Kbit I 2C Serial 
+EEPROM
+Tape and Reel 
+Option:
+Blank     =  Standard packaging (tube or tray)
+T     =  Tape and Reel (1)
+Temperature 
+Range:
+I       =  -40 C to +85C (Industrial)
+E       =  -40 C to +125C (Extended)
+Package: CS16K(2)=  Chip Scale, 8-Lead (CSP)
+MF =  Plastic Dual Flat, No Lead Package – 
+ 6x5x0.85 mm Body, 8-Lead (DFN-S)
+MS =  Plastic Micro Small Outline Package, 
+ 8-Lead (MSOP)
+P =  Plastic Dual In-Line – 300 mil Body, 8-Lead 
+ (PDIP)
+SN =  Plastic Small Outline - Narrow, 3.90 mm 
+ Body, 8-Lead (SOIC)
+SM =  Plastic Small Outline - Medium, 5.28 mm 
+ Body, 8-Lead (SOIJ)
+MNY =  Plastic Dual Flat, No Lead Package -  
+ 2x3x0.75 mm Body, 8-Lead (TDFN)
+ST =  Plastic Thin Shrink Small Outline – 4.4 mm, 
+ 8-Lead (TSSOP)
+OT =  Pastic Small Outline Transistor, 
+ 5-Lead (SOT-23) (Tape and Reel only)
+Examples:
+a) 24AA256-I/P: Industrial Temperature, 
+1.7V, PDIP package.
+b) 24AA256T-I/SN: Tape and Reel, Industrial
+Temperature, 1.7V, SOIC package.
+c) 24AA256-I/ST: Industrial Temperature,
+1.7V, TSSOP package.
+d) 24AA256-I/MS: Industrial Temperature,
+1.7V, MSOP package.
+e) 24LC256-E/P: Extended Temperature,
+2.5V, PDIP package.
+f) 24LC256-I/SN: Industrial Temperature,
+2.5V, SOIC package.
+g) 24LC256T-I/SN: Tape and Reel, Industrial
+Temperature, 2.5V, SOIC package.
+h) 24LC256-I/MS: Industrial Temperature,
+2.5V, MSOP package.
+i) 24FC256-I/P: Industrial Temperature,
+1.7V, High-Speed, PDIP package.
+j) 24FC256-I/SN: Industrial Temperature,
+1.7V, High-Speed, SOIC package.
+k) 24FC256T-I/SN: Tape and Reel, Industrial
+Temperature, 1.7V, High-Speed, SOIC
+package.
+l) 24AA256T-I/CS16K: Tape and Reel, Industrial
+Temperature, 1.7V, Chip Scale package.
+m)24AA256T-E/SN: Tape and Reel, Extended
+Temperature, 1.7V, SOIC package.
+n) 24FC256T-I/OT: Tape and Reel, Industrial
+Temperature, 1.7V, SOT-23 package.
+PART NO. -X /XX
+PackageTemperature
+Range
+Device
+[X]
+Tape and Reel
+Option
+(1)
+
+--- PDF page 46 ---
+24AA256/24LC256/24FC256
+DS20001203Y-page 46  1998-2022 Microchip Technology Inc. and its subsidiaries
+PRODUCT IDENTIFICATION SYSTEM (AUTOMOTIVE)
+To order or obtain information, e.g., on pricing or delivery, refer to the factory or the listed sales office.
+   
+Device: 24LC256 =    2.5V, 256-Kbit I2C Serial EEPROM
+24FC256 =    1.7V, High-Speed, 256-Kbit I2C Serial 
+EEPROM
+Tape and Reel 
+Option:
+Blank      =   Standard packaging (tube or tray)
+T      =   Tape and Reel (1)
+Temperature 
+Range:
+I      =   -40 C to  +85C    (AEC-Q100 Grade 3)
+E      =   -40 C to  +125C  (AEC-Q100 Grade 1)
+Package: MS      = Plastic Micro Small Outline Package, 
+8-Lead (MSOP)
+SN      = Plastic Small Outline – Narrow, 3.90 mm 
+Body, 8-Lead (SOIC)
+SM      = Plastic Small Outline – Medium, 5.28 mm 
+Body, 8-Lead (SOIJ)
+ST            =  Plastic Thin Shrink Small Outline, 
+4.4 mm, 8-Lead (TSSOP)
+Variant(2,3): 15KVAO   =  Standard Automotive, 15K Process(4)
+15KVXX   =  Customer-Specific Automotive, 15K 
+Process(4)
+16KVAO   =  Standard Automotive, 16K Process
+16KVXX   =  Customer-Specific Automotive, 16K 
+Process
+Examples:
+a) 24LC256T-I/SN16KVAO:   Tape and Reel, 
+Automotive Grade 3, 2.5V, SOIC Package.
+b) 24LC256T-I/ST16KVAO:   Tape and Reel, 
+Automotive Grade 3, 2.5V, TSSOP 
+Package.
+c) 24LC256T-I/SM16KVAO:  Tape and Reel, 
+Automotive Grade 3, 2.5V, SOIJ Package.
+d) 24FC256T-E/ST16KVAO: Tape and Reel,
+Automotive Grade 1, High-Speed, 1.7V,
+TSSOP Package.
+Note 1: Tape and Reel identifier only
+appears in the catalog part number
+description. This identifier is used for
+ordering purposes and is not printed
+on the device package. Check with
+your Microchip Sales Office for
+package availability with the Tape
+and Reel option.
+2: The VAO/VXX automotive variants
+have been designed, manufactured,
+tested and qualified in accordance
+with AEC-Q100 requirements for
+automotive applications.
+3: For customers requesting a PPAP, a
+customer-specific part number will
+be generated and provided. A PPAP
+is not provided for VAO part num-
+bers.
+4: Not recommended for new designs.
+PART NO. X /XX
+PackageTemperature
+Range
+Device
+[X]
+Tape and Reel
+Option
+XXX
+ Variant
+(1) (2, 3)
+
+--- PDF page 47 ---
+ 1998-2022 Microchip Technology Inc. and its subsidiaries DS20001203Y-page 47
+This publication and the information herein may be used only
+with Microchip products, including to design, test, and integrate
+Microchip products with your application. Use of this informa-
+tion in any other manner violates these terms. Information
+regarding device applications is provided only for your conve-
+nience and may be superseded by updates. It is your responsi-
+bility to ensure t hat your applicatio n meets with your
+specifications. Contact your lo cal Microchip sales office for
+additional support or, obtai n additional support at https://
+www.microchip.com/en-us/support/design-help/client-support-
+services.
+THIS INFORMATION IS PROVIDED BY MICROCHIP "AS IS".
+MICROCHIP MAKES NO REPRESENTATIONS OR WAR-
+RANTIES OF ANY KIND WHETHER EXPRESS OR IMPLIED,
+WRITTEN OR ORAL, STATUTORY OR OTHERWISE,
+RELATED TO THE INFORMATION INCLUDING BUT NOT
+LIMITED TO ANY IMPLIED WARRANTIES OF NON-
+INFRINGEMENT, MERCHANTABILITY, AND FITNESS FOR A
+PARTICULAR PURPOSE, OR WARRANTIES RELATED TO
+ITS CONDITION, QUALITY, OR PERFORMANCE.
+IN NO EVENT WILL MICROCHIP BE LIABLE FOR ANY INDI-
+RECT, SPECIAL, PUNITIVE , INCIDENTAL, OR CONSE-
+QUENTIAL LOSS, DAMAGE, COST, OR EXPENSE OF ANY
+KIND WHATSOEVER RELATED TO THE INFORMATION OR
+ITS USE, HOWEVER CAUSED, EVEN IF MICROCHIP HAS
+BEEN ADVISED OF THE POSSIBILITY OR THE DAMAGES
+ARE FORESEEABLE. TO THE FULLEST EXTENT
+ALLOWED BY LAW, MICROCHIP'S TOTAL LIABILITY ON
+ALL CLAIMS IN ANY WAY RELATED TO THE INFORMATION
+OR ITS USE WILL NOT EXCEED THE AMOUNT OF FEES, IF
+ANY, THAT YOU HAVE PAID DIRECTLY TO MICROCHIP
+FOR THE INFORMATION. 
+Use of Microchip devices in life support and/or safety applica-
+tions is entirely at the buyer's risk, and the buyer agrees to
+defend, indemnify and hold harmless Microchip from any and
+all damages, claims, suits, or  expenses resulting from such
+use. No licenses ar e conveyed, implicitly or otherwise, under
+any Microchip intellectual pr operty rights unless otherwise
+stated.
+Trademarks
+The Microchip name and logo, the Microchip logo, Adaptec, AVR, 
+AVR logo, AVR Freaks, BesTime, BitCloud, CryptoMemory, 
+CryptoRF, dsPIC, flexPWR, HELDO, IGLOO, JukeBlox, KeeLoq, 
+Kleer, LANCheck, LinkMD, maXStylus, maXTouch, MediaLB, 
+megaAVR, Microsemi, Microsemi logo, MOST, MOST logo, 
+MPLAB, OptoLyzer, PIC, picoPower, PICSTART, PIC32 logo, 
+PolarFire, Prochip Designer, QTouch, SAM-BA, SenGenuity, 
+SpyNIC, SST, SST Logo, SuperFlash, Symmetricom, SyncServer, 
+Tachyon, TimeSource, tinyAVR, UNI/O, Vectron, and XMEGA are 
+registered trademarks of Microchip Technology Incorporated in the 
+U.S.A. and other countries.
+AgileSwitch, APT, ClockWorks, The Embedded Control Solutions 
+Company, EtherSynch, Flashtec, Hyper Speed Control, HyperLight 
+Load, Libero, motorBench, mTouch, Powermite 3, Precision Edge, 
+ProASIC, ProASIC Plus, ProASIC Plus logo, Quiet- Wire, 
+SmartFusion, SyncWorld, Temux, TimeCesium, TimeHub, 
+TimePictra, TimeProvider, TrueTime, and ZL are registered 
+trademarks of Microchip Technology Incorporated in the U.S.A.
+Adjacent Key Suppression, AKS, Analog-for-the-Digital Age, Any 
+Capacitor, AnyIn, AnyOut, Augmented Switching, BlueSky, 
+BodyCom, Clockstudio, CodeGuard, CryptoAuthentication, 
+CryptoAutomotive, CryptoCompanion, CryptoController, 
+dsPICDEM, dsPICDEM.net, Dynamic Average Matching, DAM, 
+ECAN, Espresso T1S, EtherGREEN, GridTime, IdealBridge, In-
+Circuit Serial Programming, ICSP, INICnet, Intelligent Paralleling, 
+IntelliMOS, Inter-Chip Connectivity, JitterBlocker, Knob-on-Display, 
+KoD, maxCrypto, maxView, memBrain, Mindi, MiWi, MPASM, MPF, 
+MPLAB Certified logo, MPLIB, MPLINK, MultiTRAK, NetDetach, 
+Omniscient Code Generation, PICDEM, PICDEM.net, PICkit, 
+PICtail, PowerSmart, PureSilicon, QMatrix, REAL ICE, Ripple 
+Blocker, RTAX, RTG4, SAM-ICE, Serial Quad I/O, simpleMAP, 
+SimpliPHY, SmartBuffer, SmartHLS, SMART-I.S., storClad, SQI, 
+SuperSwitcher, SuperSwitcher II, Switchtec, SynchroPHY, Total 
+Endurance, Trusted Time, TSHARC, USBCheck, VariSense, 
+VectorBlox, VeriPHY, ViewSpan, WiperLock, XpressConnect, and 
+ZENA are trademarks of Microchip Technology Incorporated in the 
+U.S.A. and other countries.
+SQTP is a service mark of Microchip Technology Incorporated in 
+the U.S.A.
+The Adaptec logo, Frequency on Demand, Silicon Storage 
+Technology, and Symmcom are registered trademarks of Microchip 
+Technology Inc. in other countries.
+GestIC is a registered trademark of Microchip Technology Germany 
+II GmbH & Co. KG, a subsidiary of Microchip Technology Inc., in 
+other countries.
+All other trademarks mentioned herein are property of their 
+respective companies.
+© 1998-2022, Microchip Technology Incorporated and its subsidiar-
+ies.
+All Rights Reserved.
+ISBN: 978-1-6683-0520-1
+Note the following details of the code protection feature on Microchip products:
+• Microchip products meet the specifications c ontained in their particular Microchip Data Sheet.
+• Microchip believes that its family of products is secure w hen used in the intended manner, within operating specifications, and 
+under normal conditions.
+• Microchip values and aggressively protects  its intellectual property rights. Attempts to breach the code protection features of 
+Microchip product is strictly prohibited and may violate the Digital Millennium Copyright Act.
+• Neither Microchip nor any other semic onductor manufacturer can guarantee the security of its code. Code protection does not 
+mean that we are guaranteeing the product is "unbreakable" Code protection is constantly evolving. Microchip is committed to 
+continuously improving the code protection features of our products.
+For information regarding Microchip’s Quality Management Systems, 
+please visit www.microchip.com/quality.
+
+--- PDF page 48 ---
+DS20001203Y-page 48  1998-2022 Microchip Technology Inc. and its subsidiaries
+AMERICAS
+Corporate Office
+2355 West Chandler Blvd.
+Chandler, AZ 85224-6199
+Tel: 480-792-7200 
+Fax: 480-792-7277
+Technical Support: 
+http://www.microchip.com/
+support
+Web Address: 
+www.microchip.com
+Atlanta
+Duluth, GA 
+Tel: 678-957-9614 
+Fax: 678-957-1455
+Austin, TX
+Tel: 512-257-3370 
+Boston
+Westborough, MA 
+Tel: 774-760-0087 
+Fax: 774-760-0088
+Chicago
+Itasca, IL 
+Tel: 630-285-0071 
+Fax: 630-285-0075
+Dallas
+Addison, TX 
+Tel: 972-818-7423 
+Fax: 972-818-2924
+Detroit
+Novi, MI 
+Tel: 248-848-4000
+Houston, TX 
+Tel: 281-894-5983
+Indianapolis
+Noblesville, IN 
+Tel: 317-773-8323
+Fax: 317-773-5453
+Tel: 317-536-2380
+Los Angeles
+Mission Viejo, CA 
+Tel: 949-462-9523
+Fax: 949-462-9608
+Tel: 951-273-7800 
+Raleigh, NC 
+Tel: 919-844-7510
+New York, NY 
+Tel: 631-435-6000
+San Jose, CA 
+Tel: 408-735-9110
+Tel: 408-436-4270
+Canada - Toronto
+Tel: 905-695-1980 
+Fax: 905-695-2078
+ASIA/PACIFIC
+Australia - Sydney
+Tel: 61-2-9868-6733
+China - Beijing
+Tel: 86-10-8569-7000 
+China - Chengdu
+Tel: 86-28-8665-5511
+China - Chongqing
+Tel: 86-23-8980-9588
+China - Dongguan
+Tel: 86-769-8702-9880 
+China - Guangzhou
+Tel: 86-20-8755-8029 
+China - Hangzhou
+Tel: 86-571-8792-8115 
+China - Hong Kong SAR
+Tel: 852-2943-5100 
+China - Nanjing
+Tel: 86-25-8473-2460
+China - Qingdao
+Tel: 86-532-8502-7355
+China - Shanghai
+Tel: 86-21-3326-8000 
+China - Shenyang
+Tel: 86-24-2334-2829
+China - Shenzhen
+Tel: 86-755-8864-2200 
+China - Suzhou
+Tel: 86-186-6233-1526 
+China - Wuhan
+Tel: 86-27-5980-5300
+China - Xian
+Tel: 86-29-8833-7252
+China - Xiamen
+Tel: 86-592-2388138 
+China - Zhuhai
+Tel: 86-756-3210040 
+ASIA/PACIFIC
+India - Bangalore
+Tel: 91-80-3090-4444 
+India - New Delhi
+Tel: 91-11-4160-8631
+India - Pune
+Tel: 91-20-4121-0141
+Japan - Osaka
+Tel: 81-6-6152-7160 
+Japan - Tokyo
+Tel: 81-3-6880- 3770 
+Korea - Daegu
+Tel: 82-53-744-4301
+Korea - Seoul
+Tel: 82-2-554-7200
+Malaysia - Kuala Lumpur
+Tel: 60-3-7651-7906
+Malaysia - Penang
+Tel: 60-4-227-8870
+Philippines - Manila
+Tel: 63-2-634-9065
+Singapore
+Tel: 65-6334-8870
+Taiwan - Hsin Chu
+Tel: 886-3-577-8366
+Taiwan - Kaohsiung
+Tel: 886-7-213-7830
+Taiwan - Taipei
+Tel: 886-2-2508-8600 
+Thailand - Bangkok
+Tel: 66-2-694-1351
+Vietnam - Ho Chi Minh
+Tel: 84-28-5448-2100
+EUROPE
+Austria - Wels
+Tel: 43-7242-2244-39
+Fax: 43-7242-2244-393
+Denmark - Copenhagen
+Tel: 45-4485-5910 
+Fax: 45-4485-2829
+Finland - Espoo
+Tel: 358-9-4520-820
+France - Paris
+Tel: 33-1-69-53-63-20 
+Fax: 33-1-69-30-90-79 
+Germany - Garching
+Tel: 49-8931-9700
+Germany - Haan
+Tel: 49-2129-3766400
+Germany - Heilbronn
+Tel: 49-7131-72400
+Germany - Karlsruhe
+Tel: 49-721-625370
+Germany - Munich
+Tel: 49-89-627-144-0 
+Fax: 49-89-627-144-44
+Germany - Rosenheim
+Tel: 49-8031-354-560
+Israel - Ra’anana 
+Tel: 972-9-744-7705
+Italy - Milan 
+Tel: 39-0331-742611 
+Fax: 39-0331-466781
+Italy - Padova
+Tel: 39-049-7625286 
+Netherlands - Drunen
+Tel: 31-416-690399 
+Fax: 31-416-690340
+Norway - Trondheim
+Tel: 47-7288-4388
+Poland - Warsaw
+Tel: 48-22-3325737 
+Romania - Bucharest
+Tel: 40-21-407-87-50
+Spain - Madrid
+Tel: 34-91-708-08-90
+Fax: 34-91-708-08-91
+Sweden - Gothenberg
+Tel: 46-31-704-60-40
+Sweden - Stockholm
+Tel: 46-8-5090-4654
+UK - Wokingham
+Tel: 44-118-921-5800
+Fax: 44-118-921-5820
+Worldwide Sales and Service
+09/14/21

@@ -22,7 +22,7 @@ def main():
             if re.search(r"\b(?:delay|malloc|calloc|realloc|printf)\s*\(|\bnew\s+\w|\b(?:Serial|Wire)\s*[.]", code):
                 errors.append(f"allocation/logging/framework call in {path.relative_to(ROOT)}")
     metadata = json.loads((ROOT / "library.json").read_text())
-    assert metadata["name"] == "TMP1x2"
+    assert metadata["name"] == "EEPROM24Cxx"
     result = subprocess.run([sys.executable, str(ROOT / "scripts/generate_version.py"), "check"], cwd=ROOT)
     if result.returncode:
         errors.append("generated release metadata mismatch")

@@ -1,12 +1,12 @@
 #pragma once
 
-// Example-only framework-neutral command processor. The application owns I2C.
+// Example-only command processor; one application task owns this and the bus.
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
-#include "TMP1x2/TMP1x2.h"
+#include "EEPROM24Cxx/EEPROM24Cxx.h"
 
-namespace tmp1x2_cli {
+namespace eeprom24cxx_cli {
 struct TransferStats {
   uint32_t attempts = 0;
   uint32_t successes = 0;
@@ -20,7 +20,7 @@ struct TransferStats {
 struct Platform {
   void (*vprintf)(void*, const char*, va_list) = nullptr;
   uint32_t (*nowMs)(void*) = nullptr;
-  TMP1x2::Status (*probeAddress)(uint8_t, void*) = nullptr;
+  EEPROM24Cxx::Status (*probeAddress)(uint8_t, void*) = nullptr;
   TransferStats (*transferStats)(void*) = nullptr;
   void* user = nullptr;
   const char* framework = "unknown";
@@ -30,7 +30,7 @@ struct Platform {
 
 class Cli {
  public:
-  void setup(const Platform& platform, const TMP1x2::Config& config);
+  void setup(const Platform& platform, const EEPROM24Cxx::Config& config);
   void feed(char value);
   void processCommand(const char* text);
   void tick();
@@ -38,30 +38,36 @@ class Cli {
   void printPrompt();
  private:
   void print(const char* format, ...);
-  void status(TMP1x2::Status value);
+  void status(EEPROM24Cxx::Status value);
   void printVersion();
   void printHealth();
   void printSettings();
-  void printSample(const TMP1x2::Sample& sample);
+  void printProgress(const EEPROM24Cxx::TransferResult& result);
+  void printBytes(uint32_t address, size_t length);
   void stop();
+  void complete();
   const char* color(unsigned code) const;
   uint32_t now() const;
   Platform _platform{};
-  TMP1x2::Config _config{};
-  TMP1x2::TMP1x2 _device{};
-  char _line[160]{};
+  EEPROM24Cxx::Config _config{};
+  EEPROM24Cxx::EEPROM24Cxx _device{};
+  char _line[256]{};
+  uint8_t _data[256]{}; // Borrowed by the driver until its terminal result.
   size_t _length = 0;
   bool _overflow = false;
   bool _color = true;
-  bool _watch = false;
-  bool _oneShot = false;
+  bool _operation = false;
+  bool _hasResult = false;
+  EEPROM24Cxx::TransferResult _lastResult{};
+  bool _scan = false;
+  uint8_t _scanNext = 0;
+  uint8_t _scanLast = 0;
+  unsigned _scanFound = 0;
+  unsigned _scanErrors = 0;
+  bool _stress = false;
   uint32_t _remaining = 0;
-  uint32_t _intervalMs = 1000;
   uint32_t _nextMs = 0;
-  uint32_t _conversionDeadlineMs = 0;
-  uint32_t _watchSuccess = 0;
-  uint32_t _watchFailures = 0;
-  TMP1x2::Sample _lastSample{};
-  bool _hasSample = false;
+  uint32_t _stressSuccess = 0;
+  uint32_t _stressFailures = 0;
 };
-}  // namespace tmp1x2_cli
+}  // namespace eeprom24cxx_cli

@@ -8,3 +8,4 @@
 *.cmd text eol=crlf
 # Preserve vendor archive bytes and checksums, including original whitespace.
 docs/reference/** -text -whitespace
+docs/archive/** -text -whitespace

@@ -1,0 +1,375 @@
+--- PDF page 1 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+1 / 19
+ZD24C128A
+I2C-Compatible (2-wire) Serial EEPROM
+128K-bit (16,384×8)
+DATASHEET
+Features
+⚫ CompatiblewithallI2Cbidirectionaldatatransferprotocol
+- 1MHz
+- 400kHz
+- 100kHz
+⚫ Memoryarray:
+–128Kbits(16Kbytes)ofEEPROM
+–Pagesize:64bytes
+–AdditionalWritelockablepage
+⚫ Singlesupplyvoltageandhighspeed:
+–1MHz
+⚫ Write:
+–ByteWritewithin5ms
+–PageWritewithin5ms
+–PartialPageWritesAllowed
+⚫ WriteProtectPinforHardwareDataProtection
+⚫ SchmittTrigger,FilteredInputsforNoiseSuppression
+⚫ High-reliability
+–Endurance:1MillionWriteCycles
+–DataRetention:100Years
+⚫ 8-leadPDIP/SOP/TSSOP/UDFN/WLCSPpackages
+⚫ Self-timedWriteCycle(5ms max)
+⚫ OperatingAmbient Temperature
+–From-40°Cupto+85°C
+Description
+⚫ TheZD24C128Aprovides131,072bitsofserialelectricallyerasableandprogrammableread-onlymemory(EEPROM),
+organizedas16,384wordsof8bitseach..Thedeviceisoptimizedforuseinmanyindustrialandcommercial
+applicationswherelow-powerandlow-voltageoperationareessential.TheZD24C128Aisavailableinspace-saving
+8-leadPDIP,8-leadSOP,and8-leadTSSOP，TSOT23-5packagesandisaccessedviaatwo-wireserialinterface.In
+addition,theZD24C128Aisavailablein1.7V(1.7Vto5.5V)version.
+
+--- PDF page 2 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+2 / 19
+Pin Configuration
+
+
+--- PDF page 3 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+3 / 19
+Pin Descriptions
+Block Diagram
+
+
+--- PDF page 4 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+4 / 19
+DEVICE/PAGEADDRESSES(A2,A1andA0):TheA2,A1andA0pinsaredeviceaddressinputsthatarehardwirefor
+theZD24C128A. Eight128Kdevicesmay beaddressedonasinglebussystem(deviceaddressingisdiscussedin
+detailundertheDeviceAddressingsection).
+SERIALDATA (SDA):TheSDApinisbi-directionalforserialdatatransfer. Thispinisopen-draindrivenandmay bewire-
+ORedwithanynumberofotheropen-drainoropen-collectordevices.
+SERIALCLOCK (SCL): TheSCLinputisusedtopositiveedgeclockdataintoeachEEPROMdeviceandnegativeedge
+clockdataoutofeachdevice.
+WRITEPROTECT(WP):TheZD24C128AhasaWriteProtectpinthatprovideshardwaredataprotection.The
+WriteProtectpinallowsnormalread/writeoperationswhenconnectedtoground(GND). WhentheWriteProtection
+pinisconnectedtoVcc,thewriteprotectionfeatureisenabledandoperatesasshowninthefollowing Table 2.
+WPPinStatus ZD24C128A
+AtVCC Full(128K)Array
+AtGND NormalRead/WriteOperations
+Table 2
+Functional Description
+1. Memory Organization
+ZD24C128A,128KSERIALEEPROM:Internallyorganizedwith256pagesof64bytes each,the128K
+requiresa14-bitdatawordaddressforrandomwordaddressing.
+2. Device Operation
+CLOCK andDATATRANSITIONS:TheSDApinisnormallypulledhighwithanexternaldevice.Dataonthe
+SDApinmay changeonlyduringSCLlowtimeperiods(see Figure 2).DatachangesduringSCLhighperiods
+willindicateastart orstopconditionasdefinedbelow.
+STARTCONDITION: Ahigh-to-lowtransitionofSDAwithSCLhighisastartconditionwhichmustprecedeany
+othercommand(see Figure 3).
+STOPCONDITION:Alow-to-hightransitionofSDAwithSCLhighisastopcondition.Afterareadsequence,
+thestopcommandwillplacetheEEPROMinastandbypowermode(see Figure 3).
+ACKNOWLEDGE:AlladdressesanddatawordsareseriallytransmittedtoandfromtheEEPROMin8-bit
+words.TheEEPROMsendsa"0"toacknowledgethatithasreceivedeachword.Thishappensduringtheninth
+clockcycle.(see Figure 4).
+STANDBYMODE:TheZD24C128A featuresalow-powerstandbymodewhichisenabled:(a)uponpower-up
+and(b)afterthereceiptoftheSTOPbitandthecompletionofanyinternaloperations.
+MEMORYRESET:Afteraninterruptioninprotocol,powerlossorsystemreset,anytwo-wirepartcanberesetby
+followingthesesteps:
+1.Clockupto9cycles.
+2.LookforSDAhighineachcyclewhileSCLishigh.
+3.Createastartcondition.
+
+--- PDF page 5 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+5 / 19
+
+
+--- PDF page 6 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+6 / 19
+3. Device Addressing
+The128KEEPROMdevicesallrequirean8-bitdeviceaddresswordfollowingastartconditiontoenablethe
+chipforareadorwriteoperation(see Figure 5)
+Thedeviceaddresswordconsistsofamandatory"1","0"sequenceforthefirstfourmostsignificantbitsasshown.
+ThisiscommontoalltheSerialEEPROMdevices.
+The128KEEPROMusesA2,A1andA0deviceaddressbitstoallowasmuchaseightdevicesonthesame
+bus.These3bitsmustbecomparedtotheircorrespondinghardwiredinputpins.TheA2,A1andA0pinsuse
+aninternalproprietary circuitthatbiasesthemtoalogiclowconditionifthepinsareallowedtofloat.
+Theeighthbitofthedeviceaddressistheread/writeoperationselectbit.Areadoperationisinitiatedifthisbitishigh
+andawriteoperationisinitiatedifthisbitislow.
+Uponacompareofthedeviceaddress,theEEPROMwilloutput a"0".Ifacompareisnotmade,thechipwillreturntoa
+standbystate.
+DATASECURITY:TheZD24C128A hasahardwaredataprotectionschemethatallowstheusertowriteprotectthe
+entirememorywhentheWPpinisatVCC.
+
+--- PDF page 7 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+7 / 19
+4. Write Operations
+BYTE WRITE:Awriteoperationrequirestwo8-bitdatawordaddressfollowingthedeviceaddresswordand
+acknowledgment. Uponreceiptofevery8-bitaddress,theEEPROMwillagainrespondwitha"0"andthen
+clockinthefirst8-bitdataword.Followingreceiptofthe8-bitdataword, theEEPROMwilloutputa"0"andthe
+addressingdevice,suchasamicrocontroller,mustterminatethewritesequencewithastopcondition.Atthis
+timetheEEPROMentersaninternallytimedwritecycle,tWR,tothenonvolatilememory. Allinputsare
+disabledduringthiswritecycleandtheEEPROMwillnotresponduntilthewriteiscomplete(see Figure 6).
+PAGEWRITE:The128KEEPROMiscapableofa64-bytepagewrites.Apagewriteisinitiatedthesameasa
+bytewrite,butthemicrocontrollerdoesnotsendastopconditionafterthefirstdatawordisclockedin.Instead,
+aftertheEEPROMacknowledgesreceiptofthefirstdataword, themicrocontrollercantransmitupto63more
+datawords.TheEEPROMwillrespondwitha“0”aftereachdatawordreceived.Themicrocontrollermust
+terminatethepagewritesequencewithastopcondition(see Figure 7).
+Thedatawordaddresslowersixbitsareinternallyincrementedfollowingthereceiptofeachdataword. Thehigher
+datawordaddressbitsarenotincremented,retainingthememorypagerowlocation.Whenthewordaddress,
+internallygenerated,reachesthepageboundary,thefollowingbyteisplacedatthebeginningofthesamepage.If
+morethan64datawordsaretransmittedtotheEEPROM, thedatawordaddresswill"rollover"andpreviousdatawill
+beoverwritten.
+WRITEIDENTIFICATIONPAGE: The IdentificationPage(64bytes)isanadditional pagewhichcanbewrittenand(later)
+permanentlylockedinRead-onlymode. ItiswrittenbyissuingtheWriteIdentificationPageinstruction.Thisinstruction
+usesthesameprotocolandformat asPageWrite(intomemoryarray), exceptfor
+
+
+--- PDF page 8 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+8 / 19
+thefollowingdifferences:
+Devicetypeidentifier=1011b
+MSB addressbitsB15/B6aredon'tcareexceptforaddressbitB10whichmustbe"0".
+LSBaddressbitsB5/B0definethebyteaddressinsidetheIdentificationpage.
+IftheIdentificationpageislocked,thedatabytes transferredduringtheWriteIdentificationPageinstructionare
+notacknowledged(NoAck).
+ACKNOWLEDGEPOLLING: OncetheinternallytimedwritecyclehasstartedandtheEEPROMinputsare
+disabled,acknowledgepollingcanbeinitiated.Thisinvolvessendingastartconditionfollowedbythedevice
+addressword. Theread/writebitisrepresentativeoftheoperationdesired.Onlyiftheinternalwritecyclehas
+completedwilltheEEPROMrespondwitha"0",allowingthereadorwritesequencetocontinue.
+
+--- PDF page 9 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+9 / 19
+5. Read Operations
+Readoperationsareinitiatedthesamewayaswriteoperationswiththeexceptionthattheread/writeselectbit
+inthedeviceaddresswordissetto"1".Therearethreereadoperations:currentaddressread, randomaddress
+readandsequentialread.
+CURRENTADDRESSREAD:
+Theinternaldatawordaddresscountermaintainsthelastaddressaccessedduringthelastreadorwrite
+operation,incrementedbyone.Thisaddressstaysvalidbetweenoperationsaslongasthechippoweris
+maintained.Theaddress"rollover"duringreadisfromthelastbyteofthelastmemorypagetothefirstbyteof
+thefirstpage. Theaddress"rollover"duringwriteisfromthelastbyteofthecurrentpagetothefirstbyteofthe
+samepage.
+Oncethedeviceaddresswiththeread/writeselectbitsetto"1"isclockedinandacknowledgedbythe
+EEPROM,thecurrent addressdatawordisseriallyclockedout.Themicrocontrollerdoesnotrespondwithan
+input"0"butdoesgenerateafollowingstopcondition(see Figure 8).
+RANDOMREAD:
+Arandomreadrequiresa"dummy"bytewritesequencetoloadinthedatawordaddress.Oncethedevice
+addresswordanddatawordaddressareclockedinandacknowledgedbytheEEPROM, themicrocontroller
+mustgenerateanotherstartcondition.Themicrocontrollernowinitiatesacurrent addressreadbysendinga
+deviceaddresswiththeread/writeselectbithigh.TheEEPROMacknowledgesthedeviceaddressandserially
+clocksoutthedataword.Themicrocontrollerdoesnotrespondwitha"0"butdoesgenerateafollowingstop
+condition(see Figure 9)
+
+
+--- PDF page 10 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+10 /
+19
+SEQUENTIALREAD:Sequentialreadsareinitiatedbyeitheracurrent addressreadorarandomaddressread.
+Afterthemicrocontrollerreceivesadataword, itrespondswithanacknowledge.AslongastheEEPROM
+receivesanacknowledge,itwillcontinuetoincrement thedatawordaddressandseriallyclockoutsequential
+datawords.Whenthememoryaddresslimitisreached,thedatawordaddresswill"rollover"andthesequential
+readwillcontinue.Thesequentialreadoperationisterminatedwhenthemicrocontrollerdoesnotrespondwith
+a"0"butdoesgenerateafollowingstopcondition(see Figure 10).
+READIDENTIFICATIONPAGE: TheIdentificationPage(64bytes)isanadditionalpagewhichcanbewritten
+and(later)permanentlylockedinRead-onlymode.
+TheIdentificationPagecanbereadbyissuingaReadIdentificationPageinstruction.Thisinstructionusesthe
+sameprotocolandformat astheRandomAddressRead(frommemoryarray)withdevicetypeidentifier
+definedas1011b.TheMSBaddressbitsB15/B6aredon'tcare,theLSBaddressbitsB5/B0definethebyte
+addressinsidetheIdentificationPage.Thenumberof bytestoreadintheIDpagemustnotexceedthepage
+boundary(e.g.:whenreadingtheIdentificationPagefromlocation10d,thenumberofbytesshouldbeless
+thanorequalto54,astheIDpageboundaryis64bytes)
+LOCKIDENTIFICATIONPAGE:TheLockIdentificationPageinstruction(LockID)permanentlylocksthe
+IdentificationpageinRead-onlymode.TheLockIDinstructionissimilartoByteWrite(intomemoryarray)with
+thefollowingspecificconditions:
+Devicetypeidentifier=1011b
+AddressbitB10mustbe‘1’;allotheraddressbitsaredon'tcare
+Thedatabytemustbeequaltothebinaryvaluexxxxxx1x,wherexisdon'tcare
+
+
+--- PDF page 11 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+10 / 19
+Electrical Characteristics
+AbsoluteMaximumStressRatings：
+⚫ DCSupplyVoltage..........................................................................................................-0.3Vto+6.5V
+⚫ Input/Output Voltage................................................................................GND-0.3VtoVCC+0.3V
+⚫ OperatingAmbientTemperature..............................................................................-40℃to+85℃
+⚫ StorageTemperature...............................................................................................-65℃to+150℃
+⚫Electrostaticpulse(HumanBodymodel)....................................................................8000V
+Comments：
+Stressesabovethoselistedunder"AbsoluteMaximumRatings"may causepermanentdamagetothisdevice.
+Thesearestressratingsonly.Functionaloperationofthisdeviceattheseoranyotherconditionsabovethose
+indicatedintheoperationalsectionsofthisspecificationisnotimpliedorintended.Exposuretotheabsolute
+maximumratingconditionsforextendedperiodsmay affectdevicereliability.
+DCElectricalCharacteristics
+Applicableoverrecommendedoperatingrangefrom: TA=-40℃to+85℃,VCC=+1.7Vto+5.5V(unless
+otherwisenoted)
+Parameter Symbol Min Typ Max Unit Condition
+Supply Voltage VCC1 1.7 - 5.5 V @400KHz
+Supply Voltage VCC2 2.5 - 5.5 V @1MHz
+Supply CurrentVCC=5.0V ICC1 - 0.14 0.3 mA READat 400KHZ
+Supply CurrentVCC=5.0V ICC2 - 0.28 0.5 mA WRITEat400KHZ
+Supply CurrentVCC=5.0V ISB1 - 0.03 0.5 μA VIN=VCCorVSS
+InputLeakage Current IL1 - 0.10 1.0 μA VIN=VCCorVSS
+OutputLeakage Current ILO - 0.05 1.0 μA VOUT=VCCor VSS
+InputLowLevel VIL1 -0.3 - VCC×0.3 V VCC=1.7V to5.5V
+InputHighLevel VIH1 VCC×0.7 - VCC+0.3 V VCC=1.7V to5.5V
+OutputLow LevelVCC=1.7V VOL1 - - 0.2 V IOL=0.15mA
+OutputLow LevelVCC=5.0V VOL2 - - 0.4 V IOL=3.0mA
+Table3
+Pin Capacitance
+ApplicableoverrecommendedoperatingrangefromTA=25℃,f=1.0MHz,VCC=+1.7V
+Parameter Symbol Min Typ Max Unit Condition
+Input/OutputCapacitance(SDA) CI/O - - 8 pF VIO=0V
+InputCapacitance(A0,A1,A2,SCL) CIN - - 6 pF VIN=0V
+Table 4
+
+--- PDF page 12 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+11 / 19
+AC Electrical Characteristics
+ApplicableoverrecommendedoperatingrangefromTA=-40℃to+85℃,VCC=+1.7Vto+5.5V,CL=1TTL
+Gateand100pF(unlessotherwisenoted)
+Parameter Symbol
+1.7V≤VCC﹤2.5V 2.5V≤VCC﹤5.5V
+UnitsMin Typ Max Min Typ Max
+ClockFrequency,SCL fSCL - - 400 - - 1000 kHz
+ClockPulseWidthLow tLOW 1.3 - - 0.5 - - μs
+ClockPulseWidthHigh tHIGH 0.6 - - 0.26 - - μs
+NoiseSuppressionTime tI - - 50 - - 50 ns
+ClockLowtoDataOut Valid tAA - - 0.9 - - 0.45 μs
+Timethebusmustbefreebeforea
+newtransmissioncanstart tBUF 1.3 - - 0.5 - - μs
+StartHoldTime tHD:STA 0.6 - - 0.25 - - μs
+StartSetup Time tSU:STA 0.6 - - 0.25 - - μs
+DataInHoldTime tHD:DAT 0 - - 0 - - μs
+DatainSetup Time tSU:DAT 100 - - 100 - - ns
+InputRiseTime(1) tR - - 0.3 - - 0.12 μs
+InputFallTime(1) tF - - 0.3 - - 0.12 μs
+StopSetup Time tSu:STO 0.6 - - 0.25 - - μs
+DataOutHoldTime tDH 50 - - 50 - - ns
+WriteCycleTime twR - 1.9 5 - 1.9 5 ms
+5.0V,25℃,ByteMode(1) Endurance 1M - - 1M - - WriteCycle
+Table5
+Notes:
+1.Thisparameterischaracterizedandisnot100%tested.
+2.ACmeasurementconditions:
+RL(connectstoVCC): 1.3k(2.5V,5V),10k(1.7V)
+Inputpulsevoltages:0.3VCCto0.7VCC
+Inputriseandfalltime:50ns
+Inputandoutputtimingreferencevoltages:0.5VCC
+ThevalueofRLshouldbeconcernedaccordingtotheactualloadingontheuser'ssystem.
+
+--- PDF page 13 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+12 / 19
+Bus Timing
+Notes:
+ThewritecycletimetWRisthetimefromavalidstopconditionofawritesequencetotheendoftheinternal
+clear/writecycle.
+
+
+--- PDF page 14 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+13 / 19
+Package Information
+PDIP Outline Dimensions
+
+
+--- PDF page 15 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+14 / 19
+SOP
+
+
+--- PDF page 16 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+15 / 19
+TSSOP
+
+
+--- PDF page 17 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+16 / 19
+UDFN
+
+
+--- PDF page 18 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+17 / 19
+WLCSP
+
+
+--- PDF page 19 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+18 / 19
+Ordering Information
+ZD 24C XXX A - SS G M T
+Zetta Designator
+Product Family
+24C=StandardI2C-compatible
+SerialEEPROM
+Device Density
+Device Revision
+Shipping Carrier Option
+T=TapeandReel,StandardQuantityOption
+B=Tubes
+Operating Voltage
+M=1.7Vto5.5V
+Package Device Grade
+G=Low-halogen,Lead(Pb)-free
+P =Lead(Pb)-free
+Package Option
+SS =JEDECSOIC
+X = TSSOP
+MA= 2.0mmx3.0mmUDFN
+P = PDIP
+ST =SOT23
+C =VFBGA
+U = 3x3 Grid, 5-ball WLCSP
+U1 = 2x2 Grid, 4-ball WLCSP
+WU=WaferUnsawn
+
+--- PDF page 20 ---
+ZD24C128A
+ZettaDevice Electronics Technology Co.,Ltd www.zettadevice.com
+19 / 19
+Revision History
+Date Comments
+05/2020 Initialdocumentrelease.
+10/2021 Updatepackageinformation

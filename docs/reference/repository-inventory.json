@@ -1,0 +1,502 @@
+{
+  "scope": "Selected official manufacturer repositories plus bounded repository-metadata searches; not authenticated global code search or every manufacturer repository.",
+  "repositories": [
+    {
+      "repo": "STMicroelectronics/X-CUBE-EEPRMA1",
+      "requested_ref": "main",
+      "artifacts": [
+        {
+          "path": "source/st-eeprma1/README.md",
+          "upstream_path": "README.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/README.md",
+          "bytes": 1945,
+          "sha256": "ee780a6111010f6d5439847ffcbc7ed597ff4e20b761681d25bb54585971b9e3",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/LICENSE.md",
+          "upstream_path": "LICENSE.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/LICENSE.md",
+          "bytes": 1904,
+          "sha256": "579d6bc3f5deef6e303f9fe7952e69478d4f09e6994ace020d4f9991b3650341",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Drivers/BSP/Components/M24xx/LICENSE.md",
+          "upstream_path": "Drivers/BSP/Components/M24xx/LICENSE.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Drivers/BSP/Components/M24xx/LICENSE.md",
+          "bytes": 1485,
+          "sha256": "06a8a2c4dd0516964772c2629b18cdfc68b5e9f472ffe10c24dcc55850188bab",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Drivers/BSP/Components/M24xx/m24xx.c",
+          "upstream_path": "Drivers/BSP/Components/M24xx/m24xx.c",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Drivers/BSP/Components/M24xx/m24xx.c",
+          "bytes": 14852,
+          "sha256": "2173c1ff5a1f37a21ab3876b58a3c9fd08717e293588a630ae297153e21fc3d9",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Drivers/BSP/Components/M24xx/m24xx.h",
+          "upstream_path": "Drivers/BSP/Components/M24xx/m24xx.h",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Drivers/BSP/Components/M24xx/m24xx.h",
+          "bytes": 9225,
+          "sha256": "00a70cb6437eab2f9c2268c244f2b44bc401f4e03fe54be2911e29eccf05622c",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Utilities/PC_Software/AT_Commands/README.md",
+          "upstream_path": "Utilities/PC_Software/AT_Commands/README.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Utilities/PC_Software/AT_Commands/README.md",
+          "bytes": 2168,
+          "sha256": "a6ba651b57ce52bbffb8ebd7d0cd9ecbc763538547421b7f2501abdfdc1d708d",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Utilities/PC_Software/AT_Commands/LICENSE.md",
+          "upstream_path": "Utilities/PC_Software/AT_Commands/LICENSE.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Utilities/PC_Software/AT_Commands/LICENSE.md",
+          "bytes": 18270,
+          "sha256": "fff02ff46d2b986caca258fa357a405a4abcd725a9e029ae03110756d72086c9",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-eeprma1/Utilities/PC_Software/AT_Commands/readme.txt",
+          "upstream_path": "Utilities/PC_Software/AT_Commands/readme.txt",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/X-CUBE-EEPRMA1/ff0b48db84d29b5ade396441893bf64c089ae091/Utilities/PC_Software/AT_Commands/readme.txt",
+          "bytes": 2599,
+          "sha256": "8146f371ac247289307e9774594df4f23ad7f8e25f67708daed00c5448efc951",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        }
+      ],
+      "checked_utc": "2026-09-22T16:38:43.327570+00:00",
+      "commit": "ff0b48db84d29b5ade396441893bf64c089ae091",
+      "commit_date": "2025-07-15T14:21:22Z",
+      "tree_truncated": false,
+      "tree_scope": "recursive repository tree; filename search only",
+      "matched_tree_paths": [
+        "Drivers/BSP/Components/M24xx/LICENSE.md",
+        "Drivers/BSP/Components/M24xx/Release_Notes.html",
+        "Drivers/BSP/Components/M24xx/_htmresc/Add button.svg",
+        "Drivers/BSP/Components/M24xx/_htmresc/Update.svg",
+        "Drivers/BSP/Components/M24xx/_htmresc/favicon.png",
+        "Drivers/BSP/Components/M24xx/_htmresc/mini-st.css",
+        "Drivers/BSP/Components/M24xx/_htmresc/mini-st_2020.css",
+        "Drivers/BSP/Components/M24xx/_htmresc/st_logo_2020.png",
+        "Drivers/BSP/Components/M24xx/m24xx.c",
+        "Drivers/BSP/Components/M24xx/m24xx.h",
+        "Utilities/PC_Software/AT_Commands/LICENSE.md",
+        "Utilities/PC_Software/AT_Commands/README.md",
+        "Utilities/PC_Software/AT_Commands/Release_Notes.html",
+        "Utilities/PC_Software/AT_Commands/X-NUCLEO-PGEEZ1_Commands.ptn",
+        "Utilities/PC_Software/AT_Commands/X-NUCLEO-PGEEZ1_Commands.ptp",
+        "Utilities/PC_Software/AT_Commands/readme.html",
+        "Utilities/PC_Software/AT_Commands/readme.txt"
+      ],
+      "status": "archived"
+    },
+    {
+      "repo": "Microchip-MPLAB-Harmony/core",
+      "requested_ref": "master",
+      "artifacts": [
+        {
+          "path": "source/microchip-harmony/License.md",
+          "upstream_path": "License.md",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/License.md",
+          "bytes": 6098,
+          "sha256": "fd4acf65cd63a6ec0abfe2493ff8877ffa8948f1cef174be141bca6c2f8149c9",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-harmony/driver/i2c_eeprom/at24/drv_at24.h",
+          "upstream_path": "driver/i2c_eeprom/at24/drv_at24.h",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/driver/i2c_eeprom/at24/drv_at24.h",
+          "bytes": 23587,
+          "sha256": "618030c20841edef9db01abe02d2ff6531136b59f7100d434807e0cc436de79e",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-harmony/driver/i2c_eeprom/at24/drv_at24_definitions.h",
+          "upstream_path": "driver/i2c_eeprom/at24/drv_at24_definitions.h",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/driver/i2c_eeprom/at24/drv_at24_definitions.h",
+          "bytes": 5490,
+          "sha256": "3fbb6d13a09f979ee682f7fe395345322b31363e7370b0c83437625b619d9369",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-harmony/driver/i2c_eeprom/at24/src/drv_at24.c.ftl",
+          "upstream_path": "driver/i2c_eeprom/at24/src/drv_at24.c.ftl",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/driver/i2c_eeprom/at24/src/drv_at24.c.ftl",
+          "bytes": 15905,
+          "sha256": "ed9e0093601c105400397d177c543682c53f47ccdf2933579e44a16aec8c209c",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-harmony/driver/i2c_eeprom/at24/src/drv_at24_local.h",
+          "upstream_path": "driver/i2c_eeprom/at24/src/drv_at24_local.h",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/driver/i2c_eeprom/at24/src/drv_at24_local.h",
+          "bytes": 5008,
+          "sha256": "a328ac0e6754b1de8666edc2dbee5f8c513cf87eb76e2bf3b6bdcb89a87ba710",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-harmony/driver/i2c_eeprom/at24/config/drv_at24.py",
+          "upstream_path": "driver/i2c_eeprom/at24/config/drv_at24.py",
+          "url": "https://raw.githubusercontent.com/Microchip-MPLAB-Harmony/core/7028e1a7aa93c14734acb03f9255efbd07ad136a/driver/i2c_eeprom/at24/config/drv_at24.py",
+          "bytes": 12182,
+          "sha256": "0ecc098f2d182dc1c94c2a6a8fcfc2ab5cfd95306690c6e0705ec5ca14048f76",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        }
+      ],
+      "checked_utc": "2026-09-22T16:38:43.328570+00:00",
+      "commit": "7028e1a7aa93c14734acb03f9255efbd07ad136a",
+      "commit_date": "2026-09-17T12:54:49Z",
+      "tree_truncated": false,
+      "tree_scope": "recursive repository tree; filename search only",
+      "matched_tree_paths": [
+        "driver/i2c_eeprom/at24/config/drv_at24.py",
+        "driver/i2c_eeprom/at24/drv_at24.h",
+        "driver/i2c_eeprom/at24/drv_at24_definitions.h",
+        "driver/i2c_eeprom/at24/src/drv_at24.c.ftl",
+        "driver/i2c_eeprom/at24/src/drv_at24_local.h",
+        "driver/i2c_eeprom/at24/templates/system/configuration.h.ftl",
+        "driver/i2c_eeprom/at24/templates/system/definitions.h.ftl",
+        "driver/i2c_eeprom/at24/templates/system/definitions_objects.h.ftl",
+        "driver/i2c_eeprom/at24/templates/system/initialize.c.ftl",
+        "driver/i2c_eeprom/at24/templates/system/initialize_data.c.ftl"
+      ],
+      "status": "archived"
+    },
+    {
+      "repo": "microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo",
+      "requested_ref": "main",
+      "artifacts": [
+        {
+          "path": "source/microchip-24c08/README.md",
+          "upstream_path": "README.md",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/README.md",
+          "bytes": 2340,
+          "sha256": "a18bbdfa3b9c0a6d8ea8e8beba06e074fb7d2c147591e7b02ab63c1a69834af8",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-24c08/LICENSE.txt",
+          "upstream_path": "LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/LICENSE.txt",
+          "bytes": 1089,
+          "sha256": "35b0977b8a731bb5cd55be69d6ce6d89369a5b4b9bcead4e578bafe47035e299",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-24c08/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.c",
+          "upstream_path": "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.c",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.c",
+          "bytes": 5099,
+          "sha256": "53d01e4e2b94b47f2a0dee9eb65cf7e378ca804c0860fd1a1b1ff634e355ca99",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-24c08/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.h",
+          "upstream_path": "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.h",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.h",
+          "bytes": 2931,
+          "sha256": "092c173aa924979c1724eab5af92ed01e4b345b2807de66fcedaaf0c54f7e941",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-24c08/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_config.h",
+          "upstream_path": "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_config.h",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_config.h",
+          "bytes": 1706,
+          "sha256": "fab05e82ccc2ba827699ebc9d92bc1b2259c9d936be0a8c9752cbd33c18b6ea9",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/microchip-24c08/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_types.h",
+          "upstream_path": "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_types.h",
+          "url": "https://raw.githubusercontent.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo/d623df41629848d590529312dd61708125746a63/dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_types.h",
+          "bytes": 2460,
+          "sha256": "4a6b7d4be8881486cb8498b9872661c56aa4f04467b7b4588a551849cfd68f64",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        }
+      ],
+      "checked_utc": "2026-09-22T16:38:43.328570+00:00",
+      "commit": "d623df41629848d590529312dd61708125746a63",
+      "commit_date": "2022-11-15T15:13:02Z",
+      "tree_truncated": false,
+      "tree_scope": "recursive repository tree; filename search only",
+      "matched_tree_paths": [
+        "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.c",
+        "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08.h",
+        "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_config.h",
+        "dspic33ck-curiosity-i2c-eeprom-demo.X/eeprom/eeprom_24c08_types.h"
+      ],
+      "status": "archived"
+    },
+    {
+      "repo": "renesas-rcar/linux-bsp",
+      "requested_ref": "v6.12.80/rcar-6.1.0",
+      "artifacts": [
+        {
+          "path": "source/renesas-linux/COPYING",
+          "upstream_path": "COPYING",
+          "url": "https://raw.githubusercontent.com/renesas-rcar/linux-bsp/e1e83b5711610d83941c51dcf48418eda209f339/COPYING",
+          "bytes": 496,
+          "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/renesas-linux/LICENSES/preferred/GPL-2.0",
+          "upstream_path": "LICENSES/preferred/GPL-2.0",
+          "url": "https://raw.githubusercontent.com/renesas-rcar/linux-bsp/e1e83b5711610d83941c51dcf48418eda209f339/LICENSES/preferred/GPL-2.0",
+          "bytes": 18729,
+          "sha256": "f6b78c087c3ebdf0f3c13415070dd480a3f35d8fc76f3d02180a407c1c812f79",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/renesas-linux/drivers/misc/eeprom/at24.c",
+          "upstream_path": "drivers/misc/eeprom/at24.c",
+          "url": "https://raw.githubusercontent.com/renesas-rcar/linux-bsp/e1e83b5711610d83941c51dcf48418eda209f339/drivers/misc/eeprom/at24.c",
+          "bytes": 26259,
+          "sha256": "d22d38e204e8200a9468867b0843228968b56e12264526b54f4a002e6e6e3880",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/renesas-linux/Documentation/devicetree/bindings/eeprom/at24.yaml",
+          "upstream_path": "Documentation/devicetree/bindings/eeprom/at24.yaml",
+          "url": "https://raw.githubusercontent.com/renesas-rcar/linux-bsp/e1e83b5711610d83941c51dcf48418eda209f339/Documentation/devicetree/bindings/eeprom/at24.yaml",
+          "bytes": 5986,
+          "sha256": "516248db047deb738833d9a2c444eb8d90d5e3334cba9d020c2c33e9fa776cd4",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        }
+      ],
+      "checked_utc": "2026-09-22T16:38:43.328570+00:00",
+      "commit": "e1e83b5711610d83941c51dcf48418eda209f339",
+      "commit_date": "2026-08-22T22:53:02Z",
+      "matched_tree_paths": [
+        "drivers/misc/eeprom/Kconfig",
+        "drivers/misc/eeprom/Makefile",
+        "drivers/misc/eeprom/at24.c",
+        "drivers/misc/eeprom/at25.c",
+        "drivers/misc/eeprom/digsy_mtc_eeprom.c",
+        "drivers/misc/eeprom/ee1004.c",
+        "drivers/misc/eeprom/eeprom_93cx6.c",
+        "drivers/misc/eeprom/eeprom_93xx46.c",
+        "drivers/misc/eeprom/idt_89hpesx.c",
+        "drivers/misc/eeprom/max6875.c"
+      ],
+      "tree_scope": "drivers/misc/eeprom (contents API)",
+      "status": "archived"
+    },
+    {
+      "repo": "STMicroelectronics/stm32-m24256",
+      "requested_ref": "main",
+      "artifacts": [
+        {
+          "path": "source/st-m24256/README.md",
+          "upstream_path": "README.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/stm32-m24256/d7cba42c74ab2d417de22bc134511366dfec9da2/README.md",
+          "bytes": 2253,
+          "sha256": "8f7fb3e90f8e340c36029841678a75009e23e1baf840d39e0e63fd21b096a0f2",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-m24256/LICENSE.md",
+          "upstream_path": "LICENSE.md",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/stm32-m24256/d7cba42c74ab2d417de22bc134511366dfec9da2/LICENSE.md",
+          "bytes": 1485,
+          "sha256": "9226f1f12909dabffc19deb357b60883aca2ecd61d6c6e74c91c4ed121f9d628",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-m24256/m24256.c",
+          "upstream_path": "m24256.c",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/stm32-m24256/d7cba42c74ab2d417de22bc134511366dfec9da2/m24256.c",
+          "bytes": 5568,
+          "sha256": "33e3d89b68d179ef443dc01fc0ecab10ea72b4d9b261aea9e6d146288ab5877e",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        },
+        {
+          "path": "source/st-m24256/m24256.h",
+          "upstream_path": "m24256.h",
+          "url": "https://raw.githubusercontent.com/STMicroelectronics/stm32-m24256/d7cba42c74ab2d417de22bc134511366dfec9da2/m24256.h",
+          "bytes": 3626,
+          "sha256": "198b16c63d9974191b6bcc32e82961dcf1136336f19fe64c5571f462d9b9683e",
+          "license": "Upstream license and source notices apply; reference-only, excluded from library builds."
+        }
+      ],
+      "checked_utc": "2026-09-22T16:40:58.532307+00:00",
+      "commit": "d7cba42c74ab2d417de22bc134511366dfec9da2",
+      "commit_date": "2024-07-02T11:16:46Z",
+      "tree_truncated": false,
+      "tree_scope": "recursive repository tree; filename search only",
+      "matched_tree_paths": [],
+      "status": "archived"
+    }
+  ],
+  "repository_searches": [
+    {
+      "query": "org:STMicroelectronics eeprom",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:48.900126+00:00",
+      "total_count": 5,
+      "incomplete_results": false,
+      "repositories": [
+        {
+          "name": "STMicroelectronics/stm32-util-eeprom-emulation",
+          "url": "https://github.com/STMicroelectronics/stm32-util-eeprom-emulation",
+          "description": null
+        },
+        {
+          "name": "STMicroelectronics/X-CUBE-EEPRMA1",
+          "url": "https://github.com/STMicroelectronics/X-CUBE-EEPRMA1",
+          "description": "The X-CUBE-EEPRMA1 software expansion for STM32Cube provides an evaluation software example for M24XX I\u00b2C and M95XX SPI EEPROMs"
+        },
+        {
+          "name": "STMicroelectronics/stm32-m24256",
+          "url": "https://github.com/STMicroelectronics/stm32-m24256",
+          "description": "Provides the M24256 driver, part of the STM32Cube BSP Component for all STM32xx series."
+        },
+        {
+          "name": "STMicroelectronics/stm32-m95p32",
+          "url": "https://github.com/STMicroelectronics/stm32-m95p32",
+          "description": "Provides the M95P32 driver, part of the STM32Cube BSP Component for all STM32xx series."
+        },
+        {
+          "name": "STMicroelectronics/x-linux-igtw1",
+          "url": "https://github.com/STMicroelectronics/x-linux-igtw1",
+          "description": "The X-LINUX-IGTW1 is a Linux-based expansion software package designed for industrial application development on STM32MP and other microprocessor platforms. It provides drivers, APIs, and applications tailored for the X-STM32MP-IGTW1 board, which features CAN Bus and RS485 interface along with STSAFE, EEPROM, RS232, RTC, STMOD+. "
+        }
+      ]
+    },
+    {
+      "query": "org:Microchip-MPLAB-Harmony eeprom",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:49.474446+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    },
+    {
+      "query": "org:microchip-pic-avr-examples eeprom i2c",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:49.897206+00:00",
+      "total_count": 5,
+      "incomplete_results": false,
+      "repositories": [
+        {
+          "name": "microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo",
+          "url": "https://github.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo",
+          "description": "This is I2C-Host demo for dsPIC33CK Curiosity board"
+        },
+        {
+          "name": "microchip-pic-avr-examples/pic18f47q10-cnano-i2c-read-write-eeprom-bare",
+          "url": "https://github.com/microchip-pic-avr-examples/pic18f47q10-cnano-i2c-read-write-eeprom-bare",
+          "description": "Bare metal code for i2c read and write operations to an EEPROM, using pic18f47q10 curiosity nano and the PICkit Serial I2C Demo Board"
+        },
+        {
+          "name": "microchip-pic-avr-examples/pic18f47q10-cnano-i2c-read-write-eeprom-mcc",
+          "url": "https://github.com/microchip-pic-avr-examples/pic18f47q10-cnano-i2c-read-write-eeprom-mcc",
+          "description": "MCC generated code for i2c read and write operations to an EEPROM, using pic18f47q10 curiosity nano and the PICkit Serial I2C Demo Board"
+        },
+        {
+          "name": "microchip-pic-avr-examples/pic18f56q24-curiosity-mvio-i2c-mplab-mcc",
+          "url": "https://github.com/microchip-pic-avr-examples/pic18f56q24-curiosity-mvio-i2c-mplab-mcc",
+          "description": "PIC18F56Q24 mvio example using I2C to communicate to EEPROM 3 Click board"
+        },
+        {
+          "name": "microchip-pic-avr-examples/pic18f56q24-curiosity-nano-explorer-25csm04-eeprom",
+          "url": "https://github.com/microchip-pic-avr-examples/pic18f56q24-curiosity-nano-explorer-25csm04-eeprom",
+          "description": "This example will demonstrate how to interface the 25CSM04-EEPROM chip on-board the Curiosity Nano Explorer development board using I2C protocol."
+        }
+      ]
+    },
+    {
+      "query": "org:renesas eeprom",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:50.606028+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    },
+    {
+      "query": "org:ROHM-Semiconductor eeprom",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:51.079813+00:00",
+      "error": "422 Client Error: Unprocessable Entity for url: https://api.github.com/search/repositories?q=org%3AROHM-Semiconductor+eeprom&per_page=100"
+    },
+    {
+      "query": "Zetta ZD24",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:51.444988+00:00",
+      "error": "403 Client Error: rate limit exceeded for url: https://api.github.com/search/repositories?q=Zetta+ZD24&per_page=100"
+    },
+    {
+      "query": "Giantec EEPROM",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:51.644612+00:00",
+      "error": "403 Client Error: rate limit exceeded for url: https://api.github.com/search/repositories?q=Giantec+EEPROM&per_page=100"
+    },
+    {
+      "query": "onsemi CAT24",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:38:51.865111+00:00",
+      "error": "403 Client Error: rate limit exceeded for url: https://api.github.com/search/repositories?q=onsemi+CAT24&per_page=100"
+    },
+    {
+      "query": "org:RohmSemiconductor eeprom",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:41:00.985547+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    },
+    {
+      "query": "Zetta ZD24",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:41:01.380363+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    },
+    {
+      "query": "Giantec EEPROM",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:41:01.757804+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    },
+    {
+      "query": "onsemi CAT24",
+      "api": "https://api.github.com/search/repositories",
+      "checked_utc": "2026-09-22T16:41:02.175166+00:00",
+      "total_count": 0,
+      "incomplete_results": false,
+      "repositories": []
+    }
+  ],
+  "web_searches": [
+    {
+      "query": "site:github.com Zetta ZD24",
+      "date": "2026-09-22",
+      "result": "No manufacturer-owned dedicated 24Cxx driver found in returned results; general upstream Linux AT24 bindings and third-party programmers do not establish a vendor repository."
+    },
+    {
+      "query": "site:github.com Giantec EEPROM",
+      "date": "2026-09-22",
+      "result": "No manufacturer-owned dedicated 24Cxx driver found in returned results; general upstream Linux AT24 bindings and third-party programmers do not establish a vendor repository."
+    },
+    {
+      "query": "site:github.com onsemi CAT24",
+      "date": "2026-09-22",
+      "result": "No manufacturer-owned dedicated 24Cxx driver found in returned results; general upstream Linux AT24 bindings and third-party programmers do not establish a vendor repository."
+    },
+    {
+      "query": "site:github.com ROHM BR24",
+      "date": "2026-09-22",
+      "result": "No manufacturer-owned dedicated 24Cxx driver found in returned results; general upstream Linux AT24 bindings and third-party programmers do not establish a vendor repository."
+    }
+  ]
+}

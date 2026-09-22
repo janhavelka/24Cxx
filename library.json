@@ -1,11 +1,11 @@
 {
-  "name": "TMP1x2",
+  "name": "EEPROM24Cxx",
   "version": "1.0.0",
-  "description": "Framework-neutral TI TMP102/TMP112 temperature sensor driver with injected I2C, health tracking and diagnostic CLIs.",
-  "keywords": ["tmp102", "tmp112", "temperature", "sensor", "i2c", "arduino", "esp-idf"],
+  "description": "Framework-neutral 24Cxx EEPROM driver including Zetta ZD24C02B, with owner-polled page writes, typed I2C transport and diagnostic CLIs.",
+  "keywords": ["24cxx", "eeprom", "zd24c02b", "zetta", "24c02", "memory", "i2c", "arduino", "esp-idf"],
   "authors": [{"name": "Thymos Solution s.r.o", "email": "info@thymos.cz", "url": "https://www.thymos.cz"}, {"name": "Jan Havelka", "maintainer": true}],
   "license": "MIT",
-  "headers": ["TMP1x2/TMP1x2.h"],
+  "headers": ["EEPROM24Cxx/EEPROM24Cxx.h"],
   "build": {"includeDir": "include", "srcDir": "src"},
   "export": {
     "include": ["include/**", "src/**", "examples/**", "library.json", "idf_component.yml", "CMakeLists.txt", "LICENSE", "README.md", "CHANGELOG.md", "docs/*.md", "docs/reference/README.md"],

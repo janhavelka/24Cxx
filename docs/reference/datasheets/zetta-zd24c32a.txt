@@ -1,0 +1,731 @@
+--- PDF page 1 ---
+ZD24C32A
+1
+ZD24C32A
+I2C-Compatible (2-wire) Serial EEPROM
+32-Kbit (4,096 x 8)
+DATASHEET
+Features
+⚫ Compatiblewithall I²Cbidirectionaldatatransfer protocol
+⚫ Memoryarray:
+– 32Kbits(4Kbytes)ofEEPROM
+– Pagesize:32bytes
+– AdditionalWritelockablepage
+⚫ Singlesupplyvoltageandhighspeed:
+–1.7V-5.5V
+– 1MHz
+RandomandsequentialReadmodes
+⚫ Write:
+– ByteWritewithin 3ms
+– PageWritewithin 3ms
+– PartialPageWritesAllowed
+⚫ WriteProtectPinforHardwareDataProtection
+⚫ SchmittTrigger,FilteredInputsforNoiseSuppression
+⚫ High-reliability
+– Endurance:1MillionWriteCycles
+– DataRetention:100Years
+⚫ EnhancedESD/Latch-up protection
+– HBM8000V
+⚫ 8-leadPDIP/SOP/TSSOP/UDFN andWLCSP4 packages
+Description
+The ZD24C32A provides 32768 bits of serial electrically erasable and programmable read-only memory
+(EEPROM),organizedas4096byte.
+Thedevice is optimized for use in many industrial and commercial applications where low-power and low-voltage
+operationareessential.
+The ZD24C32A offers an additional page, named the Identification Page (32 bytes). The Identification Page
+can be used to store sensitive application parameters which can be (later) permanently locked in Read-only
+mode.
+TheZD24C32A offersaread-onlyPre-ProgramUniqueIdentification (UID)Page(8bytes).
+
+--- PDF page 2 ---
+ZD24C32A
+2
+PinConfiguration
+
+
+--- PDF page 3 ---
+ZD24C32A
+3
+Pin Descriptions
+Pin Name Type Functions
+A0-A2 I AddressInputs
+SDA I/O SerialData
+SCL I SerialClockInput
+WP I WriteProtect
+GND P Ground
+Vcc P PowerSupply
+Table 1
+Block Diagram
+Figure 1
+DOUT
+DOUT/ACKNOWLEDGEDIN
+YDECODER
+DATAWORD
+ADRESSCOUNTER
+A0
+A1
+A2
+INCLOAD
+DEVICEADDRESS
+COMPARATOR
+LOAD
+CCMP
+HIGHVOLTAGE
+PUMP/TIMINGSERIALCONTROL
+LOGIC
+EN
+STARTSTOP
+LOGIC
+Vcc
+GND
+WP
+SCL
+SDA
+SERIALMUX
+EEPROM
+DATARECOVERY
+XDECODER
+
+--- PDF page 4 ---
+ZD24C32A
+4
+DATASTABLEDATACHANGEDATASTABLE
+SCL
+SDA
+DEVICE/PAGE ADDRESSES (A2, A1 and A0): The A2, A1 and A0 pins are device address inputs that are
+hard wire for the ZD24C32A. Eight 32K devices maybe addressed on a single bus system (device addressing
+isdiscussedindetailundertheDeviceAddressingsection).
+SERIAL DATA (SDA): The SDA pin is bi-directional for serial data transfer. This pin is open-drain driven and
+maybewire-ORedwith any numberofotheropen-drainoropen-collector devices.
+SERIAL CLOCK (SCL): The SCL input is used to positive edge clock data into each EEPROM device and
+negativeedge clockdataoutofeachdevice.
+WRITE PROTECT (WP): The ZD24C32A has a Write Protect pin that provides hardware data protection. The
+Write Protect pin allows normal read/write operations when connected to ground (GND). When the Write
+Protection pin is connected to VCC, the write protection feature is enabled and operates as shown in the
+following Table 2.
+WP Pin Status ZD24C32A
+AtVCC Full(32K)Array
+At GND Normal Read/Write Operations
+Table 2
+Functional Description
+1. Memory Organization
+ZD24C32A, 32K SERIAL EEPROM: Internally organized with 128 pages of 32 bytes each, the 32K requires a
+12-bitdata wordaddressforrandomwordaddressing.
+2. Device Operation
+CLOCK and DATA TRANSITIONS: The SDA pin is normally pulled high with an external device. Data on the
+SDA pin can change only during SCL low time periods (see Figure 2). Data changes during SCL high periods
+willindicateastartorstopconditionas definedbelow.
+Figure 2. Data Validity
+
+--- PDF page 5 ---
+ZD24C32A
+5
+STOPSTART
+SCL
+SDA
+ACKNOWLEDGE
+START
+DATAOUT
+DATAIN
+981SCL
+STARTCONDITION:Ahigh-to-low transitionofSDA withSCL highisastartconditionwhichmustprecede
+anyothercommand(see Figure 3).
+STOPCONDITION:Alow-to-hightransition ofSDA withSCLhighisastopcondition.(see Figure 3).
+Figure 3. Start and Stop Definition
+ACKNOWLEDGE: All addresses and data words are serially transmitted to and from the EEPROM in 8-bit
+words. The EEPROM sends a "0" to acknowledge that it has received each word. This happens during the
+ninthclockcycle.
+Figure 4. Output Acknowledge
+STANDBYMODE:TheZD24C32Afeaturesalow-power standby modewhichisenabled:
+(a) uponpower-up
+(b) afterthereceiptoftheSTOPbitandthecompletionofanyinternaloperations.
+MEMORYRESET:Aftertheprotocol isinterrupted,powerlossor systemreset,any two-wirepartcanbereset
+byfollowingthesesteps:
+1. Clockupto9cycles.
+2. LookforSDA highineachcyclewhileSCL is high.
+3. Createastartcondition.
+
+--- PDF page 6 ---
+ZD24C32A
+6
+Note.1*=DON'T’TCAREbits
+L A
+S C
+B K
+L A
+S C
+B K
+L A
+S C
+B K
+L R A
+S/ C
+BW K
+M
+S
+B
+SDA
+LINE
+S
+T
+O
+P
+DATASECONDWORD
+ADDRESS
+FIRSTWORD
+ADDRESS
+W
+R
+I
+T
+E
+DEVICE
+ADDRESS
+S
+T
+A
+R
+T
+3. Device Addressing
+The32KEEPROMdevices all requirean8-bitdeviceaddresswordfollowing astartconditiontoenablethe
+chipforareadorwriteoperation(see Figure 5)
+MSB LSB
+1 0 1 0 A2 A1 A0 R/W
+Figure 5. Device Address
+The device address word consists of a mandatory "1", "0" sequence for the first four most significant bits as
+shown.Thisis commontoall theSerialEEPROMdevices.
+The 32K EEPROM uses A2, A1 and A0 device address bits to allow as much as eight devices on the same
+bus. These 3 bits must be compared to their corresponding hardwired input pins. The A2, A1 and A0 pins use
+aninternalproprietary circuitthat biasesthem toalogic lowconditionifthepinsareallowedtofloat.
+The eighth bit of the device address is the read/write operation select bit. A read operation is initiated if this bit
+ishighandawrite operationis initiatedifthis bitislow.
+Upon a compare of the device address, the EEPROM will output a "0". If a compare is not made, the chip will
+returntostandbystate.
+DATA SECURITY: The ZD24C32A has a hardware data protection scheme that allows the user to write
+protectthe entirememorywhen theWP pin isatVCC.
+4. Write Operations
+BYTE WRITE: A write operation requires two 8-bit data word address (see Table 3 & Table 4) following the
+device address word and acknowledgment. Upon receipt of every 8-bit address, the EEPROM will respond
+with a "0" and then send 8-bit data word. Following receipt of the 8-bit data word, the EEPROM will output a
+"0" and the master device, such as a microcontroller, must terminate the write sequence with a stop condition.
+At this time the EEPROM enters an internally timed write cycle, tWR, in order to save the data in the
+nonvolatile memory. All inputs are disabled during this write cycle and the EEPROM will not respond until the
+writeiscomplete(see Figure 6).
+Figure 6. Byte Write
+B15 B14 B13 B12 B11 B10 B9 B8
+Table 3. FIRST WORD ADDRESS
+B7 B6 B5 B4 B3 B2 B1 B0
+Table 4. SECOND WORD ADDRESS
+
+--- PDF page 7 ---
+ZD24C32A
+7
+Note.1*=DON'TCAREbits
+A
+C
+K
+A
+C
+K
+A
+C
+K
+L A
+S C
+B K
+L A
+S C
+B K
+L R A
+S/ C
+BW K
+M
+S
+B
+SDA
+LINE
+S
+T
+O
+P
+DATA(n+1)DATA(n+1)DATA(n)SECONDWORD
+ADDRESS
+FIRSTWORD
+ADDRESS
+W
+R
+I
+T
+E
+DEVICE
+ADDRESS
+S
+T
+A
+R
+T
+PAGE WRITE: The Page Write mode allows up to 32 bytes to be written in a single Write cycle. A page write
+is initiated the same as a byte write, but the microcontroller does not send a stop condition after the first data
+word is clocked in. Instead, after the EEPROM acknowledges receipt of the first data word, the microcontroller
+can transmit up to 31 more data words. The EEPROM will respond with a “0” after each data word received.
+Themicrocontrollermustterminatethe pagewritesequencewithastopcondition.
+The data word address lower five bits are internally incremented following the receipt of each data word. The
+higher data word address bits are not incremented, retaining the memory page row location. When the word
+address, internally generated, reaches the page boundary, the following byte is placed at the beginning of the
+same page. If more than 32 data words are transmitted to the EEPROM, the data word address will "roll over"
+andpreviousdatawillbeoverwritten.
+Figure 7. Page Write
+WRITE IDENTIFICATION PAGE: The identification Page (32 bytes) is an additional page which can be
+written and (later) permanently locked in Read-only mode. It is written by issuing the Write Identification Page
+instruction. This instruction uses the same protocol and format as Page Write (into memory array), except for
+thefollowingdifferences:
+ Devicetype identifier =1011b
+ MSB address bitsB15/B5aredon'tcareexceptforaddressbit B10whichmustbe"0".
+LSBaddressbitsB4/B0definethebyteaddressinsidetheIdentificationpage.
+IftheIdentificationpageislocked,thedatabytes transferredduringtheWriteIdentification Pageinstruction
+arenotacknowledged(NoAck).
+ACKNOWLEDGE POLLING: Once the internally timed write cycle has started and the EEPROM inputs are
+disabled, acknowledge polling can be initiated. This involves sending a start condition followed by the device
+address word. The read/write bit is representative of the operation desired. Only if the internal write cycle has
+completedwilltheEEPROM respondwitha"0",allowingthereadorwritesequencetocontinue.
+
+--- PDF page 8 ---
+ZD24C32A
+8
+S
+T
+A
+R
+T
+SDA
+LINE
+M
+S
+B
+L R A
+S/ C
+BW K
+NO
+ACK
+S
+T
+A DEVICE
+R ADDRESS
+T
+W
+R
+I
+T
+E
+1st,2ndWORD
+ADDRESS
+S
+T
+A DEVICE
+R ADDRESS
+T
+SDA
+LINE
+M
+S
+B
+L R A
+S / C
+B WK
+L A
+S C
+B K
+A
+C
+K
+NO
+ACK
+DUMMYWRITE
+Note.1*=DON'TCAREbits
+5. Read Operations
+Read operations are initiated the same way as write operations with the exception that the read/write select bit
+in the device address word is set to "1". There are three read operations: current address read, random
+addressreadand sequentialread.
+CURRENT ADDRESS READ: The internal data word address counter maintains the last address accessed
+during the last read or write operation, incremented by one. This address stays valid between operations as
+long as the chip power is maintained. The address "roll over" during read is from the last byte of the last
+memory page to the first byte of the first page. The address "roll over" during write is from the last byte of the
+current page to the first byte of the same page. Once the device address with the read/write select bit set to
+"1" is clocked in and acknowledged by the EEPROM, the current address data word is serially clocked out.
+The microcontroller does not respond with an input "0" but does generate a following stop condition (see
+Figure 8).
+R S
+DEVICE E T
+ADDRESS A DATA O
+D P
+Figure 8. Current Address Read
+RANDOM READ: A random read requires a "dummy" byte write sequence to load in the data word address.
+Once the device address word and data word address are clocked in and acknowledged by the EEPROM, the
+microcontroller must generate another start condition. The microcontroller now initiates a current address read
+by sending a device address with the read/write select bit high. The EEPROM acknowledges the device
+address and serially clocks out the data word. The microcontroller does not respond with a "0" but does
+generateafollowing stopcondition(see Figure 9)
+R S
+E T
+A DATA(n) O
+D P
+Figure 9. Random Read
+
+--- PDF page 9 ---
+ZD24C32A
+9
+NO
+ACK
+A
+C
+K
+A
+C
+K
+A
+C
+K
+R A
+/C
+W K
+SDA
+LINE
+S
+T
+O
+P
+DATA(n+x)DATA(n+2)DATA(n+1)DATA(n)
+R
+DEVICE E
+ADDRESS A
+D
+SEQUENTIAL READ: Sequential reads are initiated by either a current address read or a random address
+read. After the microcontroller receives a data word, it responds with an acknowledge. As long as the
+EEPROM receives an acknowledge, it will continue to increment the data word address and serially clock out
+sequential data words. When the memory address limit is reached, the data word address will "roll over" and
+the sequential read will continue. The sequential read operation is terminated when the microcontroller does
+notrespondwith a"0"but doesgenerateafollowing stopcondition(see Figure 10).
+Figure 10. Sequential Read
+READ IDENTIFICATION PAGE: The Identification Page (32 bytes) is an additional page which can be written
+and(later)permanently lockedin Read-only mode.
+The Identification Page can be read by issuing a Read Identification Page instruction. This instruction uses the
+same protocol and format as the Random Address Read (from memory array) with device type identifier
+defined as 1011b. The address bit B10 must be "0", MSB address bits B15/B5 are don't care, the LSB
+address bits B4/B0 define the byte address inside the identification Page. The number of bytes to read in the
+ID page must not exceed the page boundary (e.g. when reading the identification Page from location 10d, the
+numberofbytesshouldbelessthan orequalto22,as theIDpageboundaryis 32bytes)
+LOCK IDENTIFICATION PAGE: The Lock Identification Page instruction (Lock ID) permanently locks the
+Identification page in Read-only mode. The Lock ID instruction is similar to Byte Write (into memory array) with
+thefollowingspecificconditions:
+Devicetype identifier =1011b
+AddressbitB10mustbe"1";all otheraddressbitsaredon'tcare
+Thedatabytemustbeequaltothebinaryvaluexxxxxx1x,wherexisdon'tcare
+READUIDPAGE:TheUIDPage(8bytes)is aread-only Pre-Programpage.
+The UID Page can be read by issuing a Read UID Page instruction. This instruction uses the same protocol
+and format as the Random Address Read (from memory array) with device type identifier defined as 1011b.
+The MSB address bits B10 must be "1" and others address bits must be "0". The number of bytes to read in
+theUIDpageis32bytes,only thestart8bytes areeffective.
+
+--- PDF page 10 ---
+ZD24C32A
+10
+Electrical Characteristics
+AbsoluteMaximumStressRatings：
+⚫ DCSupplyVoltage..............................................................................................................Vto+6.5V
+⚫ Input/OutputVoltage.................................................................................GND-0.3V toVCC+0.3V
+⚫ OperatingAmbientTemperature................................... -40℃ to+85℃
+⚫ StorageTemperature..............................................................................................-65℃ to+150℃
+⚫ Electrostaticpulse(HumanBodymodel) ................................... 8000V
+Comments:
+Stresses above those listed under "Absolute Maximum Ratings" may cause permanent damage to this device.
+These are stress ratings only. Functional operation of this device at these or any other conditions above those
+indicated in the operational sections of this specification is not implied or intended. Exposure to the absolute
+maximumratingconditionsforextendedperiods mayaffectdevicereliability.
+DC Electrical Characteristics
+Applicable over recommended operating range from: TA = -40℃ to +85℃, VCC = +1.7V to +5.5V (unless
+otherwisenoted)
+Parameter Symbol Min Typ Max Unit Condition
+Supply Voltage VCC1 1.7 - 5.5 V @400KHz
+Supply Voltage VCC2 2.5 - 5.5 V @1MHz
+Supply Current VCC=5.0V ICC1 - 0.14 0.3 mA READ at 400KHZ
+Supply Current VCC=5.0V ICC2 - 0.28 0.5 mA WRITE at 400KHZ
+Supply Current VCC=5.0V ISB1 - 0.03 0.5 μA VIN=VCCor VSS
+Input Leakage Current IL1 - 0.10 1.0 μA VIN=VCCor VSS
+Output Leakage Current ILO - 0.05 1.0 μA VOUT=VCCor VSS
+Input Low Level VIL1 -0.3 - VCC×0.3 V VCC=1.7V to 5.5V
+Input High Level VIH1 VCC×0.7 - VCC+0.3 V VCC=1.7V to 5.5V
+Output Low Level VCC=1.7V VOL1 - - 0.2 V IOL=0.15mA
+Output Low Level VCC=5.0V VOL2 - - 0.4 V IOL=3.0mA
+Pin Capacitance
+Table 5
+Applicableover recommendedoperatingrangefromTA=25℃,f=1.0MHz, VCC=+1.7V
+Parameter Symbol Min Typ Max Unit Condition
+Input/OutputCapacitance(SDA) CI/O - - 8 pF VIO=0V
+InputCapacitance(A0,A1,A2,SCL) CIN - - 6 pF VIN=0V
+Table 6
+
+--- PDF page 11 ---
+ZD24C32A
+11
+AC Electrical Characteristics
+Applicableover recommendedoperatingrangefromTA=-40℃ to+85℃,VCC=+1.7Vto+5.5V,CL=1TTL
+Gateand100pF(unlessotherwisenoted)
+Parameter Symbol
+1.7V≤VCC﹤2.5V 2.5V≤VCC﹤5.5V
+Units
+Min Typ Max Min Typ Max
+ClockFrequency,SCL fSCL - - 400 - - 1000 kHz
+ClockPulseWidthLow tLOW 1.3 - - 0.5 - - μs
+ClockPulseWidthHigh tHIGH 0.6 - - 0.26 - - μs
+NoiseSuppressionTime tI - - 50 - - 50 ns
+ClockLowtoDataOutValid tAA - - 0.9 - - 0.45 μs
+Timethebusmustbefreebeforea
+newtransmissioncanstart tBUF 1.3 - - 0.5 - - μs
+StartHold Time tHD:STA 0.6 - - 0.25 - - μs
+StartSetup Time tSU:STA 0.6 - - 0.25 - - μs
+DataInHoldTime tHD:DAT 0 - - 0 - - μs
+DatainSetup Time tSU:DAT 100 - - 100 - - ns
+InputRiseTime(1) tR - - 0.3 - - 0.12 μs
+InputFallTime(1) tF - - 0.3 - - 0.12 μs
+StopSetup Time tSu:STO 0.6 - - 0.25 - - μs
+DataOutHoldTime tDH 50 - - 50 - - ns
+WriteCycleTime twR - 1.9 3 - 1.9 3 ms
+5.0V,25℃,ByteMode(1) Endurance 1M - - 1M - - WriteCycle
+Notes:
+Table 7
+1. This parameter ischaracterizedandis not100% tested.
+2. ACmeasurementconditions:
+RL(connectstoVCC): 1.3K
+Inputpulsevoltages:0.3VCCto0.7VCC
+Inputriseandfalltime:50ns
+Inputand outputtimingreferencevoltages:0.5VCC
+ThevalueofRLshouldbeconcernedaccording totheactual loadingontheuser'ssystem.
+
+--- PDF page 12 ---
+ZD24C32A
+12
+SDA_OUT
+t BUFtDHtAA
+SDA_IN
+tSU.STO
+tSU.DATtHD.DATtHD.STAtSU.STA
+tLOW
+tRtHIGH
+tF
+tLOW
+SCL
+START
+CONDITION
+STOP
+CONDITION
+tWR(1)WordnSDA
+ACK
+SCL
+Bus Timing
+Figure 11. SCL: Serial Clock, SDA: Serial Data I/O
+Write Cycle Timing
+Figure 12. SCL: Serial Clock, SDA: Serial Data I/O
+Notes:
+ThewritecycletimetWRis thetimefromavalidstopconditionofawritesequencetotheend ofthe
+internalclear/writecycle.
+
+--- PDF page 13 ---
+ZD24C32A
+13
+E1
+c
+eA
+eB
+COMMONDIMENSIONS
+(UnitofMeasure=mm)
+De A2A
+b2
+L
+Package Information
+PDIP Outline Dimensions
+SYMBOL MIN NOM MAX
+A 3.60 3.80 4.00
+A2 3.20 3.30 3.40
+b 0.44 - 0.53
+b2 1.52BSC
+c 0.24 - 0.32
+D 9.05 9.25 9.45
+E1 6.15 6.35 6.55
+e 2.54BSC
+eA 7.62BSC
+eB 7.62 - 9.30
+L 3.00BSC
+Figure 13
+
+--- PDF page 14 ---
+ZD24C32A
+14
+C
+E E1
+L
+Φ
+COMMONDIMENSIONS
+(UnitofMeasure=mm)
+e BAA1
+D
+SOP
+SYMBOL MIN NOM MAX
+A 1.35 - 1.75
+A1 0.10 - 0.23
+B 0.39 - 0.48
+C 0.21 - 0.26
+D 4.70 4.90 5.10
+E1 3.70 3.90 4.10
+E 5.80 6.00 6.20
+e 1.27BSC
+L 0.50 - 0.80
+Φ 0" - 8"
+Figure 14
+
+--- PDF page 15 ---
+ZD24C32A
+15
+E1 E
+L1
+EndView
+TopView L
+COMMONDIMENSIONS
+b A UnitofMeasure=mm
+e A1
+D
+SideView
+TSSOP
+SYMBOL MIN NOM MAX
+D 2.90 3.00 3.10
+E 6.20 6.40 6.60
+E1 4.30 4.40 4.50
+A - - 1.20
+A1 0.05 - 0.15
+b 0.21 - 0.30
+e 0.65BSC
+L 0.45 0.60 0.75
+L1 1.00REF
+Figure 15
+
+--- PDF page 16 ---
+ZD24C32A
+16
+D D2
+L
+PIN1DOT
+BYMARKING E
+E2
+PIN#1IDENTIFICATION
+CHAMFER
+TOPVIEW
+BOTTOMVIEW
+e b
+A A3
+A1
+SIDEVIEW
+UDFN
+COMMON DIMENSION(MM)
+PKG UT:ULTRA THIN
+REF MIN NOM MAX
+A 0.50 0.55 0.60
+A1 0.00 - 0.05
+A3 0.15REF
+D 1.95 2.00 2.05
+E 2.95 3.00 3.05
+b 0.20 0.25 0.30
+L 0.20 0.30 0.40
+D2 1.25 1.40 1.50
+E2 1.15 1.30 1.40
+e 0.50BSC
+Figure 16
+
+--- PDF page 17 ---
+ZD24C32A
+17
+TSOT23-5
+D L2e1
+R1 R
+Θ1(4X) L(L1)
+Θ2(4X)
+E E1
+Θ
+B B
+Pin1
+AA2
+b e
+TOPVIEW
+SIDEVIEW
+COMMONDIMENSIONS
+(UNITSOFMEASURE=MILLIMETER)
+A3
+0.10
+SIDEVIEW A1
+cc1
+b
+b1
+SECTIONB-B
+WITHPLATING
+BASEMETAL
+Figure 17
+0.20 M
+SYMBOL MIN NOM MAX
+A - - 0.90
+A1 0.00 - 0.15
+A2 0.65 0.75 0.85
+A3 0.35 0.40 0.45
+b 0.36 - 0.50
+b1 0.36 0.38 0.45
+c 0.14 - 0.20
+c1 0.14 0.15 0.16
+D 2.85 2.95 3.05
+E 2.65 2.80 2.95
+E1 1.60 1.65 1.70
+e 0.90 0.95 1.00
+e1 1.80 1.90 2.00
+L 0.30 0.45 0.60
+L1 0.575REF
+L2 0.258BSC
+R - - 0.25
+R1 - - 0.25
+Θ 0° - 8°
+Θ1 3° 5° 7°
+Θ2 10° 12° 14°
+
+--- PDF page 18 ---
+ZD24C32A
+18
+Ordering Information
+ZD 24C 32 A - SS G M T
+Zetta Designator
+Product Family
+24C=StandardI2C-compatible
+SerialEEPROM
+Device Density
+32=32Kilobit
+Device Revision
+Shipping Carrier Option
+T=TapeandReel,StandardQuantityOption
+B=Tubes
+Operating Voltage
+M=1.7Vto5.5V
+Package Device Grade
+G=Low-halogen,Lead(Pb)-free
+P =Lead(Pb)-free
+Package Option
+SS =JEDECSOIC
+X = TSSOP
+MA= 2.0mmx3.0mmUDFN
+P = PDIP
+ST =SOT23
+C = VFBGA
+U = 3x3 Grid, 5-ball WLCSP
+U1 = 2x2 Grid, 4-ball WLCSP
+WU=WaferUnsawn
+
+--- PDF page 19 ---
+ZD24C32A
+19
+Revision history
+Version No Description Date
+1.0 InitialRelease 2016-05-03
+1.1 Addpackageinformation 2018-10-05

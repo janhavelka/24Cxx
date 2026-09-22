@@ -1,4 +1,4 @@
-PROJECT_NAME           = "TMP1x2"
+PROJECT_NAME           = "EEPROM24Cxx"
 PROJECT_NUMBER         = "1.0.0"
 OUTPUT_DIRECTORY       = build/doxygen
 INPUT                  = include README.md

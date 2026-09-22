@@ -88,6 +88,16 @@ def _resolve_namespace_dir(project_root: Path) -> Path:
     if not include_root.exists():
         raise FileNotFoundError(f"Missing include directory: {include_root}")
 
+    # The manifest selects the public namespace even during a device-family
+    # migration where the old generated header may still be present.
+    metadata = _load_library_json(project_root / "library.json")
+    declared_headers = metadata.get("headers", [])
+    if declared_headers:
+        namespace = str(declared_headers[0]).split("/")[0]
+        declared = include_root / namespace
+        if declared.is_dir():
+            return declared
+
     candidates = [path for path in include_root.iterdir() if path.is_dir()]
     version_candidates = [path for path in candidates if (path / "Version.h").exists()]
 

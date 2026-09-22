@@ -1,5 +1,4 @@
-// Native ESP-IDF example. One application task owns the bus and driver. The
-// input task queues characters only; it never touches I2C or driver state.
+// Native ESP-IDF: one owner task calls the driver; input task queues bytes only.
 #include <cstdarg>
 #include <cstdio>
 #include <climits>
@@ -12,54 +11,61 @@
 #include <freertos/task.h>
 #include <sdkconfig.h>
 #include "BoardConfig.h"
-#include "Tmp1x2Cli.h"
+#include "Eeprom24CxxCli.h"
 
 namespace {
+using namespace EEPROM24Cxx;
 struct App {
   i2c_master_bus_handle_t bus = nullptr;
-  i2c_master_dev_handle_t devices[4]{};
-  tmp1x2_cli::TransferStats stats{};
+  i2c_master_dev_handle_t devices[8]{};
+  eeprom24cxx_cli::TransferStats stats{};
   QueueHandle_t input = nullptr;
-  tmp1x2_cli::Cli cli{};
+  eeprom24cxx_cli::Cli cli{};
 } app;
-TMP1x2::Status mapError(esp_err_t error) {
-  if (error == ESP_OK) return TMP1x2::Status::Ok();
-  // Transaction errors do not reliably identify which NACK phase occurred.
-  return TMP1x2::Status::Error(error == ESP_ERR_TIMEOUT ? TMP1x2::Err::I2C_TIMEOUT : TMP1x2::Err::I2C_ERROR,
-                               "ESP-IDF I2C transfer", error);
+TransportResult finish(esp_err_t error, size_t tx = 0, size_t rx = 0) {
+  app.stats.record(error == ESP_OK);
+  if (error == ESP_OK) return TransportResult::Ok(tx, rx);
+  // IDF transaction errors do not identify NACK phase or accepted byte count.
+  // Never fabricate NOT_COMMITTED or full acceptance from an SDK error alone.
+  return TransportResult::Error(error == ESP_ERR_TIMEOUT ? TransportCode::TIMEOUT : TransportCode::IO_ERROR, error);
 }
-TMP1x2::Status finish(esp_err_t error) { app.stats.record(error == ESP_OK); return mapError(error); }
-TMP1x2::Status writeI2c(uint8_t address, const uint8_t* data, size_t length,
-                       uint32_t timeoutMs, void*) {
-  if (address < 0x48 || address > 0x4B || !data || length == 0 || timeoutMs == 0 || timeoutMs > INT_MAX)
-    return TMP1x2::Status::Error(TMP1x2::Err::INVALID_PARAM, "invalid IDF write");
-  return finish(i2c_master_transmit(app.devices[address - 0x48], data, length, static_cast<int>(timeoutMs)));
+TransportResult writeI2c(uint8_t address, const uint8_t* data, size_t length,
+                         uint32_t timeoutMs, void*) {
+  if (address < 0x50 || address > 0x57 || !data || !length || !timeoutMs || timeoutMs > INT_MAX)
+    return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_COMMITTED);
+  return finish(i2c_master_transmit(app.devices[address - 0x50], data, length, static_cast<int>(timeoutMs)), length);
 }
-TMP1x2::Status readI2c(uint8_t address, const uint8_t* tx, size_t txLength,
-                      uint8_t* rx, size_t rxLength, uint32_t timeoutMs, void*) {
-  if (address < 0x48 || address > 0x4B || !tx || txLength == 0 || !rx || rxLength == 0 || timeoutMs == 0 || timeoutMs > INT_MAX)
-    return TMP1x2::Status::Error(TMP1x2::Err::INVALID_PARAM, "invalid IDF read");
-  return finish(i2c_master_transmit_receive(app.devices[address - 0x48], tx, txLength, rx, rxLength, static_cast<int>(timeoutMs)));
+TransportResult readI2c(uint8_t address, const uint8_t* tx, size_t txLength,
+                        uint8_t* rx, size_t rxLength, uint32_t timeoutMs, void*) {
+  if (address < 0x50 || address > 0x57 || !tx || !txLength || !rx || !rxLength || !timeoutMs || timeoutMs > INT_MAX)
+    return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
+  return finish(i2c_master_transmit_receive(app.devices[address - 0x50], tx, txLength, rx, rxLength,
+                                           static_cast<int>(timeoutMs)), txLength, rxLength);
 }
-TMP1x2::Status probe(uint8_t address, void*) {
-  const esp_err_t result = i2c_master_probe(app.bus, address, static_cast<int>(board::I2C_TIMEOUT_MS));
+TransportResult probeI2c(uint8_t address, uint32_t timeoutMs, void*) {
+  const esp_err_t result = i2c_master_probe(app.bus, address, static_cast<int>(timeoutMs));
   app.stats.record(result == ESP_OK);
-  // Probe is an address-only operation; ESP_ERR_NOT_FOUND proves address NACK.
-  if (result == ESP_ERR_NOT_FOUND)
-    return TMP1x2::Status::Error(TMP1x2::Err::I2C_NACK_ADDR, "address probe NACK", result);
-  return mapError(result);
+  if (result == ESP_OK) return TransportResult::Ok(0, 0);
+  // The address-only probe can reliably identify address NACK (including tWR).
+  return TransportResult::Error(result == ESP_ERR_NOT_FOUND ? TransportCode::NACK_ADDRESS :
+      result == ESP_ERR_TIMEOUT ? TransportCode::TIMEOUT : TransportCode::IO_ERROR, result,
+      WriteCommit::NOT_APPLICABLE);
+}
+Status probeAddress(uint8_t address, void*) {
+  const auto result = probeI2c(address, board::I2C_TIMEOUT_MS, nullptr);
+  if (result.ok()) return Status::Ok();
+  return Status::Error(result.code == TransportCode::NACK_ADDRESS ? Err::I2C_NACK_ADDR :
+      result.code == TransportCode::TIMEOUT ? Err::I2C_TIMEOUT : Err::I2C_ERROR, "IDF address probe", result.detail);
 }
 uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
-void cooperativeYield(void*) { vTaskDelay(1); }
 void output(void*, const char* format, va_list args) { std::vprintf(format, args); }
-tmp1x2_cli::TransferStats stats(void*) { return app.stats; }
+eeprom24cxx_cli::TransferStats stats(void*) { return app.stats; }
 void inputTask(void*) {
   while (true) {
     const int value = std::getchar();
     if (value == EOF) { std::clearerr(stdin); vTaskDelay(pdMS_TO_TICKS(10)); continue; }
     const char character = static_cast<char>(value);
-    // A bounded queue provides backpressure; never silently drop part of a
-    // command (which could turn an invalid line into a valid write).
+    // Backpressure prevents dropped input from changing a write's arguments.
     (void)xQueueSend(app.input, &character, portMAX_DELAY);
   }
 }
@@ -75,39 +81,37 @@ extern "C" void app_main() {
   bus.flags.enable_internal_pullup = true;
   esp_err_t error = i2c_new_master_bus(&bus, &app.bus);
   if (error != ESP_OK) { std::printf("[E] Bus creation failed: %s\n", esp_err_to_name(error)); return; }
-  // Fixed set of four device handles makes runtime address changes allocation
-  // free. i2c_master_bus_add_device does not prove presence or touch the chip.
-  for (unsigned index = 0; index < 4; ++index) {
+  // Every 0x50..0x57 address has a handle, including bank aliases. Device handle
+  // registration is local SDK setup and performs no EEPROM access.
+  for (unsigned index = 0; index < 8; ++index) {
     i2c_device_config_t device{};
     device.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    device.device_address = static_cast<uint16_t>(0x48U + index);
+    device.device_address = static_cast<uint16_t>(0x50U + index);
     device.scl_speed_hz = board::I2C_FREQUENCY_HZ;
     error = i2c_master_bus_add_device(app.bus, &device, &app.devices[index]);
     if (error != ESP_OK) {
       std::printf("[E] Device handle creation failed: %s\n", esp_err_to_name(error));
       for (unsigned previous = 0; previous < index; ++previous) (void)i2c_master_bus_rm_device(app.devices[previous]);
-      (void)i2c_del_master_bus(app.bus);
-      return;
+      (void)i2c_del_master_bus(app.bus); return;
     }
   }
-  app.input = xQueueCreate(192, sizeof(char));
-  if (!app.input || xTaskCreate(inputTask, "tmp1x2_input", 3072, nullptr, 4, nullptr) != pdPASS) {
+  app.input = xQueueCreate(384, sizeof(char));
+  if (!app.input || xTaskCreate(inputTask, "eeprom_input", 3072, nullptr, 4, nullptr) != pdPASS) {
     std::puts("[E] Input queue/task creation failed");
     if (app.input) vQueueDelete(app.input);
     for (auto device : app.devices) (void)i2c_master_bus_rm_device(device);
-    (void)i2c_del_master_bus(app.bus);
-    return;
+    (void)i2c_del_master_bus(app.bus); return;
   }
-  TMP1x2::Config config{};
+  EEPROM24Cxx::Config config{};
   config.i2cWrite = writeI2c;
   config.i2cWriteRead = readI2c;
+  config.i2cProbe = probeI2c;
   config.nowMs = nowMs;
-  config.cooperativeYield = cooperativeYield;
   config.i2cTimeoutMs = board::I2C_TIMEOUT_MS;
-  tmp1x2_cli::Platform platform{};
+  eeprom24cxx_cli::Platform platform{};
   platform.vprintf = output;
   platform.nowMs = nowMs;
-  platform.probeAddress = probe;
+  platform.probeAddress = probeAddress;
   platform.transferStats = stats;
   platform.framework = "native-esp-idf";
   platform.frameworkVersion = esp_get_idf_version();

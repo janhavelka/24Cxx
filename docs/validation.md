@@ -1,56 +1,64 @@
 # Validation results
 
-Local validation in this `24Cxx` checkout on 2026-09-22 (Windows, GCC 15.1
-host compiler). These results were rerun here after importing the sibling
-implementation; they are not inherited build claims.
+Validated on 2026-09-22 after replacing the mistakenly requested sensor driver
+with EEPROM24Cxx. No board was flashed and no physical EEPROM/WP result is claimed.
 
-| Check | Result |
-| --- | --- |
-| CMake native core regression suite | Passed, 12 test groups |
-| Exhaustive signed temperature decoding | Passed all 4,096 normal and 8,192 extended codes |
-| Shared CLI behavioral tests | Passed help/ANSI formatting, color-off, cached diagnostics, invalid arguments, overflow rejection, end/unbind configuration retention and transient one-shot watch recovery |
-| Strict C++17 host warnings | Passed `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror` |
-| PlatformIO native tests | Passed all 12 test groups |
-| Framework-free compile/link | Passed; no Arduino/Wire headers, including Xtensa macro-collision regression |
-| Arduino ESP32-S3 and ESP32-S2 firmware | Compiled and linked with pioarduino 55.03.311 / Arduino 3.3.11 |
-| Native ESP-IDF CMake, compilation and firmware link | Passed S3 and S2 with IDF 5.5.5 through the separate PlatformIO `framework = espidf` project; no Arduino facade |
-| ESP-IDF component discovery under a different checkout name | Passed actual firmware builds with component name `24Cxx` |
-| Release metadata and core boundary checks | Passed |
-| PlatformIO release package | Created, checked and independently built with CMake; reference binaries and development tests excluded |
-| TI reference integrity | Passed 30 manifest artifacts and 35 SHA-256 entries; all four sensor PDFs re-downloaded from TI match the archive |
-| Physical sensor / ALERT / address straps | Not run; no hardware results claimed |
+## Host and package checks
 
-Regression tests cover wire byte order and framing, signed conversion, threshold
-rounding and overflow, invalid enum/address/timeouts without I2C, lifecycle,
-probe versus tracked health, passive OFFLINE recovery, preserved failed outputs,
-partial writes, dirty-state recovery, OS readiness, conversion deadlines, clock
-wraparound, extended-format threshold preservation, all AL/POL combinations, and
-each initialization transfer failing in turn. A dedicated device model reproduces
-TI's premature EM marker; a failure after EM changes must retain the fresh-
-conversion requirement through recovery.
+- GCC 15.1.0, C++17, CMake/Ninja: core and shared CLI compile with
+  `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror`.
+- CTest: both core and CLI executables pass. The core has 11 regression groups;
+  the CLI suite exercises command processing against an EEPROM model.
+- Managed PlatformIO `test -e native`: all 11 core groups pass.
+- Managed PlatformIO `run -e native_core_no_arduino`: strict compile/link passes
+  with no Arduino, Wire or ESP-IDF include paths or dependencies.
+- `python tools/check_contracts.py`: release metadata and framework boundaries pass.
+- `python tools/check_reference_archive.py`: 15 document artifacts (14 PDFs and
+  the catalogue), 28 source/license artifacts and 66 archive checksums pass.
+- PlatformIO package export: 31 entries, expected public/core/example files
+  present, vendor source/PDFs and generated build artifacts excluded. Extracted
+  package builds as a standalone CMake C++17 library with strict warnings.
 
-CLI regressions exercise rejected mode/shutdown/threshold commands after both
-`end` and `unbind`, preserving transport and a staged address. Injected failures
-at CONFIG and TEMP reads prove shutdown watch can rejoin a pending conversion.
-The new lifecycle regression fails against the original imported CLI and passes
-against the corrected implementation.
+The core model emulates page wrapping, bank-local reads, write-cycle NACKs and
+write protection. Regressions cover every preset, page and bank boundaries,
+invalid geometry/ranges, fixed-buffer limits, exact completion counts, partial
+reads/writes, ambiguous effects, no replay, readback mismatch, retained results,
+cancellation/end barriers, ACK faults, callback budgets, clockless operation,
+post-callback deadlines and uint32_t rollover. Health tests distinguish expected
+busy polling and logical/content failures from physical transport failures.
 
-The full local IDF builds used the repository's actual component registration,
-native `app_main`, bootloader and firmware link. Running the standalone `idf.py`
-front end separately was not necessary and is not claimed. Other IDF versions
-(5.3.2, 5.5.1 and 6.0.1) are configured for S2/S3 in CI but were not run locally
-or remotely during setup. Host ASan/UBSan are configured in Linux CI and are
-not claimed as locally run Windows sanitizer tests.
+CLI regressions cover startup without programming, ANSI colors/help columns,
+read-only diagnostics/stress, strict decimal/hex parsing (including leading
+zeros), malformed/overlong/control-character input, borrowed-buffer protection,
+page-split programming, write protection, partial-write effect reporting,
+bank selection and cancellation. The Wire adapter helper tests ambiguous error
+mapping and clearing an unsent partial buffer before releasing the mutex.
 
-Reproduce native checks with the commands in the root README. Firmware builds:
+## Firmware builds
+
+The repository wrapper uses the existing VS Code-managed PlatformIO Core. The
+platform is pinned to pioarduino Espressif32 55.03.311. Both examples use a 4 MB
+flash layout; generated SDK configurations confirm that choice for S2 and S3.
+
+| Framework | Local version | ESP32-S3 | ESP32-S2 |
+| --- | --- | --- | --- |
+| Arduino-ESP32 | 3.3.11 | Compile/link and binary generation passed | Compile/link and binary generation passed |
+| Native ESP-IDF | 5.5.5 | Compile/link, bootloader and binary generation passed | Compile/link, bootloader and binary generation passed |
+
+Commands:
 
 ```powershell
 .\scripts\pio.cmd run -e esp32s3dev -e esp32s2dev
 .\scripts\pio.cmd run --project-dir examples/esp_idf/basic -e esp32s3 -e esp32s2
 ```
 
-Local build logs are retained in ignored `build/arduino-build.log` and
-`build/idf-build.log`. `tools/check_idf_sdk_compile.py` remains an optional,
-narrower SDK-header check; it is not a substitute for the full IDF builds above.
+These are full native ESP-IDF component/application builds, not an Arduino
+compatibility build or syntax-only check. The separate `idf.py` front end was
+not run locally. CI is configured for native IDF 5.3.2, 5.5.1 and 6.0.1 on both
+targets; those CI jobs have not been executed in this session. Host sanitizer
+checks are also configured in CI but were not run on this Windows host.
 
-Hardware procedure: [hardware-validation.md](hardware-validation.md).
+The Arduino platform emits a host Windows long-path-support warning; all builds
+complete. Build logs and the package smoke workspace are local ignored files
+under `build-eeprom/`. Physical electrical/timing/WP validation remains the
+[bench procedure](hardware-validation.md), not a result established by mocks.

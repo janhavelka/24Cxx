@@ -1,128 +1,254 @@
-#include "Tmp1x2Cli.h"
+#include "Eeprom24CxxCli.h"
+#include "WireTransportHelpers.h"
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
+using namespace EEPROM24Cxx;
 struct Fixture {
   std::string output;
+  std::vector<uint8_t> addresses;
+  uint8_t memory[2048]{};
   unsigned transfers = 0;
   unsigned writes = 0;
-  uint8_t lastAddress = 0;
+  unsigned reads = 0;
+  unsigned probes = 0;
   uint32_t ms = 0;
-  uint32_t shotAt = 0;
-  bool shot = false;
-  int failReadRegister = -1;
-  uint16_t regs[4] = {0x1900, 0x60A0, 0x4B00, 0x5000};
+  uint32_t busyUntil = 0;
+  bool writeProtected = false;
+  bool failWrite = false;
+  bool nackWrite = false;
+  bool failRead = false;
+  Geometry geometry = geometryFor(DeviceVariant::ZETTA_ZD24C02B);
   static uint32_t clock(void* user) { return static_cast<Fixture*>(user)->ms; }
-  static void yield(void* user) { ++static_cast<Fixture*>(user)->ms; }
   static void print(void* user, const char* format, va_list args) {
     char text[2048]; std::vsnprintf(text, sizeof(text), format, args);
     static_cast<Fixture*>(user)->output += text;
   }
-  static TMP1x2::Status write(uint8_t address, const uint8_t* data, size_t n, uint32_t, void* user) {
-    auto& f = *static_cast<Fixture*>(user); ++f.transfers; ++f.writes;
-    f.lastAddress = address;
-    if (n != 3 || data[0] < 1 || data[0] > 3) return TMP1x2::Status::Error(TMP1x2::Err::INVALID_PARAM, "framing");
-    auto word = static_cast<uint16_t>((static_cast<uint16_t>(data[1]) << 8U) | data[2]);
-    f.regs[data[0]] = data[0] == 1 ? static_cast<uint16_t>((word & 0x1FD0U) | 0x6020U) : word;
-    if (data[0] == 1) {
-      f.shot = (word & 0x8100U) == 0x8100U;
-      if (f.shot) f.shotAt = f.ms;
-      else if ((word & 0x0100U) != 0) f.regs[1] |= 0x8000U;
-    }
-    return TMP1x2::Status::Ok();
+  uint32_t address(uint8_t bus, const uint8_t* prefix) const {
+    uint32_t value = prefix[0];
+    if (geometry.wordAddressBytes == 2) value = (value << 8U) | prefix[1];
+    const uint32_t bank = (bus >> geometry.bankAddressShift) & ((1U << geometry.bankAddressBits) - 1U);
+    return value | (bank << (8U * geometry.wordAddressBytes));
   }
-  static TMP1x2::Status read(uint8_t address, const uint8_t* data, size_t n, uint8_t* out, size_t count, uint32_t, void* user) {
-    auto& f = *static_cast<Fixture*>(user); ++f.transfers;
-    f.lastAddress = address;
-    if (n != 1 || count != 2 || data[0] > 3) return TMP1x2::Status::Error(TMP1x2::Err::INVALID_PARAM, "framing");
-    if (data[0] == f.failReadRegister) {
-      f.failReadRegister = -1;
-      return TMP1x2::Status::Error(TMP1x2::Err::I2C_TIMEOUT, "injected read failure");
+  static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t, void* user) {
+    auto& f = *static_cast<Fixture*>(user);
+    ++f.transfers; ++f.writes; f.addresses.push_back(bus);
+    if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED);
+    if (f.failWrite) { f.failWrite = false; f.busyUntil = f.ms + 5; return TransportResult::Error(TransportCode::TIMEOUT); }
+    if (f.nackWrite) { f.nackWrite = false; return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED); }
+    const uint32_t start = f.address(bus, tx);
+    if (n <= f.geometry.wordAddressBytes) return TransportResult::Error(TransportCode::IO_ERROR);
+    if (!f.writeProtected) for (size_t i = f.geometry.wordAddressBytes; i < n; ++i) {
+      const uint32_t target = (start / f.geometry.pageSizeBytes) * f.geometry.pageSizeBytes +
+          (start + static_cast<uint32_t>(i) - f.geometry.wordAddressBytes) % f.geometry.pageSizeBytes;
+      if (target >= sizeof(f.memory)) return TransportResult::Error(TransportCode::IO_ERROR);
+      f.memory[target] = tx[i];
     }
-    if (f.shot && static_cast<uint32_t>(f.ms - f.shotAt) >= 35U) {
-      f.shot = false;
-      f.regs[1] |= 0x8000U;
+    f.busyUntil = f.ms + 5;
+    return TransportResult::Ok(n, 0);
+  }
+  static TransportResult read(uint8_t bus, const uint8_t* tx, size_t n,
+                               uint8_t* out, size_t count, uint32_t, void* user) {
+    auto& f = *static_cast<Fixture*>(user);
+    ++f.transfers; ++f.reads; f.addresses.push_back(bus);
+    if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS);
+    if (f.failRead) { f.failRead = false; return TransportResult::Error(TransportCode::TIMEOUT); }
+    const uint32_t start = f.address(bus, tx);
+    if (n != f.geometry.wordAddressBytes || start + count > sizeof(f.memory))
+      return TransportResult::Error(TransportCode::IO_ERROR);
+    std::memcpy(out, f.memory + start, count);
+    return TransportResult::Ok(n, count);
+  }
+  static TransportResult probe(uint8_t bus, uint32_t, void* user) {
+    auto& f = *static_cast<Fixture*>(user);
+    ++f.transfers; ++f.probes; f.addresses.push_back(bus);
+    if (bus < 0x50 || bus > 0x57 || f.ms < f.busyUntil)
+      return TransportResult::Error(TransportCode::NACK_ADDRESS);
+    return TransportResult::Ok(0, 0);
+  }
+  static Status scan(uint8_t bus, void* user) {
+    const auto result = probe(bus, 50, user);
+    return result.ok() ? Status::Ok() : Status::Error(Err::I2C_NACK_ADDR, "probe NACK");
+  }
+  Config config() {
+    Config c;
+    c.i2cWrite = write; c.i2cWriteRead = read; c.i2cProbe = probe; c.i2cUser = this;
+    c.nowMs = clock; c.timeUser = this; c.maxTxBytes = 17; c.maxRxBytes = 16;
+    c.offlineThreshold = 2;
+    return c;
+  }
+  eeprom24cxx_cli::Platform platform() {
+    eeprom24cxx_cli::Platform p;
+    p.vprintf = print; p.nowMs = clock; p.probeAddress = scan; p.user = this;
+    return p;
+  }
+  bool run(eeprom24cxx_cli::Cli& cli, unsigned ticks = 80) {
+    for (unsigned i = 0; i < ticks; ++i) {
+      const unsigned before = transfers;
+      cli.tick();
+      if (transfers > before + 1) return false;
+      ++ms;
     }
-    out[0] = static_cast<uint8_t>(f.regs[data[0]] >> 8U); out[1] = static_cast<uint8_t>(f.regs[data[0]]);
-    return TMP1x2::Status::Ok();
+    return true;
   }
 };
 #define CHECK(x) do { if (!(x)) { std::printf("CLI check failed line %d: %s\n", __LINE__, #x); return 1; } } while (false)
 int main() {
-  Fixture f; tmp1x2_cli::Cli cli; tmp1x2_cli::Platform p; p.vprintf = Fixture::print; p.user = &f;
-  TMP1x2::Config c; c.i2cWrite = Fixture::write; c.i2cWriteRead = Fixture::read; c.i2cUser = &f;
-  cli.setup(p, c); f.output.clear();
-  cli.processCommand("help");
-  CHECK(f.output.find("\033[36m=== TMP1x2 CLI Help ===\033[0m") != std::string::npos);
+  // ESP32 Wire code 2 is ambiguous for payload transactions. An address-only
+  // probe is the only context in which it proves an address NACK.
+  const auto ambiguous = eeprom24cxx_cli::wireResult(2, 9);
+  CHECK(ambiguous.code == TransportCode::NACK_UNSPECIFIED);
+  CHECK(ambiguous.writeCommit == WriteCommit::INDETERMINATE);
+  CHECK(ambiguous.completedTxBytes == 0);
+  CHECK(eeprom24cxx_cli::wireResult(2, 0, 0, true).code == TransportCode::NACK_ADDRESS);
+  CHECK(eeprom24cxx_cli::wireResult(0, 9).completedTxBytes == 9);
+  // Model precisely the relevant Wire mutex/buffer cleanup behavior, not an
+  // entire framework. Flushing must precede STOP; null storage uses no I2C.
+  struct BufferedWire {
+    size_t length = 3;
+    bool locked = true;
+    bool nullBuffer = false;
+    unsigned physical = 0;
+    unsigned payloadSent = 0;
+    void flush() { length = 0; }
+    uint8_t endTransmission(bool) {
+      if (nullBuffer) return 4; // Pinned Wire does not unlock this path.
+      ++physical; payloadSent += static_cast<unsigned>(length); locked = false; return 0;
+    }
+    size_t requestFrom(uint8_t, size_t, bool) {
+      if (!nullBuffer) ++physical;
+      locked = false; return 0;
+    }
+  } wire;
+  CHECK(eeprom24cxx_cli::discardWireTx(wire, 0x50, 3).physicalAttempt);
+  CHECK(!wire.locked && wire.physical == 1 && wire.payloadSent == 0);
+  wire = {}; wire.nullBuffer = true;
+  CHECK(!eeprom24cxx_cli::discardWireTx(wire, 0x50, 0).physicalAttempt);
+  CHECK(!wire.locked && wire.physical == 0 && wire.payloadSent == 0);
+  Fixture f; eeprom24cxx_cli::Cli cli;
+  cli.setup(f.platform(), f.config());
+  CHECK(f.writes == 0 && f.probes == 1);
+  f.output.clear(); cli.processCommand("help");
+  CHECK(f.output.find("\033[36m=== EEPROM24Cxx CLI Help ===\033[0m") != std::string::npos);
   CHECK(f.output.find("\033[32m[Configuration]\033[0m") != std::string::npos);
-  CHECK(f.output.find("%-32") == std::string::npos);
-  CHECK(f.output.find("readblocking") != std::string::npos);
-  const unsigned traffic = f.transfers;
-  for (const char* cmd : {"health", "settings", "version", "sample", "sampleage", "diag"}) cli.processCommand(cmd);
-  CHECK(f.transfers == traffic);
-  for (const char* cmd : {"wreg 1 0x10000", "wreg 0 1", "wreg 1 -1", "reg 4", "reg 0 extra", "threshold nan 80", "threshold 1 inf", "rate 9", "faults 3", "addr 0x40", "watch -1", "extended 2", "mode potato"}) {
-    cli.processCommand(cmd); CHECK(f.transfers == traffic);
+  CHECK(f.output.find("\033[36mhelp / ?                        \033[0m -") != std::string::npos);
+  CHECK(f.output.find("fill <addr> <byte> <N>") != std::string::npos);
+  CHECK(f.output.find("wverify") != std::string::npos);
+  unsigned before = f.transfers;
+  for (const char* command : {"health", "drv", "state", "online", "settings", "cfg", "snapshot", "version", "ver", "diag", "progress", "status", "?"})
+    cli.processCommand(command);
+  CHECK(f.transfers == before && f.writes == 0);
+  for (const char* command : {"write 0 256", "write 0 -1", "write 0 1 invalid", "fill 0 1 0", "read -1", "read 0 257", "readbyte 0 2", "verify 0", "addr 0x40", "stress -1", "writebyte 0 1 2", "help extra", "write 4294967296 1"}) {
+    cli.processCommand(command); CHECK(f.transfers == before);
   }
   cli.processCommand("color off"); f.output.clear(); cli.processCommand("help");
   CHECK(f.output.find('\033') == std::string::npos);
-  f.output.clear(); cli.processCommand("read"); CHECK(f.output.find("25.0000") != std::string::npos || f.output.find("25.000") != std::string::npos);
-  const unsigned before = f.transfers;
-  const std::string tooLong = "wreg 1 0x6100 " + std::string(180, ' ');
-  for (char ch : tooLong) cli.feed(ch);
-  cli.feed('\n'); CHECK(f.transfers == before);
-  cli.processCommand("end"); CHECK(f.transfers == before);
-  cli.processCommand("addr 0x49"); CHECK(f.transfers == before);
-  // Rejected setters must preserve staged addressing and the CLI's transport
-  // callbacks even when the driver has released its complete configuration.
-  for (const char* rejected : {"shutdown", "threshold 10 20", "mode shutdown"}) {
-    for (const char* lifecycle : {"end", "unbind"}) {
-      cli.processCommand(lifecycle);
-      cli.processCommand("addr 0x49");
-      const unsigned idleTransfers = f.transfers;
-      f.output.clear();
-      cli.processCommand(rejected);
-      CHECK(f.output.find("NOT_INITIALIZED") != std::string::npos);
-      CHECK(f.transfers == idleTransfers);
-      cli.processCommand("settings");
-      CHECK(f.output.find("address=0x49") != std::string::npos);
-      f.output.clear();
-      cli.processCommand("begin");
-      CHECK(f.output.find("[I] OK") != std::string::npos);
-      CHECK(f.transfers > idleTransfers);
-      CHECK(f.lastAddress == 0x49);
-    }
-  }
-  // A one-shot survives transient failures at either polling or payload read.
-  // The finite watch must rejoin it and continue obtaining samples.
-  for (int failingRegister : {1, 0}) {
-    Fixture watch;
-    tmp1x2_cli::Cli watchCli;
-    auto watchPlatform = p; watchPlatform.user = &watch; watchPlatform.nowMs = Fixture::clock;
-    auto watchConfig = c; watchConfig.i2cUser = &watch;
-    watchConfig.nowMs = Fixture::clock; watchConfig.cooperativeYield = Fixture::yield;
-    watchConfig.timeUser = &watch; watchConfig.mode = TMP1x2::Mode::SHUTDOWN;
-    watchCli.setup(watchPlatform, watchConfig);
-    watchCli.processCommand("color off");
-    watch.output.clear();
-    watchCli.processCommand("watch 3 1");
-    watchCli.tick(); // Start first conversion.
-    watch.ms += 35U;
-    watch.failReadRegister = failingRegister;
-    watchCli.tick(); // One injected failed watch attempt.
-    CHECK(watch.output.find("I2C_TIMEOUT") != std::string::npos);
-    ++watch.ms;
-    watchCli.tick(); // Consume the same pending conversion successfully.
-    ++watch.ms;
-    watchCli.tick(); // Start the final conversion.
-    watch.ms += 35U;
-    watchCli.tick();
-    CHECK(watch.output.find("BUSY") == std::string::npos);
-    CHECK(watch.output.find("Watch stopped: ok=2 fail=1") != std::string::npos);
-    const unsigned completedTransfers = watch.transfers;
-    ++watch.ms; watchCli.tick();
-    CHECK(watch.transfers == completedTransfers);
-  }
-  std::puts("CLI help, colors, passive diagnostics, parsers, lifecycle and watch recovery checks passed");
+  for (char ch : std::string("writebyte 0 99 ") + std::string(280, ' ')) cli.feed(ch);
+  cli.feed('\n'); CHECK(f.transfers == before); CHECK(f.writes == 0);
+  // Invalid control characters must not silently combine into a valid mutation.
+  for (char ch : std::string("writebyte 0 9") + char(1) + "9\n") cli.feed(ch);
+  CHECK(f.transfers == before);
+  f.output.clear(); cli.processCommand("wverify 6 0xAA 0xBB 0xCC 0xDD");
+  CHECK(f.transfers == before); // Admission only, no synchronous write.
+  cli.tick(); CHECK(f.writes == 1);
+  // Reject commands before parsing their data into the active borrowed buffer.
+  cli.processCommand("write 6 1 2 3 4");
+  CHECK(f.output.find("BUSY") != std::string::npos);
+  CHECK(f.run(cli));
+  CHECK(f.writes == 2 && f.memory[6] == 0xAA && f.memory[7] == 0xBB && f.memory[8] == 0xCC && f.memory[9] == 0xDD);
+  CHECK(f.output.find("verified=4 commit=VERIFIED") != std::string::npos);
+  f.output.clear(); cli.processCommand("progress");
+  CHECK(f.output.find("verified=4 commit=VERIFIED") != std::string::npos);
+  before = f.transfers;
+  cli.processCommand("health"); CHECK(f.transfers == before);
+  CHECK(f.output.find("write-busy-polls=") != std::string::npos);
+  f.output.clear(); cli.processCommand("read 6 4"); CHECK(f.run(cli));
+  CHECK(f.output.find("00006: AA BB CC DD") != std::string::npos);
+  const unsigned previousWrites = f.writes;
+  cli.processCommand("verify 6 0xAA 0xBB 0xCC 0xDD"); CHECK(f.run(cli));
+  CHECK(f.writes == previousWrites);
+  f.output.clear(); cli.processCommand("fillverify 20 0xA5 9"); CHECK(f.run(cli));
+  for (size_t i = 20; i < 29; ++i) CHECK(f.memory[i] == 0xA5);
+  CHECK(f.memory[29] == 0);
+  f.writeProtected = true;
+  f.output.clear(); cli.processCommand("wverify 20 0"); CHECK(f.run(cli));
+  CHECK(f.output.find("VERIFY_MISMATCH") != std::string::npos);
+  CHECK(f.memory[20] == 0xA5);
+  f.writeProtected = false;
+  f.failWrite = true;
+  before = f.writes;
+  f.output.clear(); cli.processCommand("writebyte 30 99"); CHECK(f.run(cli));
+  CHECK(f.writes == before + 1); CHECK(f.output.find("commit=INDETERMINATE") != std::string::npos);
+  // Cancel after the first page: preserve accepted prefix and the tWR barrier.
+  f.output.clear(); cli.processCommand("fill 40 0x55 24"); cli.tick();
+  before = f.writes;
+  cli.processCommand("cancel");
+  CHECK(f.output.find("CANCELLED") != std::string::npos);
+  CHECK(f.output.find("accepted=8 completed=0") != std::string::npos);
+  CHECK(f.run(cli)); CHECK(f.writes == before);
+  cli.processCommand("readbyte 40"); CHECK(f.run(cli));
+  CHECK(f.memory[40] == 0x55 && f.memory[48] == 0);
+  // Finite stress consumes failures and remains read-only.
+  before = f.writes; f.output.clear(); f.failRead = true;
+  cli.processCommand("stress 3"); CHECK(f.run(cli));
+  CHECK(f.output.find("Stress stopped: ok=2 fail=1") != std::string::npos);
+  CHECK(f.writes == before);
+  before = f.transfers; CHECK(f.run(cli)); CHECK(f.transfers == before);
+  cli.processCommand("discover"); CHECK(f.transfers == before);
+  CHECK(f.run(cli, 8)); CHECK(f.transfers == before + 8);
+  CHECK(f.output.find("bank candidate; identity unverified") != std::string::npos);
+  before = f.transfers; cli.processCommand("scan"); cli.tick();
+  cli.processCommand("stop"); CHECK(f.run(cli)); CHECK(f.transfers == before + 1);
+  // Staged address/model survives end/bind and bank address selection is visible.
+  before = f.transfers; cli.processCommand("end"); cli.processCommand("model 24c04");
+  cli.processCommand("addr 0x52"); CHECK(f.transfers == before);
+  f.geometry = geometryFor(DeviceVariant::C04);
+  cli.processCommand("bind"); CHECK(f.transfers == before);
+  cli.processCommand("read 0xFF 2"); CHECK(f.run(cli));
+  CHECK(f.addresses[f.addresses.size() - 2] == 0x52 && f.addresses.back() == 0x53);
+  before = f.transfers; cli.processCommand("unbind"); cli.processCommand("writebyte 0 12");
+  CHECK(f.transfers == before);
+  cli.processCommand("begin"); CHECK(f.transfers == before + 1);
+  // Numbers without an explicit hex prefix are decimal, including leading
+  // zeroes. Interpreting a write address as octal could modify the wrong byte.
+  cli.processCommand("writebyte 010 010"); CHECK(f.run(cli));
+  CHECK(f.memory[10] == 10);
+  cli.processCommand("writebyte 08 08"); CHECK(f.run(cli));
+  CHECK(f.memory[8] == 8);
+  cli.processCommand("writebyte 0x0B 0X0C"); CHECK(f.run(cli));
+  CHECK(f.memory[11] == 12);
+  // A definite first page remains accepted when the following page address
+  // NACK proves that newest chunk accepted nothing. Display both facts.
+  Fixture partial;
+  eeprom24cxx_cli::Cli partialCli;
+  partialCli.setup(partial.platform(), partial.config());
+  partialCli.processCommand("color off");
+  partial.output.clear(); partialCli.processCommand("fill 0 0x66 16");
+  partialCli.tick(); CHECK(partial.writes == 1);
+  partial.ms += 6; partial.nackWrite = true;
+  CHECK(partial.run(partialCli));
+  CHECK(partial.writes == 2 && partial.memory[0] == 0x66 && partial.memory[8] == 0);
+  CHECK(partial.output.find("accepted=8") != std::string::npos);
+  CHECK(partial.output.find("commit=ACCEPTED last-chunk-commit=NOT_COMMITTED") != std::string::npos);
+  // Config clock is a valid fallback. Without either clock, writes/stress must
+  // fail before admission rather than remain pending forever at timestamp 0.
+  Fixture fallback;
+  eeprom24cxx_cli::Cli fallbackCli;
+  auto fallbackPlatform = fallback.platform(); fallbackPlatform.nowMs = nullptr;
+  fallbackCli.setup(fallbackPlatform, fallback.config());
+  fallbackCli.processCommand("writebyte 1 42"); CHECK(fallback.run(fallbackCli));
+  CHECK(fallback.memory[1] == 42);
+  Fixture clockless;
+  eeprom24cxx_cli::Cli clocklessCli;
+  auto clocklessPlatform = clockless.platform(); clocklessPlatform.nowMs = nullptr;
+  auto clocklessConfig = clockless.config(); clocklessConfig.nowMs = nullptr;
+  clocklessCli.setup(clocklessPlatform, clocklessConfig);
+  before = clockless.transfers;
+  clocklessCli.processCommand("writebyte 1 42"); clocklessCli.processCommand("stress 2");
+  CHECK(clockless.run(clocklessCli)); CHECK(clockless.transfers == before);
+  CHECK(clockless.output.find("requires a clock") != std::string::npos);
+  std::puts("CLI startup, ANSI/help, parsing, page writes, readback, cancellation, bank addressing and read-only stress passed");
   return 0;
 }

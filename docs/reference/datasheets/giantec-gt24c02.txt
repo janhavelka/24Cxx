@@ -1,0 +1,1309 @@
+--- PDF page 1 ---
+GT24C02                           
+  
+Copyright © 2011 Giantec Semiconductor Inc. (Giantec). All rights reserved. Giantec reserves the right to make changes to this specification a nd its products at any time without 
+notice. Giantec products are not designed, intended, authorized  or warranted for use as components in systems or equipment  intended for critical medical or surgical equipment, 
+aerospace or military, or other applications planned to support or sustain life. It is the customer's  obligation to optimize the design in thei r own products for the best performance 
+and optimization on the functionality and etc. Giantec assumes no liability arising out of the application or use of any information, products or services described herein. Customers 
+are advised to obtain the latest version of this device specification before relying on any published information and prior placing orders for products . 
+ 
+ 
+Giantec Semiconductor, Inc.                       www.giantec-semi.com  
+A3                        1/25 
+ 
+                                                 
+ 
+GT24C02 
+ 
+2-WIRE  
+ 
+2K Bits 
+ 
+Serial EEPROM 
+
+--- PDF page 2 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 2/25 
+Table of Contents 
+1. Features ..................................................................................................................................................................... 3 
+2. General Description ............................................................................................................................................. 3 
+3. Functional Block Diagram ................................................................................................................................ 4 
+4. Pin Configuration................................................................................................................................................... 5 
+4.1 8-Pin SOIC, TSSOP, MSOP and PDIP ................................................................................................... 5 
+4.2 8-Lead UDFN .......................................................................................................................................... 5 
+4.3 5-Pin TSOT23 ......................................................................................................................................... 5 
+4.4 Pin Definition ........................................................................................................................................... 5 
+4.5 Pin Descriptions ...................................................................................................................................... 6 
+5. Device Operation ................................................................................................................................................... 7 
+5.1 2-WIRE Bus ............................................................................................................................................ 7 
+5.2 The Bus Protocol .................................................................................................................................... 7 
+5.3 Start Condition ........................................................................................................................................ 7 
+5.4 Stop Condition ......................................................................................................................................... 7 
+5.5 Acknowledge ........................................................................................................................................... 7 
+5.6 Reset ....................................................................................................................................................... 7 
+5.7 Standby Mode ......................................................................................................................................... 7 
+5.8 Device Addressing .................................................................................................................................. 7 
+5.9 Write Operation ....................................................................................................................................... 7 
+5.10 Read Operation ..................................................................................................................................... 8 
+5.11 Diagrams ............................................................................................................................................... 9 
+5.12 Timing Diagrams ................................................................................................................................. 12 
+6. Electrical Characteristics .............................................................................................................................. 13 
+6.1 Absolute Maximum Ratings .................................................................................................................. 13 
+6.2 Operating Range ................................................................................................................................... 13 
+6.3 Capacitance .......................................................................................................................................... 13 
+6.4 DC Electrical Characteristic .................................................................................................................. 14 
+6.5 AC Electrical Characteristic .................................................................................................................. 15 
+7. Ordering Information ......................................................................................................................................... 16 
+8. Top Markings ......................................................................................................................................................... 17 
+8.1 SOIC Package ...................................................................................................................................... 17 
+8.2 TSSOP Package ................................................................................................................................... 17 
+8.3 UDFN Package ..................................................................................................................................... 17 
+8.4 MSOP Package .................................................................................................................................... 17 
+8.5 PDIP Package ....................................................................................................................................... 18 
+8.6 TSOT23 Package ................................................................................................................................. 18 
+9. Package Information ......................................................................................................................................... 19 
+9.1 SOIC ..................................................................................................................................................... 19 
+9.2 TSSOP .................................................................................................................................................. 20 
+9.3 UDFN .................................................................................................................................................... 21 
+9.4 MSOP .................................................................................................................................................... 22 
+9.5 PDIP ...................................................................................................................................................... 23 
+9.6 TSOT23 ................................................................................................................................................. 24 
+10. Revision History ................................................................................................................................................ 25 
+
+--- PDF page 3 ---
+GT24C02                           
+  
+. 
+Giantec Semiconductor, Inc.                       www.giantec-semi.com  
+A3                        3/25 
+1. Features 
+ Two-Wire Serial Interface, I2CTM Compatible 
+– Bi-directional data transfer protocol 
+ Wide-voltage Operation 
+– VCC = 1.7V to 5.5V 
+ Speed: 400 KHz (1.7V) and 1 MHz (2.5V~5.5V)  
+ Standby current (max.): 1 A, 1.7V 
+ Operating current (max.): 3 mA, 5.5V 
+ Hardware Data Protection 
+– Write Protect Pin 
+ Sequential & Random Read Features 
+ Memory organization: 2Kb (256 x 8)  
+ Page Size: 16 bytes 
+ Page write mode 
+– Partial page writes allowed 
+ Self timed write cycle: 5 ms (max.) 
+ Noise immunity on inputs, besides Schmitt trigger 
+ High-reliability 
+– Endurance: 1 million cycles 
+– Data retention: 100 years 
+ Industrial grade 
+ Packages: SOIC , TSSOP, UDFN , MSOP , PDIP 
+and TSOT23 
+ Lead-free, RoHS, Halogen free, Green 
+ 
+2. General Description 
+The GT24C02 is an industrial standard electrically erasable 
+programmable read only memory (EEPROM) device that 
+utilizes the industrial standard 2 -wire interface for 
+communications. The GT24C02 contains a memory array of 
+2K bits (256x8), which is organized in 16-byte per page.  
+The EEPROM operates in a wide voltage range from 1.7V 
+to 5.5V, which fits most application. The product provides 
+low-power operations and low standby current. The device 
+is offered in Lead -free, RoHS, halogen free or Gree n 
+package. The available package types are 8 -pin SOIC , 
+TSSOP, UDFN, MSOP, PDIP and TSOT23. 
+The GT24C 02 is compatible to the standard 2 -wire bus 
+protocol. The simple bus consists of Serial Clock (SCL) and 
+Serial Data (SDA) signals. Utilizing such bus protoc ol, a 
+Master device, such as a microcontroller, can usually 
+control one or more Slave devices, alike this GT24C02. The 
+bit stream over the SDA line includes a series of bytes, 
+which identifies a particular Slave device, an instruction, an 
+address within th at Slave device, and a series of data, if 
+appropriate. The GT24C 02 also has a Write Protect 
+function via WP pin to cease from overwriting the data 
+stored inside the memory array. 
+In order to refrain the state machine entering into a wrong 
+state during powe r-up sequence or a power toggle off -on 
+condition, a power on reset circuit is embedded. During 
+power-up, the device does not respond to any instructions 
+until the supply voltage (V CC) has reached an acceptable 
+stable level above the reset threshold voltage . Once V CC 
+passes the power on reset threshold, the device is reset 
+and enters into the Standby mode. This would also avoid 
+any inadvertent Write operations during power -up stage. 
+During power -down process, the device will enter into 
+standby mode, once V CC drops below the power on reset 
+threshold voltage. In addition, the device will be in standby 
+mode after receiving the Stop command, provided that no 
+internal write operation is in progress. Nevertheless, it is not 
+recommended to send a command until the VCC reaches its 
+operating level. 
+
+--- PDF page 4 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 4/25 
+3. Functional Block Diagram 
+HIGH VOLTAGE 
+GENERATOR 
+TIMING & 
+CONTROL
+EEPROM ARRAY
+Y DECODER
+X DECODER
+DATA REGISTER
+CONTROL LOGIC
+WORD ADDRESS 
+COUNTER
+SLAVE ADDRESS 
+REGISTER & 
+COMPARATOR
+5
+6
+7
+1
+2
+3
+4
+8
+GND
+A2
+A1
+A0
+WP
+SCL
+SDA
+VCC
+ACK
+nMOS
+DI
+CLOCK
+DO
+ 
+
+--- PDF page 5 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 5/25 
+4. Pin Configuration  
+4.1 8-Pin SOIC, TSSOP, MSOP and PDIP 
+Top View 
+A0
+A1
+VCC
+SCL
+SDAGND
+A2
+WP
+1
+2
+3
+4
+8
+7
+6
+5
+ 
+4.2 8-Lead UDFN  
+Top View 
+A0
+A1
+VCC
+SCL
+SDAGND
+A2
+WP
+1
+2
+3
+4
+8
+7
+6
+5
+ 
+ 
+ 
+4.3 5-Pin TSOT23 
+Top View 
+SCL
+GND
+VCC
+WP
+SDA
+1
+2
+3
+5
+4
+ 
+ 
+ 
+ 
+4.4 Pin Definition 
+Pin Name I/O Definition 
+A0 I Device Address Input  
+A1 I Device Address Input 
+A2 I Device Address Input 
+GND - Ground 
+SDA I/O Serial Address and Data input and Data out put 
+SCL I Serial Clock Input 
+WP I Write Protect Input 
+VCC - Power Supply 
+ 
+ 
+ 
+ 
+
+--- PDF page 6 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 6/25 
+4.5 Pin Descriptions 
+SCL 
+This input clock pin is used to synchronize the data transfer 
+to and from the device. 
+SDA 
+The SDA is a bi -directional pin used to transfer addresses 
+and data into and out of the device. The SDA pin is an open 
+drain output and can be wired with other open drain or open 
+collector outputs. However, the SDA pin requires a pull-up 
+resistor connected to the power supply. 
+A0, A1, A2 
+The A0, A1 and A2 are the device address inputs.  
+Typically, the A0, A1, and A2 pins are for hardware 
+addressing and a total of 8 devices can be connected on a 
+single bus system.  When A0, A1, and A2 are left floating, 
+the inputs are defaulted to zero. 
+WP 
+WP is the Write Protect pin. Wh ile the WP pin is connected 
+to the power supply of GT24C 02, the entire array becomes 
+Write Protected (i.e. the device becomes Read only). When 
+WP is tied to Ground or left floating, the normal write 
+operations are allowed.   
+VCC 
+Supply voltage 
+GND 
+Ground of supply voltage 
+
+--- PDF page 7 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 7/25 
+5. Device Operation 
+The GT24C02 serial interface supports communications 
+using industrial standard 2-wire bus protocol, such as I2C. 
+5.1 2-WIRE Bus 
+The two -wire bus is defined as Serial Data (SDA), and 
+Serial Clock (SCL). The protocol d efines any device that 
+sends data onto the SDA bus as a transmitter, and the 
+receiving devices as receivers. The bus is controlled by 
+Master device that generates the SCL, controls the bus 
+access, and generates the Start and Stop conditions. The 
+GT24C02 is the Slave device. 
+5.2 The Bus Protocol 
+Data transfer may be initiated only when the bus is not busy. 
+During a data transfer, the SDA line must remain stable 
+whenever the SCL line is high. Any changes in the SDA line 
+while the SCL line is high will be inte rpreted as a Start or 
+Stop condition.  
+The state of the SDA line represents valid data after a Start 
+condition. The SDA line must be stable for the duration of 
+the High period of the clock signal. The data on the SDA line 
+may be changed during the Low peri od of the clock signal. 
+There is one clock pulse per bit of data. Each data transfer 
+is initiated with a Start condition and terminated by a Stop 
+condition. 
+5.3 Start Condition 
+The Start condition precedes all commands to the device 
+and is defined as a High to Low transition of SDA when SCL 
+is High. The EEPROM monitors the SDA and SCL lines and 
+will not respond until the Start condition is met. 
+5.4 Stop Condition 
+The Stop condition is defined as a Low to High transition of 
+SDA when SCL is High. All operations must end with a Stop 
+condition. 
+5.5 Acknowledge 
+After a successful data transfer, each receiving device is 
+required to generate an ACK. The Acknowledging device 
+pulls down the SDA line. 
+5.6 Reset 
+The GT24C02 contains a reset function in case the 2 -wire 
+bus transmission on is accidentally interrupted (e.g. a power 
+loss), or needs to be terminated mid -stream. The reset is 
+initiated when the Master device creates a Start condition. 
+To do this, it may be necessary for the Master device to 
+monitor the SDA line while cycling the SCL up to nine times. 
+(For each clock signal transition to High, the Master checks 
+for a High level on SDA.) 
+5.7 Standby Mode 
+While in standby mode, the power consumption is minimal. 
+The GT24C02 enters into standby mode during one of th e 
+following conditions: a) After Power-up, while no Op-code is 
+sent; b) After the completion of an operation and followed 
+by the Stop signal, provided that the previous operation is 
+not Write related; or c) After the completion of any internal 
+write operations. 
+5.8 Device Addressing 
+The Master begins a transmission on by sending a Start 
+condition, then sends the address of the particular Slave 
+devices to be communicated. The Slave device address is 8 
+bits format as shown in Figure. 5-5.  
+The four most significant bits of the Slave address are fixed 
+(1010) for GT24C02. 
+The next three bits, A0, A1 and A2, of the Slave address are 
+specifically related to EEPROM. Up to eight GT24C02 units 
+can be connected to the 2-wire bus.  
+The last bit of the Slave address spe cifies whether a Read 
+or Write operation is to be performed. When this bit is set to 
+1, Read operation is selected. While it is set to 0, Write 
+operation is selected. 
+After the Master transmits the Start condition and Slave 
+address byte appropriately, the associated 2 -wire Slave 
+device, GT24C02, will respond with ACK on the SDA line. 
+Then GT24C02 will pull down the SDA on the ninth clock 
+cycle, signaling that it received the eight bits of data. 
+The GT24C02 then prepares for a Read or Write operation 
+by monitoring the bus. 
+5.9 Write Operation 
+5.9.1 Byte Write 
+In the Byte Write mode, the Master device sends the Start 
+
+--- PDF page 8 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 8/25 
+condition and the Slave address information (with the R/W 
+set to Zero) to the Slave device. After the Slave generates 
+an ACK, the Master sends th e byte address that is to be 
+written into the address pointer of the GT24C02. After 
+receiving another ACK from the Slave, the Master device 
+transmits the data byte to be written into the address 
+memory location. The GT24C02 acknowledges once more 
+and the Master generates the Stop condition, at which time 
+the device begins its internal programming cycle. While this 
+internal cycle is in progress, the device will not respond to 
+any request from the Master device. 
+5.9.2 Page Write 
+The GT24C02 is capable of 16-byte Page-Write operation. 
+A Page -Write is initiated in the same manner as a Byte 
+Write, but instead of terminating the internal Write cycle 
+after the first data word is transferred, the Master device 
+can transmit up to 15 more bytes. After the receipt of e ach 
+data word, the EEPROM responds immediately with an 
+ACK on SDA line, and the four lower order data word 
+address bits are internally incremented by one, while the 
+higher order bits of the data word address remain constant. 
+If a byte address is incremented from the last byte of a page, 
+it returns to the first byte of that page . If the Master device 
+should transmit more than 16 bytes prior to issuing the Stop 
+condition, the address counter will “roll over,” and the 
+previously written data will be overwritten. Once all 16 bytes 
+are received and the Stop condition has been sent by the 
+Master, the internal programming cycle begins. At this point, 
+all received data is written to the GT24C02 in a single Write 
+cycle. All inputs are disabled until completion of the  internal 
+Write cycle. 
+5.9.3 Acknowledge (ACK) Polling 
+The disabling of the inputs can be used to take advantage 
+of the typical Write cycle time. Once the Stop condition is 
+issued to indicate the end of the host's Write operation, the 
+GT24C02 initiates the internal Write cycle. ACK polling can 
+be initiated immediately. This involves issuing the Start 
+condition followed by the Slave address for a Write 
+operation. If the EEPROM is still busy with the Write 
+operation, no ACK will be returned. If the GT24C02 has 
+completed the Write operation, an ACK will be returned and 
+the host can then proceed with the next Read or Write 
+operation. 
+5.10 Read Operation 
+Read operations are initiated in the same manner as Write 
+operations, except that the (R/W) bit of the Slave address is 
+set to “1”. There are three Read operation options: current 
+address read, random address read and sequential read. 
+5.10.1 Current Address Read 
+The GT24C02 contains an internal address counter which 
+maintains the address of the last byte accessed,  
+incremented by one. For example, if the previous operation 
+is either a Read or Write operation addressed to the 
+address location n, the internal address counter would 
+increment to address location n+1. When the EEPROM 
+receives the Slave Addressing Byte wi th a Read operation 
+(R/W bit set to “1”), it will respond an ACK and transmit the 
+8-bit data byte stored at address location n+1. The Master 
+should not acknowledge the transfer but should generate a 
+Stop condition so the GT24C02 discontinues transmission. 
+If 'n' is the last byte of the memory, the data from location '0' 
+will be  transmitted. (Refer to Figure 5-8. Current Address 
+Read Diagram.) 
+5.10.2 Random Address Read 
+Selective Read operations allow the Master device to select 
+at random any memory location  for a Read operation. The 
+Master device first performs a 'dummy' Write operation by 
+sending the Start condition, Slave address and byte 
+address of the location it wishes to read. After the GT24C02 
+acknowledges the byte address, the Master device resends 
+the Start condition and the Slave address, this time with the 
+R/W bit set to one. The EEPROM then responds with its 
+ACK and sends the data requested. The Master device 
+does not send an ACK but will generate a Stop condition. 
+(Refer to Figure 5-9. Random Address Read Diagram.) 
+5.10.3 Sequential Read 
+Sequential Reads can be initiated as either a Current 
+Address Read or Random Address Read. After the 
+GT24C02 sends the initial byte sequence, the Master 
+device now responds with an ACK indicating it requires 
+
+--- PDF page 9 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 9/25 
+additional data from the GT24C02. The EEPROM continues 
+to output data for each ACK received. The Master device 
+terminates the sequential Read operation by pulling SDA 
+High (no ACK) indicating the last data word to be read, 
+followed by a Stop condition. The data  output is sequential, 
+with the data from address n followed by the data from 
+address n+1,n+2 ... etc. The address counter increments by 
+one automatically, allowing the entire memory contents to 
+be serially read during sequential Read operation. When 
+the memory address boun dary of the array is reached, the 
+address counter “rolls over” to address 0, and the device 
+continues to output data. (Refer to Figure 5-10. Sequential 
+Read Diagram). 
+5.11 Diagrams 
+ 
+Figure 5-1. Typical System Bus Configuration 
+Master
+Transmitter/Receiver GT24CXX
+SCL
+SDA
+VCC
+ 
+ 
+ 
+Figure 5-2. Output Acknowledge 
+1 8 9SCL from Master
+Data Output from 
+Transmitter
+Data Output from 
+Receiver ACK
+TAATAA
+ 
+ 
+ 
+Figure 5-3. Start and Stop Conditions 
+STOP
+ CONDITION
+START 
+CONDITIONSCL
+SDA
+ 
+ 
+
+--- PDF page 10 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 10/25 
+ 
+ 
+Figure 5-4. Data Validity Protocol 
+SCL
+SDA
+Data Stable Data Stable
+Data Change
+ 
+ 
+ 
+ Figure 5-5. Slave Address 
+ 
+1 0 1 0 A2 A1 A0 R/W
+7Bit 6 5 4 3 2 1 0  
+ 
+ 
+Figure 5-6. Byte Write 
+A
+C
+K
+A
+C
+K
+A
+C
+K
+SDA 
+Bus 
+Activity
+S
+T
+A
+R
+T
+M
+S
+B
+L
+S
+B
+W
+R
+I
+T
+E
+R/W
+Device 
+Address Byte Address Data
+S
+T
+O
+P
+ 
+ 
+ 
+Figure 5-7. Page Write 
+A
+C
+K
+A
+C
+K
+A
+C
+K
+A
+C
+K
+SDA 
+Bus 
+Activity
+S
+T
+A
+R
+T
+M
+S
+B
+L
+S
+B
+W
+R
+I
+T
+E
+R/W
+Device 
+Address Byte Address(n) Data(n)
+S
+T
+O
+P
+A
+C
+K
+Data(n+1) Data(n+15)
+ 
+ 
+ 
+
+--- PDF page 11 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 11/25 
+ 
+ 
+Figure 5-8. Current Address Read 
+A
+C
+K
+SDA 
+Bus 
+Activity
+S
+T
+A
+R
+T
+Device 
+Address
+M
+S
+B
+L
+S
+B
+R
+E
+A
+D Data
+S
+T
+O
+P
+N
+O
+A
+C
+K
+R/W
+ 
+ 
+ 
+Figure 5-9. Random Address Read 
+A
+C
+K
+A
+C
+K
+A
+C
+K
+SDA 
+Bus 
+Activity
+S
+T
+A
+R
+T
+Device 
+Address
+W
+R
+I
+T
+E Data n
+R/W
+M
+S
+B
+L
+S
+B
+Byte 
+Address(n)
+Device 
+Address
+S
+T
+A
+R
+T
+R
+E
+A
+D
+S
+T
+O
+P
+DUMMY WRITE
+N
+O
+A
+C
+K
+ 
+ 
+ 
+Figure 5-10. Sequential Read 
+N
+O
+A
+C
+K
+A
+C
+K
+A
+C
+K
+Device 
+Address
+R
+E
+A
+D Data Byte n
+A
+C
+K
+Data Byte n+1 Data Byte n+2 Data Byte n+x
+S
+T
+O
+P
+SDA 
+Bus 
+Activity
+R/W
+A
+C
+K
+ 
+ 
+ 
+
+--- PDF page 12 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 12/25 
+5.12 Timing Diagrams 
+ 
+Figure 5-11. Bus Timing 
+SCL
+SDAIN
+SDAOUT
+WP
+TSU:WP THD:WP
+TBUF
+TSU:DAT
+TDHTAA
+THD:DATTHD:STA
+TSU:STA
+TSU:STOTLOWTHIGHTFTR
+ 
+ 
+ 
+Figure 5-12. Write Cycle Timing 
+SDA
+Word n
+ACK
+STOP
+Condition
+START
+Condition
+TWR
+SCL
+ 
+ 
+
+--- PDF page 13 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 13/25 
+6. Electrical Characteristics 
+6.1 Absolute Maximum Ratings 
+Symbol Parameter Value Unit 
+VS Supply Voltage -0.5 to + 6.5 V 
+VP Voltage on Any Pin –0.5 to VCC + 0.5 V 
+TBIAS Temperature Under Bias –55 to +125 °C 
+TSTG Storage Temperature –65 to +150 °C 
+IOUT Output Current 5 mA 
+Note: Stress greater than those listed under Absolute Maximum Ratings may cause permanent damage to the device. This is a stress rating only 
+and functional operation of the device at these or any other condition outside those indicated in the operational sections of this specification is not 
+implied. Exposure to absolute maximum rating conditions for extended periods may affect reliability. 
+ 
+ 
+6.2 Operating Range  
+Range Ambient Temperature (TA) VCC 
+Industrial –40° C to +85° C 1.7V to 5.5V 
+Note: Giantec offers Industrial grade for Commercial applications (0C to +70C). 
+ 
+ 
+6.3 Capacitance 
+Symbol Parameter[1,2] Conditions Max. Unit 
+CIN Input Capacitance VIN = 0V 6 pF 
+CI/O Input / Output Capacitance VI/O = 0V 8 pF 
+Notes: [1] Tested initially and after any design or process changes that may affect these parameters and not 100% tested. 
+[2] Test conditions: TA = 25° C, f = 1 MHz, VCC = 5.0V 
+ 
+
+--- PDF page 14 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 14/25 
+6.4 DC Electrical Characteristic 
+Industrial: TA = –40° C to +85° C, VCC = 1.7V ~ 5.5V   
+Symbol Parameter [1] VCC Test Conditions Min. Max. Unit 
+VCC Supply Voltage   1.7 5.5 V 
+VIH Input High Voltage   0.7*VCC VCC+1 V 
+VIL Input Low Voltage   -1 0.3* VCC V 
+ILI Input Leakage Current 5 V VIN = VCC max — 2 μA 
+ILO Output Leakage Current 5V  — 2 μA 
+VOL1 Output Low Voltage 1.7V IOL = 0.15 mA — 0.2 V 
+VOL2 Output Low Voltage 2.5V IOL = 2.1 mA — 0.4 V 
+ISB1 Standby Current 1.7V VIN = VCC or GND — 1 μA 
+ISB2 Standby Current 2.5V VIN = VCC or GND — 2 μA 
+ISB3 Standby Current 5V VIN = VCC or GND — 3 μA 
+ICC1 Read Current 
+1.7V Read at 400 KHz — 0.5 mA 
+2.5V Read at 1 MHz — 1 mA 
+5.5V Read at 1 MHz — 1 mA 
+ICC2 Write Current 
+1.7V Write at 400 KHz — 1 mA 
+2.5V Write at 1 MHz — 2 mA 
+5.5V Write at 1 MHz — 3 mA 
+Note: The parameters are characterized but not 100% tested. 
+ 
+
+--- PDF page 15 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 15/25 
+6.5 AC Electrical Characteristic 
+Industrial: TA = –40° C to +85° C, Supply voltage = 1.7V to 5.5V 
+Symbol Parameter [1] [2] 
+1.7VVCC<2.5V 2.5VVCC<4.5V 4.5VVCC5.5V 
+Unit 
+Min. Max. Min. Max. Min. Max. 
+FSCL SCK Clock Frequency  400  1000  1000 KHz 
+TLOW Clock Low Period 1200 — 400 — 400 — ns 
+THIGH Clock High Period 600 — 400 — 400 — ns 
+TR Rise Time (SCL and SDA) — 300 — 300 — 300 ns 
+TF Fall Time (SCL and SDA) — 300 — 100 — 100 ns 
+TSU:STA Start Condition Setup Time 500 — 200 — 200 — ns 
+TSU:STO Stop Condition Setup Time 500 — 200 — 200 — ns 
+THD:STA Start Condition Hold Time 500 — 200 — 200 — ns 
+TSU:DAT Data In Setup Time 100 — 40 — 40 — ns 
+THD:DAT Data In Hold Time 0 — 0 — 0 — ns 
+TAA Clock to Output Access time (SCL 
+Low to SDA Data Out Valid) 
+100 900 50 400 50 400 ns 
+TDH Data Out Hold Time (SCL Low to 
+SDA Data Out Change) 
+100 — 50 — 50 — ns 
+TWR Write Cycle Time — 5 — 5 — 5 ms 
+TBUF Bus Free Time Before New 
+Transmission 
+1000 — 400 — 400 — ns 
+TSU:WP WP pin Setup Time 1000 — 400 — 400  ns 
+THD:WP WP pin Hold Time 1200 — 1200 — 1200 — ns 
+T Noise Suppression Time — 100 — 50 — 50 ns 
+Notes:  [1] The parameters are characterized but not 100% tested. 
+  [2] AC measurement conditions: 
+RL (connects to VCC): 1.3 kΩ (2.5V, 5.0V), 10 kΩ (1.7V) 
+CL = 100 pF 
+Input pulse voltages: 0.3*VCC to 0.7*VCC 
+Input rise and fall times: ≤ 50 ns 
+Timing reference voltages: half VCC level 
+
+--- PDF page 16 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 16/25 
+7. Ordering Information 
+ 
+Industrial Grade: -40° C to +85° C, Lead-free 
+Voltage Range Part Number* Package (8-pin)* 
+1.7V to 5.5V GT24C02-2GLI-TR 150-mil SOIC 
+GT24C02-2ZLI-TR 3 x 4.4 mm TSSOP 
+GT24C02-2UDLI-TR 2 x 3 x 0.55 mm UDFN 
+GT24C02-2SLI-TR 3 x 3 mm MSOP 
+GT24C02-2PLI 300mil PDIP 
+GT24C02-2TLI-TR 2.9 x 1.65 mm TSOT23 
+ 
+*   
+1. Contact Giantec Sales Representatives for availability and other package information. 
+2. The product is packed in tape and reel “-TR” (4K per reel), except UDFN is 5K per reel and TSOT23 is 3K per reel. 
+3. Refer to Giantec website for related declaration document on lead free, RoHS, halogen free or Green, whichever is applicable. 
+4. Giantec offers Industrial grade for Commercial applications (0C to +70C). 
+ 
+
+--- PDF page 17 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 17/25 
+8. Top Markings 
+8.1 SOIC Package 
+ 
+ 
+                                                  G: Giantec Logo 
+402-2GLI: GT24C02-2GLI-TR  
+YWW: Date Code, Y=year, WW=week  
+ 
+ 
+8.2 TSSOP Package 
+ 
+ 
+ 
+                                                    GT: Giantec Logo 
+402-2ZLI: GT24C02-2ZLI-TR  
+YWW: Date Code, Y=year, WW=week  
+ 
+ 
+ 
+8.3 UDFN Package 
+ 
+ 
+ 
+GT: Giantec Logo 
+41: GT24C02-2UDLI-TR 
+YWW: Date Code, Y=year, WW=week  
+ 
+ 
+ 
+8.4 MSOP Package 
+ 
+ 
+ 
+GT: Giantec Logo 
+4022SLI: GT24C02-2SLI-TR 
+YWW: Date Code, Y=year, WW=week  
+ 
+ 
+ 
+ 
+
+
+--- PDF page 18 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 18/25 
+ 
+8.5 PDIP Package 
+ 
+ 
+ 
+                                                    GT: Giantec Logo 
+2402-2PLI: GT24C02-2PLI 
+YWW: Date Code, Y=year, WW=week  
+ 
+ 
+ 
+8.6 TSOT23 Package 
+ 
+ 
+ 
+                                                    402: GT24C02-2TLI-TR 
+YW: Date Code, Y=year, W=week  
+ 
+ 
+ 
+
+
+--- PDF page 19 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 19/25 
+9. Package Information 
+9.1 SOIC 
+8L 150mil SOIC Package Outline 
+L1
+D
+E1 E
+A
+A1e
+ZD
+Detail A
+L
+Detail A
+GAUGE 
+PLANE
+SEATING 
+PLANE Θ
+Note:
+1. Controlling Dimension:MM
+2. Dimension D and E1 do not include   
+3. Dimension b does not include 
+4. Refer to Jedec standard MS-012
+5. Drawing is not to scale
+MIN NOM MAX MIN NOM MAX
+A 1.35 -- 1.75 0.053 -- 0.069
+A1 0.10 -- 0.25 0.004 -- 0.010
+b 0.33 -- 0.51 0.013 -- 0.020
+D 4.80 -- 5.00 0.189 -- 0.197
+E 5.80 -- 6.20 0.228 -- 0.244
+E1 3.80 -- 4.00 0.150 -- 0.157
+e
+L 0.38 -- 1.27 0.015 0.050
+L1
+ZD
+Θ 0 -- 8° 0 -- 8°
+0.545 REF.
+0.050 BSC.
+0.010 BSC.
+0.021 REF.
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+1.27 BSC.
+0.25 BSC.
+    Mold protrusion
+    dambar protrusion/intrusion.
+b
+ 
+
+--- PDF page 20 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 20/25 
+9.2 TSSOP 
+8L 3x4.4mm TSSOP Package Outline 
+A2
+A1
+b
+MIN NOM MAX MIN NOM MAX
+A -- -- 1.20 -- -- 0.047
+A1 0.05 -- 0.15 0.002 -- 0.006
+A2 0.80 1.00 1.05 0.031 0.039 0.041
+b 0.19 -- 0.30 0.007 -- 0.012
+c 0.09 -- 0.20 0.004 -- 0.008
+D 2.90 3.00 3.10 0.114 0.118 0.122
+E 4.30 4.40 4.50 0.169 0.173 0.177
+E1
+e
+L 0.45 0.60 0.75 0.018 0.024 0.030
+Θ 0 -- 8° 0 -- 8°
+0.252 BSC
+0.026 BSC
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+0.65 BSC
+6.4 BSC
+Θ
+A
+12°(4X)
+0.10mm
+L
+C
+E E1
+e
+D
+Note:
+1. Controlling Dimension:MM
+2. Dimension D and E do not include Mold protrusion
+3. Dimension b does not include dambar protrusion/intrusion.
+4. Refer to Jedec standard MO-153 AA
+5. Drawing is not to scale
+6. Package may have exposed tie bar.
+1
+8
+ 
+
+--- PDF page 21 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 21/25 
+9.3 UDFN 
+8L 2x3mm UDFN Package Outline 
+MIN NOM MAX MIN NOM MAX
+A 0.50 0.55 0.60 0.020 0.022 0.024
+A1 0.00 -- 0.05 0.000 -- 0.002
+b 0.18 0.25 0.30 0.007 0.010 0.012
+A2
+D
+D2 1.25 1.40 1.50 0.049 0.055 0.059
+E
+E2 1.15 1.30 1.40 0.045 0.051 0.055
+e
+K 0.40 -- -- 0.016 -- --
+L 0.20 0.30 0.40 0.008 0.012 0.016
+3.00 BSC 0.118 BSC
+0.020 BSC.
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+0.50 BSC.
+0.152 REF 0.006 REF
+2.00 BSC 0.079 BSC
+Note:
+1. Controlling Dimension:MM
+2. Drawing is not to scale
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+TOP VIEW BOTTOM VIEW
+SIDE VIEW
+D
+E
+PIN#1 DOT 
+BY MARKING
+D2
+e
+E2
+K
+L
+b
+A
+A1
+A2
+PIN#1 
+IDENTIFICATION 
+CHAMFER
+ 
+
+--- PDF page 22 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 22/25 
+9.4 MSOP 
+8L 120mil MSOP package Outline 
+MIN NOM MAX MIN NOM MAX
+A -- -- 1.10 -- -- 0.043
+A1 0.05 -- 0.15 0.002 -- 0.006
+A2 0.75 0.85 0.95 0.030 0.033 0.037
+b 0.25 -- 0.40 0.010 -- 0.016
+C 0.13 -- 0.23 0.005 -- 0.009
+D 2.90 3.00 3.10 0.114 0.118 0.122
+E 2.90 3.00 3.10 0.114 0.118 0.122
+E1
+e
+L -- -- 0.55 -- -- 0.022
+Θ 0 -- 7° 0 -- 7°
+0.193 BSC
+0.026 BSC
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+0.65 BSC
+4.90 BSC
+Note:
+1. Controlling Dimension:MM
+2. Dimension D and E do not include Mold protrusion
+3. Refer to Jedec standard MO187
+4. Drawing is not to scale
+e
+D
+E E1
+A2
+A
+12°(4X)
+A1
+C
+L
+θ
+b
+ 
+
+--- PDF page 23 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 23/25 
+9.5 PDIP 
+8L 300mil PDIP Package Outline 
+MIN NOM MAX MIN NOM MAX
+A 3.60 -- 4.20 0.142 -- 0.165
+A1 0.38 -- 0.75 0.015 -- 0.030
+A2 3.25 -- 3.45 0.128 -- 0.136
+b 0.36 -- 0.56 0.014 -- 0.022
+b2 1.40 -- 1.65 0.055 -- 0.065
+b3 0.81 -- 1.17 0.032 -- 0.046
+D 9.01 -- 9.53 0.355 -- 0.375
+E 7.49 -- 8.26 0.295 -- 0.325
+E1 6.20 -- 6.60 0.244 -- 0.260
+e
+eB 8.12 -- 9.65 0.320 -- 0.380
+L 3.18 -- 3.80 0.125 -- 0.150
+ZD
+2.54 BSC. 0.100 BSC.
+0.825 REF. 0.032 REF.
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+D
+E1 eBE
+ZD
+e
+b3
+b
+A2 A
+A1 L
+Note:
+1. Controlling Dimension:MM
+2. Dimension D and E1 do not include Mold protrusion
+3. Dimension b2 and b3 do not include dambar protrusion/instrusion
+4. Drawing is not to scale
+ 
+
+--- PDF page 24 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 24/25 
+9.6 TSOT23 
+5L 2.9x1.65mm TSOT23 Package Outline 
+D
+E1 E
+MIN MAX MIN MAX
+A -- 0.900 -- 0.035
+A1 0.020 0.090 0.001 0.004
+A2 0.700 0.800 0.028 0.031
+b 0.350 0.500 0.014 0.020
+c 0.080 0.200 0.003 0.008
+D 2.820 3.020 0.111 0.119
+E 2.650 2.950 0.104 0.116
+E1 1.600 1.700 0.063 0.067
+e
+e1
+L 0.300 0.600 0.012 0.024
+Θ 0° 8° 0° 8°
+SYMBOLS DIMENSIONS IN MILLIMETERS DIMENSIONS IN INCHES
+0.95(BSC)
+1.90(BSC)
+0.037(BSC)
+0.075(BSC)
+Note:
+1. Dimension D and E1 do not include Mold protrusion
+2. Dimension b does not include dambar protrusion/intrusion.
+3. Refer to Jedec standard MO-193 AB
+4. Drawing is not to scale
+e1
+e
+0.25
+Θ
+L
+AA2
+A1
+b
+c
+ 
+
+--- PDF page 25 ---
+GT24C02                           
+  
+ 
+Giantec Semiconductor, Inc.                        www.giantec-semi.com 
+A3                                 25/25 
+10. Revision History  
+ 
+Revision Date Descriptions 
+A0 Jan. 2010 Initial draft 
+A1 Jun. 2011 New datasheet format  
+A2 Oct. 2011 Change VCC from 1.8V to 1.7V 
+A3 Oct. 2013 Revise SOIC/SOP to SOIC 
+ 

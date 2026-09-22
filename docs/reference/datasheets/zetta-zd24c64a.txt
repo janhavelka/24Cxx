@@ -1,0 +1,1041 @@
+--- PDF page 1 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 1 / 28 
+ZD24C64A 
+ 
+I2C-Compatible (2-wire) Serial EEPROM 
+64-Kbit (8,192 x 8) 
+DATASHEET 
+Features 
+ 
+ Low Voltage Operation  
+̶ VCC = 1.7V to 5.5V 
+ Internally Organized as 8,192 x 8 (64Kb) 
+ Additional Write lockable page 
+ I2C-compatible (2-wire) Serial Interface 
+̶ 100kHz Standard Mode, 1.7V to 5.5V 
+̶ 400kHz Fast Mode, 1.7V to 5.5V 
+̶ 1MHz Fast Mode Plus (FM+), 2.5V to 5.5V 
+ Schmitt Trigger Filtered Inputs for Noise Suppression 
+ Bidirectional Data Transfer Protocol 
+ Write Protect Pin for Full Array Hardware Data Protection 
+ Ultra Low Active Current (300μA max) and Standby Current (0.5μA Max) 
+ 32-byte Page Write Mode  
+̶ Partial Page Writes Allowed 
+ Random and Sequential Read Modes 
+ Self-timed Write Cycle Within 5ms Max 
+ High Reliability 
+̶ Endurance: 1,000,000 Write Cycles 
+̶ Data Retention: 100 Years 
+ Green Package Options (Lead-free/Halide-free/RoHS Compliant) 
+̶ 8-lead SOIC, 8-lead TSSOP, 8-pad UDFN, 8-lead PDIP, 5-lead SOT23 
+ Die Sale Options: Wafer Form and Tape and Reel Available 
+ Identification Page Options(Contact our sales for details) 
+Description 
+ 
+The ZD24C64A provides 65,536 bits of Serial Electrically Erasable and Programmable Read-Only Memory (EEPROM) 
+organized as 8,192 words of 8 b its each. The device offers an a dditional page, named the Identification Page(32 
+bytes). The Identification Page can be used to store sensitive application parameters which can be (later) permanently 
+locked in Read-only mode. The device’s cascadable feature allow s more devices to share a common 2-wire bus. 
+This device is optimized for use in many industrial and commerc ial applications where low-power and low voltage 
+operation are essential. The dev ice is available in space-savin g 8-lead SOIC, 8-lead TSSOP , 8-pad UDFN, 8-lead 
+PDIP(1), 5-lead SOT23, and 8-ball UDFN packages. The entire family of packages operates from 1.7V to 5.5V.  
+Note:  1.Contact Sales for the availability of this package. 
+
+--- PDF page 2 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 2 / 28 
+1. Pin Descriptions and Pinouts 
+Table 1-1.Pin Descriptions 
+Pin  
+Number 
+Pin  
+Symbol  Pin Name and Functional Description
+Asserted 
+State 
+Pin 
+Type
+1, 2, 3  A0, A1, A2 
+Device Address Input: The A2 pin is used to select the hardware 
+device address and correspond to the fifth bit of the I2C seven bit slave 
+address. This pin can be directly connected to VCC or GND, allowing up 
+to two devices on the same bus. 
+—  Input 
+4  GND 
+Ground: The ground reference for the power supply. GND should be 
+connected to the system ground.  —  Power 
+5  SDA 
+Serial Data: The SDA pin is an open-drain bidirectional input/output pin 
+used to serially transfer data to and from the device. 
+The SDA pin must be pulled-high using an external pull-up resis tor (not to 
+exceed 10KΩ in value) and may be wire-ORed with any number of o ther 
+open-drain or open-collector pins from other devices on the same bus. 
+—  Input/ 
+Output
+6  SCL 
+Serial Clock: The SCL pin is used to provide a clock to the device and to 
+control the flow of data to and from the device. Command and in put data 
+present on the SDA pin is always latched in on the rising edge of SCL, while 
+output data on the SDA pin is clocked out on the falling edge of SCL. 
+The SCL pin must either be forced high when the serial bus is idle or pulled-
+high using an external pull-up resistor. 
+—  Input 
+7  WP 
+Write Protect: Connecting the WP pin to GND will ensure normal write 
+operations. When the WP pin is connected to VCC, all write operations to the 
+memory are inhibited.  
+Refer to Note 1 for behavior of the pin when not connected. 
+High  Input 
+8  VCC 
+Device Power Supply: The VCC pin is used to supply the source voltage to 
+the device. Operations at invalid VCC voltages may produce spurious results 
+and should not be attempted. 
+—  Power 
+  Note:1.  If the WP pin is not driven, it is internally pulled down to GND. In order to operate in a wide variety of application 
+environments, the pull-down mechanism is intentionally designed to be somewhat strong. Once these pins are biased above the 
+CMOS input buffer’s trip point (~0.5 x VCC), the pull-down mechanism disengages. Zetta recommends connecting these pins to a 
+known state whenever possible. 
+ 
+  
+
+--- PDF page 3 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 3 / 28 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+2. Device Block Diagram and System Configuration 
+ 
+Figure 2-2. System Configurati on Using 2-Wire Serial EEPROMs 
+ 
+
+
+--- PDF page 4 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 4 / 28 
+ 
+3. Device Operation and Communication  
+The ZD24C64A operates as a slave device and utilizes a simple I2C-compatible 2-wire digital serial interface 
+to communicate with a host controller, commonly referred to as the bus Master. The Master initiates and 
+controls all read and write operations to the slave devices on the serial bus, and both the Master and the 
+slave devices can transmit and receive data on the bus. 
+The serial interface is comprised of just two signal lines: Serial Clock (SCL) and Serial Data (SDA). The 
+SCL pin is used to receive the clock signal from the Master, while the bidirectional SDA pin is used to 
+receive command and data information from the Master, as well as, to send data back to the Master. Data is 
+always latched into the ZD24C64A on the rising edge of SCL and always output from the device on the 
+falling edge of SCL. Both the SCL and SDA pin incorporate integrated spike suppression filters and Schmitt 
+Triggers to minimize the effects of input spikes and bus noise. 
+All command and data information is transferred with the Most-Significant Bit (MSB) first. During bus 
+communication, one data bit is transmitted every clock cycle, and after eight bits (one byte) of data have 
+been transferred, the receiving device must respond with either an Acknowledge (ACK) or a No-
+Acknowledge (NACK) response bit during a ninth clock cycle (ACK/NACK clock cycle) generated by the 
+Master. Therefore, nine clock cycles are required for every one byte of data transferred. There are no 
+unused clock cycles during any read or write operation, so there must not be any interruptions or breaks in 
+the data stream during each data byte transfer and ACK or NACK clock cycle. 
+During data transfers, data on the SDA pin must only change while SCL is low, and the data must remain 
+stable while SCL is high. If data on the SDA pin changes while SCL is high, then either a Start or a Stop 
+condition will occur. Start and Stop conditions are used to initiate and end all serial bus communication 
+between the Master and the slave devices. The number of data bytes transferred between a Start and a 
+Stop condition is not limited and is determined by the Master. In order for the serial bus to be idle, both the 
+SCL and SDA pins must be in the logic-high state at the same time. 
+3.1 Clock and Data Tra nsition Requirements 
+The SDA pin is an open drain terminal and therefore must be pulled high with an external pull-up resistor. 
+Data on the SDA pin may change only during SCL low time periods. Data changes during SCL high periods 
+will indicate a Start or Stop condition as defined below. 
+
+
+--- PDF page 5 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 5 / 28 
+3.2 Start and Stop Conditions 
+3.2.1 Start Condition  
+A Start condition occurs when there is a high-to-low transition on the SDA pin while the SCL pin is at a 
+stable Logic 1 state and will bring the device out of standby mode. The Master uses a Start condition to 
+initiate any data transfer sequence, therefore every command must begin with a Start condition. The device 
+will continuously monitor the SDA and SCL pins for a Start condition but will not respond unless one is 
+detected. Please refer to Figure 3-1 for more details.  
+3.2.2 Stop Condition  
+A Stop condition occurs when there is a low-to-high transition on the SDA pin while the SCL pin is stable in 
+the Logic 1 state. The Master can use the Stop condition to end a data transfer sequence with the ZD24C64A 
+which will subsequently return to standby mode. The Master can also utilize a repeated Start condition instead 
+of a Stop condition to end the current data transfer if the Master will perform another operation. Please refer 
+to Figure 3-1 for more details.  
+3.3 Acknowledge and No-Acknowledge  
+After every byte of data is received, the receiving device must  confirm to the Master that it has successfully 
+received the data byte by responding with what is known as an acknowledge (ACK). An ACK is accomplished 
+by the transmitting device first releasing the SDA line at the falling edge of the eighth clock cycle followed by 
+the receiving device responding with a Logic 0 during the entire high period of the ninth clock cycle.  
+When the ZD24C64A is transmitting data to the Master, the Master can indicate that it is done receiving 
+data and wants to end the operation by sending a Logic 1 response to the ZD24C64A instead of an ACK 
+response during the ninth clock cycle. This is known as a no-acknowledge (NACK) and is accomplished by 
+the Master sending a Logic 1 during the ninth clock cycle, at which point the ZD24C64A will release the 
+SDA line so the Master can then generate a Stop condition. 
+The transmitting device, which can be the bus Master or the Serial EEPROM, must release the SDA line at 
+the falling edge of the eighth clock cycle to allow the receiving device to drive the SDA line to a Logic 0 to 
+ACK the previous 8-bit word. The receiving device must release the SDA line at the end of the ninth clock 
+cycle to allow the transmitter to continue sending new data. A timing diagram has been provided in Figure 3-
+1 to better illustrate these requirements.  
+Figure 3-1.Start Condition, Data Transitions, Stop Condition and Acknowledge 
+  SDA SDA  
+ 
+  Allowed Allowed SDA line low to ACK the previous 8-bit word. to continue sendin g new data. 
+
+
+--- PDF page 6 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 6 / 28 
+3.4 Standby Mode  
+The ZD24C64A features a low-power standby mode which is enabled when any one of the following occurs:  
+ A valid power-up sequence is performed (see Section 8.5, “Pin Capacitance”). 
+ A Stop condition is received by the device unless it initiates an internal write cycle (see Section 5., 
+“Write Operations”). 
+ At the completion of an internal write cycle (see Section 5.). 
+ An unsuccessful match of the device type identifier or hardware address in the Device Address byte 
+occurs (see Section 4.1, “Device Addressing”). 
+ The bus Master does not ACK the receipt of data read out from the device; instead it sends a NACK 
+response. (see Section 6., “Read Operations”). 
+ 
+3.5 Software Reset  
+After an interruption in protocol, power loss, or system reset, any 2-wire part can be protocol reset by 
+following these steps:  
+1. Create a Start condition (if possible).  
+2. Clock nine cycles.  
+3. Create another Start condition  followed by a Stop condition as seen in Figure 3-2. 
+The device should be ready for the next communication after above steps have been completed. In the event 
+that the device is still non-responsive or remains active on the SDA bus, a power cycle must be used to reset 
+the device (see Section 8.6.1, “Device Reset”). 
+Figure 3-2. Software Reset
+SCL  9 
+Start 
+Condition  Start 
+Condition 
+Stop
+Condition
+8321 
+SDA 
+Dummy Clock Cycles
+
+--- PDF page 7 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 7 / 28 
+4. Memory Organization 
+The ZD24C64A is internally organized as 256 pages of 32 bytes each.  
+4.1 Device Addressing  
+Accessing the device requires an 8-bit Device Address word following a Start condition to enable the device 
+for a read or write operation. Since multiple slave devices can  reside on the serial bus each slave device 
+must have its own unique address so the Master can access each device independently.  
+The most significant four bits of the Device Address word is referred to as the device type identifier. The 
+device type identifier is required in bits seven through four of the Device Address byte (Table 4-1).  
+Following the 4-bit device type identifier are the hardware slave address bits, A0, A1, and A2. These bits can 
+be used to expand the address space by allowing up to eight 64-Kbit Serial EEPROM devices on the same 
+bus.  
+The eighth bit (bit 0) of the Device Address byte is the read/write operation select bit. A read operation is 
+initiated if this bit is high and a write operation is initiated if this bit is low.  
+Upon the successful comparison of the Device Address byte, the ZD24C64A will return an ACK. If a valid 
+comparison is not made, the device will NACK and return to a standby state. 
+Table 4-1.Device Address Byte 
+Package 
+ 
+Device Type Identifier
+ 
+Hardware Slave Address Bits 
+Read/ 
+Write 
+Bit 7  Bit 6  Bit 5  Bit 4  Bit 3  Bit 2  Bit 1  Bit 0 
+Device select code 
+when addressing the 
+memory array 
+1  0  1  0  0  0  0   
+R/W 
+Device select code 
+when accessing the 
+Identification Page 
+1 0 1 1 0 0 0  
+R/W 
+ 
+  
+
+--- PDF page 8 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 8 / 28 
+For all operations (except the Current Address Read), a two 8-bit Word Address byte must be transmitted to 
+the device immediately following the Device Address byte. The W ord Address bytes consist of the 13-bit 
+memory array word address, and i s used to specify which byte lo cation in the EEPROM to start reading or 
+writing.  
+The first Word Address byte contains the five most significant bits of the word address (A12 through A8) in 
+bit positions four through zero, as seen in Table 4-2. The remainder of the first Word Address byte are don’t 
+care bits and (in bit positions seven through five) as they all outside of the addressable 64-Kbit range. Upon 
+completion of the first Word Address byte, the ZD24C64A will return an ACK. 
+Table 4-2.First Word Address Byte 
+Bit 7  Bit 6  Bit 5  Bit 4  Bit 3  Bit 2  Bit 1  Bit 0 
+X  X  X  A12  A11  A10  A9  A8 
+  Note: Bit 7 through Bit 5 are don ’t care values as they fall outside the addressable 64-Kbit range. 
+Next, the second Word Address byte is sent to the device which provides the remaining eight bits of the word 
+address (A7 though A0). Upon completion of the second Word Addr ess byte, the ZD24C64A will return an 
+ACK. Please consult Table 4-3 to review these bit positions. 
+Table 4-3.Second Word Address Byte 
+Bit 7  Bit 6  Bit 5  Bit 4  Bit 3  Bit 2  Bit 1  Bit 0 
+A7  A6  A5  A4  A3  A2  A1  A0 
+The relationship of the AC timing parameters with respect to SCL and SDA for the ZD24C64A are shown in 
+the timing waveform Figure 8-1 on page 15. The AC timing characteristics and specifications are outlined in 
+Section 8.4 “AC Characteristics” on page 15. 
+  
+
+--- PDF page 9 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 9 / 28 
+5. Write Operations 
+All write operations for the ZD24C64A begin with the Master sending a Start condition, followed by a Device 
+Address byte with the R/W bit set to ‘0’, and then by the Word Address byte. The data value(s) to be written 
+to the device immediately follow the Word Address byte.  
+5.1 Byte Write 
+The ZD24C64A supports the writing of single 8-bit bytes. Selecting a data word in the ZD24C64A requires a 
+13bit word address.  
+Upon receipt of the proper Device Address and Word Address bytes, the EEPROM will send an 
+Acknowledge.  
+The device will then be ready to receive the first 8-bit data word. Following receipt of the 8-bit data word, the 
+EEPROM will respond with an Ackn owledge. The addressing device,  such as a bus Master, must then 
+terminate the Write operation with a Stop condition. At that ti me the EEPROM will enter an internally self-
+timed write cycle, which will be completed within t WR, while the data word is being programmed into the 
+nonvolatile EEPROM. All inputs are disabled during this write cycle, and the EEPROM will not respond until 
+the Write is complete.  
+Figure 5-1. Byte Write 
+ 
+ 
+5.2 Page Write 
+A Page Write operation allows up to 32 bytes to be written in the same write cycle, provided all bytes are in 
+the same row of the memory array (where address bits A12 through A5 are the same). Partial Page Writes 
+of less than 32 bytes are also allowed.  
+A Page Write is initiated the same way as a Byte Write, but the  bus Master does not send a Stop condition 
+after the first data word is clocked in. Instead, after the EEPROM acknowledges receipt of the first data word, 
+the bus Master can transmit up to thirty one additional data wo rds. The EEPROM will respond with an ACK 
+after each data word is received. Once all data to be written h as been sent to the device, the bus Master 
+must issue a Stop condition (Figure 5-2) at which time the internally self-timed write cycle will begin. 
+SCL 
+SDA 
+Start Condition 
+by Master 
+Device Address Byte  First Word Address Byte
+MSBMSB 
+9 1 2 3 4 5 6 7 8 97  1   2  3  4 5  6  8
+ 0    1   0  A  1   2  A 1  A 0  0  0 0 X X X A12 A11    A10   A9 A8 
+ACK
+from Slave
+ACK
+from Slave
+Second Word Address Byte Data Word 
+Stop Condition
+by Master
+MSBMSB 
+9 1 2 3 4 5 6  7  8  9 8 1   2  3  4 5 6 7
+D6 D4 D5  D7 D0  D1  D2  D3 0 
+ACK
+from Slave
+ACK 
+from Slave 
+A7   A3 A5 A4 A2 A1 A0 A6   0
+
+--- PDF page 10 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 10 / 28 
+The lower five bits of the word address are internally incremented following the receipt of each data word. 
+The higher order address bits are not incremented and retain the memory page row location. Page Write 
+operations are limited to writing bytes within a single physical page, regardless of the number of bytes 
+actually being written. When the incremented word address reaches the page boundary, the address 
+counter will “roll over” to the beginning of the same page. Nevertheless, creating a roll over event should be 
+avoided as previously loaded data in the page could become unintentionally altered. 
+Figure 5-2.Page Write 
+ 
+ 
+5.3 Acknowledge Polling 
+An Acknowledge Polling routine can be implemented to optimize time sensitive applications that would 
+prefer not to wait the fixed maximum write cycle time (tWR). This method allows the application to know 
+immediately when the Serial EEPROM write cycle has completed, so a subsequent operation can be 
+started. 
+Once the internally self-timed write cycle has started, an Acknowledge Polling routine can be initiated. This  
+involves repeatedly sending a Start condition followed by a valid Device Address byte with the R/W bit set at 
+Logic 0. The device will not respond with an ACK while the write cycle is ongoing. Once the internal write 
+cycle has completed, the EEPROM will respond with an ACK, allowing a new Read or Write operation to be 
+immediately initiated. A flow chart has been included below in Figure 5-3 to better illustrate this technique.  
+ 
+SCL 
+SDA 
+Start Condition 
+by Master  ACK
+from Slave
+ACK
+from Slave
+Device Address Byte 
+  First Word Address Byte
+MSB  MSB
+6
+ 7
+ 8
+ 9
+5
+6 
+ 1  
+ 2 
+ 3 
+ 4
+ 5 
+ 7 
+ 8
+ 9
+ 1
+ 2
+ 3
+ 4
+A 
+ 1  
+  0  
+  1  
+ 0 
+ 2 
+ A 
+1 
+ A 
+0 
+ 0
+ X 
+ X 
+ X 
+ A11
+A12
+0
+ A8 
+ 0
+A9 
+A10 
+Figure 5-3.
+ Acknowledge Polling Flow Chart
+Did 
+the device  
+ACK? 
+Send any  
+Write  
+protocol 
+Send  
+Stop  
+condition  
+  
+to initiate the 
+write cycle 
+Send Start 
+condition followed 
+by a valid 
+Device Address 
+byte with R/W = 0
+Proceed to 
+next Read or 
+Write operation 
+NO
+YES 
+
+--- PDF page 11 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 11 / 28 
+5.4 Write Cycle Timing 
+The length of the self-timed write cycle, or tWR, is defined as the amount of time from the Stop condition that 
+begins the internal Write operation, to the Start condition of the first Device Address byte sent to the 
+ZD24C64A that it subsequently responds to with an ACK. Figure 5-4 has been included to show this 
+measurement. During the internally self-timed write cycle, any attempts to read from or write to the memory 
+array will not be processed.  
+Figure 5-4.Write Cycle Timing 
+ 
+5.5 Write Protection 
+The ZD24C64A utilizes a hardware data protection scheme that allows the user to write protect the entire 
+memory contents when the WP pin is at VCC (or a valid VIH). No write protection will be set if the WP pin is at 
+GND or left floating.  
+Table 5-1.ZD24C64A Write Protect Behavior 
+WP Pin Voltage  Part of the Array Protected 
+VCC  Full Array 
+GND  None — Write Protection Not Enabled 
+The status of the WP pin is sampled at the Stop condition for every Byte Write or Page Write command prior 
+to the start of an internally self-timed Write operation. Changing the WP pin state after the Stop condition 
+has been sent will not alter or interrupt the execution of the write cycle. The WP pin state must be valid with 
+respect to the associated setup (tSU.WP) and hold (tHD.WP) timing as shown in the Figure 5-5 below. The WP 
+setup time is the amount of time that the WP state must be stable before the Stop condition is issued. The 
+WP hold time is the amount of time after the Stop condition that the WP state must remain stable. 
+If an attempt is made to write to the device while the WP pin has been asserted, the device will acknowledge 
+the Device Address, Word Address, and Data bytes but no write c ycle will occur when the Stop condition is 
+issued, and the device will immediately be ready to accept a new Read or Write command. 
+
+
+--- PDF page 12 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 12 / 28 
+ 
+   
+Write Protect Setup and Hold Timing Figure 5-5.
+SCL 
+SDA IN 
+        9           8               7            2      1 
+ D1                   D0        D7                 D6  
+WP 
+tSU.WP
+Stop Condition
+by Master
+Data Word Input Sequence Page/Byte Write Operation
+ACK by Slave 
+tHD.WP
+
+--- PDF page 13 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 13 / 28 
+6. Read Operations 
+Read operations are initiated the same way as Write operations with the exception that the Read/Write 
+Select bit in the Device Address word must be a Logic 1. There are three Read operations:  
+ Current Address 
+Read 
+ Random Address 
+Read 
+ Sequential Read 
+6.1 Current Address Read  
+The internal data word address counter maintains the last addre ss accessed during the last read or write 
+operation, incremented by one. This address stays valid between operations as long as the VCC is maintained 
+to the part. The address “roll over” during read is from the last byte of the last page to the first byte of the first 
+page of the memory. 
+A Current Address Read operation will output data according to the location of the internal data word 
+address counter. This is initiated with a Start condition, followed by a valid Device Address byte with the 
+R/W bit set to Logic 1. The device will ACK this sequence and the current address data word is serially 
+clocked out on the SDA line. All types of Read operations will be terminated if the bus Master does not 
+respond with an ACK (it NACKs) during the ninth clock cycle, which will force the device into standby mode. 
+After the NACK response, the Master may send a Stop condition to complete the protocol, or it can send a 
+Start condition to begin the next sequence. 
+ 
+Figure 6-1.Current Address Read 
+ 
+6.2 Random Read  
+A Random Read begins in the same way as a Byte Write operation does to load in a new data word 
+address. This is known as a “dummy write” sequence; however, the Data Byte and Stop condition of the 
+Byte Write must be omitted to prevent the part from entering an internal write cycle. Once the Device 
+Address and Word Address bytes are clocked in and acknowledged by the EEPROM, the bus Master must 
+generate another Start condition. The bus Master now initiates a Current Address Read by sending a Start 
+condition, followed by a valid Device Address byte with the R/W bit set to Logic 1. The EEPROM will ACK 
+the Device Address and serially clock out the data word on the SDA line. All types of Read operations will 
+be terminated if the bus Master does not respond with an ACK (it NACKs) during the ninth clock cycle, 
+which will force the device into standby mode. After the NACK response, the Master may send a Stop 
+condition to complete the protocol, or it can send a Start condition to begin the next sequence. 
+SCL 
+SDA 
+Device Address Byte  Data Word (n)
+Start Condition 
+by Master  ACK
+from Slave
+NACK
+from Master
+Stop Condition 
+by Master 
+MSB  MSB
+ 1   0  1  0  A 2  A 1  A 0  10 D5 D7 1 D6 D4 D3 D2 D1 D0 
+6  7  9 1 2 3 4 5 68 7 1   92  3  84  5 
+
+--- PDF page 14 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 14 / 28 
+   
+Figure 6-2.Random Read 
+   1  2  3  4  5  6  7  8  9  1  2  3  4  5  6  7  8  9  1  2  3  4  5  6  7  8  9  
+ 
+ 
+6.3 Sequential Read  
+Sequential Reads are initiated by either a Current Address Read or a Random Read. After the bus Master 
+receives a data word, it responds with an acknowledge. As long as the EEPROM receives an ACK, it will 
+continue to increment the word address and serially clock out sequential data words. When the maximum 
+memory address is reached, the data word address will “roll over” and the sequential read will continue from 
+the beginning of the memory array. All types of Read operations will be terminated if the bus Master does 
+not respond with an ACK (it NACKs) during the ninth clock cycle, which will force the device into standby 
+mode. After the NACK response, the Master may send a Stop condition to complete the protocol, or it can 
+send a Start condition to begin the next sequence. 
+Figure 6-3.Sequential Read 
+ 
+ 
+SCL 
+SDA 
+Start Condition 
+by Master 
+First Word Address Byte
+Device Address Byte 
+MSBMSB 
+ 1  
+ A 
+0 
+ 1  
+ 0  
+ 2 
+ A 
+1 
+ A 
+0 
+  0
+0
+Dummy Write
+ X 
+ X 
+ X 
+ A11    A10 A9 
+ A8 
+ 0
+A12
+ACK
+from Slave
+ACK
+from Slave
+Second Word Address Byte
+MSB 
+A7  
+ A6  
+ A5  
+ A4  
+ A3  
+ A2 
+ A1 
+ 0
+A0 
+ACK
+from Slave
+Start Condition 
+by Master 
+Device Address Byte
+ Data Word (n) 
+Stop Condition
+by Master
+MSBMSB 
+1
+ 2
+ 3
+ 4 
+ 6 
+ 7 
+ 8 
+ 9
+5 
+6
+ 1  
+ 2
+ 3
+ 4
+ 5
+ 7
+ 8
+ 9
+0
+ 1  
+  0 
+  1 
+ A
+2
+ A
+1
+ A
+0
+ 1
+  0 
+ D7 
+ D5 
+ D3  
+ D2  
+ D1  
+ D0  
+ 1
+D6 
+ D4  
+ACK
+from Slave
+NACK
+from Master
+SCL 
+SDA 
+Start Condition 
+by Master  ACK
+from Slave
+ACK
+from Master
+Device Address Byte 
+ Data Word (n)
+MSB  MSB
+5
+ 6
+ 7
+ 8
+ 9
+7 
+ 1  
+ 2 
+ 3 
+ 4
+ 5 
+ 6 
+ 8
+ 9
+ 1
+ 2
+ 3
+ 4
+ 1  
+  0  
+  1  
+ 0 
+ A 
+2 
+ A 
+1 
+ A 
+0 
+ D5 
+ D4 
+ D3 
+ D2 
+1
+ 0
+ D7 
+ D6 
+ 0
+D0 
+D1 
+
+--- PDF page 15 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 15 / 28 
+7.      Device Default Condition from Zetta Device 
+The ZD24C64A is delivered with the EEPROM array set to Logic 1, resulting in FFh data in all locations.  
+ 
+8. Electrical Specifications 
+8.1 Absolute Maximum Ratings 
+Functional operation at the “Absolute Maximum Ratings” or any 
+other conditions beyond those indicated in Section 8.2 “DC and 
+AC Operating Range” is not implied or guaranteed. Stresses 
+beyond those listed under “Absolute Maximum Ratings” and/or 
+exposure to the “Absolute Maximum Ratings” for extended 
+periods may affect device reliability and cause permanent 
+damage to the device. 
+ 
+The voltage extremes referenced in the “Absolute Maximum 
+Ratings” are intended to accommodate short duration 
+undershoot/overshoot pulses that the device may be subjected 
+to during the course of normal operation and does not imply or 
+guarantee functional device operation at these levels for any 
+extended period of time.
+ 
+8.2 DC and AC Operating Range 
+Table 8-1.DC and AC Operating Range 
+    ZD24C64A 
+Operating Temperature (Case)  Industrial Temperature Range  -40°C to +85°C 
+VCC Power Supply  Low Voltage Grade  1.7V to 5.5V 
+   
+Temperature under Bias. . . . . . . -55°C to +125°C 
+Storage Temperature. . . . . . . . . -65°C to +150°C 
+Supply Voltage with respect to 
+ground . . . . . . . . .. . . .. . . .. . . . .-0.5V to +5.50V 
+Voltage on any pin with respect to 
+ground . . . . .. . . .. . . .. . . . . . .-0.6V to VCC + 0.5V 
+DC Output Current . . . . . . . . . . . . . . . . . . . 5.0mA 
+
+--- PDF page 16 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 16 / 28 
+8.3 DC Characteristics 
+Table 8-2.DC Characteristics 
+Parameters are applicable over the operating range in specified Section 8.2, unless otherwise noted. 
+Symbol  Parameter  Test Conditions  Min  Typical(1)  Max  Units
+VCC  Supply Voltage    1.7    5.5  V 
+ICC1 
+Supply Current, Read 
+VCC = 1.8V(2) Read at 400kHz    0.08  0.3  mA 
+VCC = 5.5V Read at 1MHz    0.15  0.5  mA 
+ICC2  Supply Current, Write  VCC = 5.5V Write at 1MHz    0.20  1.0  mA 
+ISB  Standby Current 
+VCC = 1.8V(2)
+VIN = VCC or VSS
+  0.08  0.4  μA 
+         
+    VCC = 5.5V     0.10  0.5 μA
+ILI  Input Leakage Current  VIN = VCC or VSS   0.10  3.0  μA 
+ILO  Output Leakage Current  VOUT = VCC or VSS   0.05  3.0  μA 
+VIL  Input Low Level(2)    –0.6    VCC x 0.3 V 
+VIH  Input High Level(2)    VCC x 0.7   VCC + 0.5 V 
+VOL1  Output Low Level  VCC = 1.8V IOL = 0.15mA     0.2  V 
+VOL2  Output Low Level  VCC = 5.5V IOL = 2.1mA     0.4  V 
+  Notes: 1. Typical values characterized at T A = +25°C unless otherwise noted. 
+  2. This parameter is characteri zed but is not 100% tested in production. 
+   
+
+--- PDF page 17 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 17 / 28 
+8.4 AC Characteristics  
+Table 8-3. AC Characteristics 
+Parameters are applicable over operating range in Section 8.2 unless otherwise noted. Test conditions shown in Note 2. 
+Symbol  Parameter 
+Standard Mode Fast Mode  Fast Mode Plus
+Units
+VCC = 1.7V to 
+5.5V
+VCC = 1.7V to 
+5.5V
+VCC  =  2.5V to 
+5.5V 
+Min Max Min Max  Min  Max
+fSCL 
+Clock Frequency, SCL   100   400    1000 kHz
+tLOW 
+Clock Pulse Width Low  4,700   1300   500    ns
+tHIGH 
+Clock Pulse Width High  4,000   600   400    ns
+tI  Input Filter Spike Suppression 
+(SCL,SDA)(1) 
+  100   100    100 ns
+tAA  Clock Low to Data Out Valid    4,500   900    450 ns
+tBUF 
+Bus Free Time between Stop and Start(1) 4,700   1300   500    ns
+tHD.STA 
+Start Condition Hold Time  4,000   600   250    ns
+tSU.STA 
+Start Condition Set-up Time  4,700   600   250    ns
+tHD.DAT 
+Data In Hold Time  0   0   0    ns
+tSU.DAT 
+Data In Set-up Time  200   100   100    ns
+tR  Inputs Rise Time(1)    1,000   300    100 ns
+tF  Inputs Fall Time(1)    300   300    100 ns
+tSU.STO 
+Stop Condition Set-up Time  4,700   600   250    ns
+tSU.WP 
+Write Protect Setup Time  4,000   600   100    ns
+tHD.WP 
+Write Protect Hold Time  4,000   600   400    ns
+tDH  Data Out Hold Time  100   50   50    ns
+tWR 
+Write Cycle Time    5    5    5 ms
+
+--- PDF page 18 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 18 / 28 
+ 
+Notes: 1. These parameters are determined through product chara cterization and are not 100% tested in production. 
+2. AC measurement conditions: 
+ C
+L : 100pF 
+ RPUP (SDA bus line pull-up resistor to VCC): 1.3kΩ(1000kHz), 4kΩ (400kHz), 10kΩ (100kHz) 
+ Input pulse voltages: 0.3 x VCC to 0.7 x VCC 
+ Input rise and fall times: ≤ 50ns 
+ Input and output timing reference voltages: 0.5 x VCC 
+Figure 8-1. Bus Timing 
+ 
+ 
+8.5 Pin Capacitance 
+Table 8-4.Pin Capacitance(1) 
+Applicable over recommended operating range from TA = 25°C, f = 1.0MHz, VCC = 3.0V 
+Symbol  Test Condition  Max Units  Conditions
+CI/O  Input/Output Capacitance (SDA) 8 pF  VI/O = 0V
+CIN  Input Capacitance (A0, A1, A2, SCL) 6 pF  VIN = 0V
+  Note: 1. This parameter is char acterized but is not 100% tested in production. 
+8.6 Power-Up Requirements and Reset Behavior 
+During a power-up sequence, the VCC supplied to the ZD24C64A should monotonically rise from GND to the 
+minimum VCC level as specified in Section 8.2, “DC and AC Operating Range” with a slew rate no greater 
+than 1V/μs. 
+8.6.1 Device Reset  
+To prevent inadvertent write operations or other spurious events from happening during a power-up 
+sequence, the ZD24C64A includes a power-on-reset (POR) circuit. Upon power-up, the device will not 
+respond to any commands until the VCC level crosses the internal voltage threshold (VPOR) that brings the 
+device out of reset and into standby mode.  
+The system designer must ensure that instructions are not sent to the device until the VCC supply has reached 
+a stable value greater than or equal to the minimum V CC level. Additionally, once the VCC is greater than or 
+
+
+--- PDF page 19 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 19 / 28 
+equal to the minimum VCC level, the bus Master must wait at least t PUP before sending the first command to 
+the device. See Table 8-5 for the values associated with these power-up parameters. 
+Table 8-5.Power-up Conditions(1) 
+Symbol  Parameter  Min  Max Units
+tPUP 
+Time required after VCC is stable before the device can accept commands.  100    μs
+VPOR  Power-On Reset Threshold Voltage   1.5 V
+tPOFF 
+Minimum time at VCC = 0V between power cycles. 1    ms
+  Note: 1. These parameters are c haracterized but they are not 100% tested in production. 
+If an event occurs in the system where the V CC level supplied to the ZD24C64A drops below the maximum 
+VPOR level specified, it is recommended that a full power cycle sequence be performed by first driving the VCC 
+pin to GND, waiting at least the minimum t POFF time, and then performing a new power-up sequence in 
+compliance with the requirements defined in this section.  
+8.7 EEPROM Cell Performance Characteristics 
+Table 8-6.EEPROM Cell Performance Characteristics 
+Operation  Test Condition Min Max  Units
+Write Endurance(1) 
+TA = 25°C, VCC(min)< VCC < VCC(max)
+Byte or Page Write Mode   1,000,000  —  Write Cycles 
+Data Retention(2)  TA = 55°C, VCC(min)< VCC < VCC(max) 100 —  Years
+  Notes: 1. Write endurance performa nce is determined through characterization and the qualification process. 
+   2. The data retention capability is determined through qualification and is checked on each device in 
+production. 
+
+--- PDF page 20 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 20 / 28 
+9. Ordering Information 
+SS     =  JEDEC SOIC 
+X       =  TSSOP 
+MA    =  2.0mm x 3.0mm UDFN 
+P       =  PDIP 
+ST     =  SOT23 
+C       =  VFBGA 
+U       =  3x3 Grid, 5-ball WLCSP 
+U1     =  2x2 Grid, 4-ball WLCSP 
+WU    =  Wafer Unsawn
+ 
+   
+Zetta Designator 
+Product Family 
+24 C = Standard I 2 C-compatible 
+Serial EEPROM 
+Device Density 
+Shipping Carrier Option 
+Package Device Grade 
+Package Option 
+ = 64 Kilobit 64 
+T = Tape and Reel, Standard Quantity Option
+B = Bulk (Tubes) 
+Operating Voltage 
+M  = 1.7V to 5.5V 
+G  = Low-halogen, Lead(Pb)-free
+P  =  Lead (Pb) - free  
+ZD     24C   64   A -  SS  G  M   T
+Device Revision 
+
+--- PDF page 21 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 21 / 28 
+10. Packaging Information 
+10.1    8-lead JEDEC SOIC 
+ 
+
+
+--- PDF page 22 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 22 / 28 
+10.2 8-lead TSSOP  
+ 
+
+
+--- PDF page 23 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 23 / 28 
+10.3 8-pad UDFN 
+ 
+ 
+  
+
+
+--- PDF page 24 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 24 / 28 
+10.4 5-lead SOT23 
+ 
+ 
+  
+
+
+--- PDF page 25 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 25 / 28 
+10.5 8-ball VFBGA 
+ 
+ 
+  
+
+
+--- PDF page 26 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 26 / 28 
+10.6 5-ball WLCSP 
+ 
+ 
+  
+
+
+--- PDF page 27 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 27 / 28 
+10.7 4-ball WLCSP 
+ 
+ 
+  
+
+
+--- PDF page 28 ---
+Zetta                                                                                                                                                           ZD24C64A 
+ 
+ ZettaDevice Electronics Technology Co.,Ltd                                                                                                                    www.zettadevice.com 
+ 28 / 28 
+11. Revision History 
+Doc. No.  Date  Comments 
+  08/2015  Initial document release. 
+ 

@@ -1,119 +1,121 @@
-# TMP1x2
+# EEPROM24Cxx
 
-Framework-neutral C++17 driver for TI **TMP102 and TMP112** temperature sensors.
-The public API, transport callbacks, four-state health model, repository layout
-and colored diagnostic CLI follow the neighboring OPT4001 library, with ADS1115
-as the four-register protocol reference. See the full
-[library comparison](docs/library-comparison.md).
+Framework-neutral C++17 I2C EEPROM driver for **Zetta ZD24C02B-MAGMT** and
+explicit 24Cxx-family memory layouts. The Zetta default is 256 bytes, 8-byte
+pages, an 8-bit memory pointer and a 5 ms maximum programming cycle.
 
-This checkout was initialized in `Projects/24Cxx` for the requested temperature
-sensor library. Its package name and C++ namespace are `TMP1x2`; see
-[source provenance](docs/provenance.md) for the existing implementation reused.
+The closest local template is **MB85RC** for memory operations, typed transport,
+write-effect evidence and application-owned I2C. CLI help, colors and common
+commands follow the sibling libraries; Arduino and native ESP-IDF share one
+command processor. See the [library comparison](docs/library-comparison.md).
 
-- Signed 12-bit normal and 13-bit extended temperatures, 0.0625 C per count.
-- Continuous rates of 0.25, 1, 4 and 8 Hz; shutdown and polled one-shot conversion.
-- Low/high thresholds, comparator/interrupt ALERT, polarity and fault queue.
-- Structured `Status`, typed enums, raw diagnostics, verified configuration,
-  dirty-state detection and explicit recovery.
-- Application-owned I2C callbacks; no Arduino/ESP-IDF dependency in the core.
-- Arduino ESP32-S2/S3 and native ESP-IDF examples sharing one diagnostic CLI.
+- Byte-addressed reads, page/bank-aware writes, fill and readback verification.
+- Exact Zetta preset; common C01 through C512 layouts, explicit Microchip
+  24LC1025 and ST M24M01 layouts, and validated custom geometry.
+- Bus-silent operation admission and bounded owner-driven polling.
+- Fixed buffers, typed Status/results, passive health and partial-write evidence.
+- Optional address-only ACK polling; conservative timed completion otherwise.
+- Application owns bus initialization, timing, locking, WP and recovery.
+- ESP32-S2/S3 Arduino and native ESP-IDF examples; no framework in core headers.
+
+24Cxx devices are EEPROM memory, not temperature sensors. This repository
+replaces the accidentally requested TMP1x2 implementation; its original commit
+and separately archived references remain available. See [provenance](docs/provenance.md).
 
 ## Integration
 
 ```cpp
-#include <TMP1x2/TMP1x2.h>
+#include <EEPROM24Cxx/EEPROM24Cxx.h>
 
-TMP1x2::TMP1x2 sensor;
-TMP1x2::Config cfg;
-// Implement these bounded callbacks in your application's bus owner:
-cfg.i2cWrite = applicationWrite;
-cfg.i2cWriteRead = applicationWriteRead;
-cfg.i2cUser = &applicationBus;
-cfg.nowMs = applicationClock;    // uint32_t applicationClock(void*)
-cfg.cooperativeYield = applicationYield; // void applicationYield(void*)
-cfg.model = TMP1x2::Model::TMP112;  // explicit BOM selection; no chip ID exists
-cfg.i2cAddress = 0x48;
-cfg.mode = TMP1x2::Mode::SHUTDOWN;
+EEPROM24Cxx::EEPROM24Cxx memory;
+uint8_t bytes[16]; // Remains valid until the operation finishes.
 
-auto status = sensor.begin(cfg);
-if (status.ok()) {
-  sensor.tick(applicationNowMs());
-  status = sensor.startOneShot();
+void initializeMemory() {
+  EEPROM24Cxx::Config config;
+  config.i2cWrite = applicationWrite;       // Terminal TransportResult callbacks
+  config.i2cWriteRead = applicationWriteRead;
+  config.i2cProbe = applicationAddressProbe; // Optional SLA+W/ACK/STOP only
+  config.i2cUser = &applicationBus;
+  config.nowMs = applicationClock;
+  config.timeUser = &applicationClockState;
+  config.variant = EEPROM24Cxx::DeviceVariant::ZETTA_ZD24C02B;
+  config.i2cAddress = 0x50;                 // Actual A2:A0 board straps
+  config.maxTxBytes = 32;                  // Includes the pointer byte(s)
+  config.maxRxBytes = 32;
+  auto status = memory.bind(config);        // No I2C, does not identify the chip
+  if (status.ok()) status = memory.startRead(0, bytes, sizeof(bytes), 1000);
+  handleAdmission(status);                 // OK means admitted, not completed
 }
-// In the application scheduler, without holding the bus lock between calls:
-sensor.tick(applicationNowMs());
-TMP1x2::Sample sample;
-status = sensor.tryRead(sample);
-if (status.ok()) {
-  consumeTemperature(sample.celsius);
-} else if (!status.is(TMP1x2::Err::MEASUREMENT_NOT_READY)) {
-  handleError(status);
+
+void serviceMemory(uint32_t nowMs) {
+  (void)memory.poll(nowMs, 1);              // At most one physical callback
+  EEPROM24Cxx::TransferResult result;
+  if (memory.takeResult(result).ok()) {
+    consumeResult(result, bytes);          // Consume every terminal result once
+  }
 }
 ```
 
-Read the [ownership and integration contract](docs/integration.md) before writing
-callbacks. `end()` only deinitializes local state; `shutdown()` is the explicit
-fallible hardware operation. All bus calls require external serialization.
-`readSample()` returns the current temperature register; it cannot establish
-freshness in continuous mode. One-shot completion is checked through hardware OS.
-Changing extended format and entering shutdown from continuous mode require the
-clock hook for TI's bounded settling sequence; ordinary continuous initialization
-can run without it.
+Implement the named application callbacks and handlers; they are integration
+points, not library-provided functions. Call the driver from one serialized
+owner task. Every callback must enforce its timeout, complete before returning,
+and report exact successful byte counts. Never retain callback stack buffers.
+The clock hook and `poll()` argument must use the same wrapping millisecond domain.
+Nonzero logical deadlines require the clock hook. Clockless owners use a zero
+logical deadline and may cancel through their own scheduling policy.
 
-Supported addresses are 0x48–0x4B for the classic ADD0 mapping. TMP112D X2SON
-address-select ordering codes at 0x40–0x43 are outside this release's supported
-configuration. Model selection cannot establish physical identity. Extended
-register range does not extend the part's specified operating range or accuracy.
+For an explicit programming operation, call
+`startWrite(address, data, length, true, timeoutMs)` to enable readback verification,
+then service and consume it the same way. Keep `data` unchanged until completion.
+Writes are split at page/bank/transport limits and never automatically replayed.
+After a failed or cancelled write, inspect accepted/completed/verified byte
+counts and write-commit evidence before deciding what to do next.
+
+Read the [ownership and completion contract](docs/integration.md) before writing
+an adapter. WP-high may acknowledge a write while preserving old contents;
+only readback proves the requested data is present. There is no general device
+ID, capacity-detection command, register map or erase instruction.
 
 ## Build and test
 
-Native, with no framework or third-party test dependency:
-
 ```sh
-cmake -S . -B build -DTMP1X2_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build-eeprom -DEEPROM24CXX_BUILD_TESTS=ON
+cmake --build build-eeprom
+ctest --test-dir build-eeprom --output-on-failure
 python tools/check_contracts.py
+python tools/check_reference_archive.py
 ```
 
-On Windows with MinGW, add `-G "MinGW Makefiles"` to the configure command.
-The existing VS Code-managed PlatformIO installation is used through:
+On Windows use Ninja (`-G Ninja`) or MinGW Makefiles. The existing VS Code-managed
+PlatformIO installation is used through the repository wrapper:
 
 ```powershell
 .\scripts\pio.cmd test -e native
 .\scripts\pio.cmd run -e native_core_no_arduino
 .\scripts\pio.cmd run -e esp32s3dev -e esp32s2dev
-```
-
-Configure example pins in `examples/common/BoardConfig.h` before connecting
-hardware. The firmware examples are diagnostic bring-up applications; deployment
-bus locking and retry policy belong to your application.
-
-Native ESP-IDF (5.3 or newer, `driver/i2c_master.h` API):
-
-```sh
-idf.py -C examples/esp_idf/basic set-target esp32s3
-idf.py -C examples/esp_idf/basic build
-```
-
-The managed PlatformIO installation can also build the native IDF example
-directly, including its component registration and firmware link:
-
-```powershell
 .\scripts\pio.cmd run --project-dir examples/esp_idf/basic -e esp32s3 -e esp32s2
 ```
 
-Use this repository as a component through `EXTRA_COMPONENT_DIRS` or under your
-application's `components/` directory. `library.json` is the version source;
-`python scripts/generate_version.py sync` regenerates version metadata.
-The example resolves the component name from the checkout directory, so the
-folder does not need to be named `TMP1x2`.
+Native ESP-IDF 5.3 or newer, using `driver/i2c_master.h`, also supports:
 
-## References and validation
+```sh
+idf.py -C examples/esp_idf/basic set-target esp32s3 build
+```
 
-[TI datasheets, official source inventory and register notes](docs/reference/README.md)
-are stored locally with source URLs and checksums. TI reference code retains its
-own license; the independent driver and example code are MIT-licensed.
+The IDF example resolves its component dependency from the checkout folder name,
+so `24Cxx` and renamed package checkouts work. `library.json` is the version source;
+run `python scripts/generate_version.py sync` after changing it.
 
-See [validation results](docs/validation.md) for the checks actually run and
-[hardware validation](docs/hardware-validation.md) for the physical test procedure.
+Configure example pins in `examples/common/BoardConfig.h` for your board. Startup
+and ordinary diagnostics never program EEPROM. Use the explicit CLI memory-write
+commands only for data you intend to change; the driver owns no persistence policy.
+
+## References and evidence
+
+[Manufacturer datasheets and source research](docs/reference/README.md) include
+local reference files, revisions, URLs and checksums. Generic family layouts are
+not interchangeable across every manufacturer: verify the fitted part's page
+size, bank-bit placement, write time, address pins and supply limits.
+
+[Validation results](docs/validation.md) distinguish host tests and firmware
+builds from [physical hardware validation](docs/hardware-validation.md).

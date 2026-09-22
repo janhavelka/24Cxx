@@ -1,73 +1,102 @@
 # Diagnostic examples
 
-Both examples run the same framework-neutral command processor in `common/Tmp1x2Cli.cpp`. Arduino and native ESP-IDF therefore have the same commands, aliases, help layout, ANSI colors, finite sampling workflows and parsing behavior. These are bring-up diagnostics, not a multitask bus-manager implementation.
+Both frameworks run `common/Eeprom24CxxCli.cpp`. Commands, aliases, help layout,
+ANSI colors, parsers and operation results are identical. The application owns
+the bus; the core sees only typed callbacks. Configure SDA/SCL and speed in
+`common/BoardConfig.h` or its documented build defines before connecting hardware.
 
-If reusing the shared CLI on another platform, supply both `Platform::nowMs` and
-`Config::nowMs` in the same monotonic millisecond clock domain for watch, stress
-and one-shot timing. Both supplied adapters do this. Core-only applications can
-instead use the documented `tick(nowMs)` clock support.
+The default model is Zetta ZD24C02B at strap address 0x50. Startup binds and checks
+presence without programming memory. An ACK cannot identify the manufacturer,
+capacity or geometry, and several addresses may be banks of one EEPROM.
 
-`common/BoardConfig.h` selects SDA 8, SCL 9, 400 kHz and a 50 ms transaction timeout. Override `TMP1X2_I2C_SDA`/`TMP1X2_I2C_SCL` or edit this example-only file for your hardware. Fit appropriate external I2C pull-ups. No pins or platform handles enter the library.
+## Build
 
-## Arduino / PlatformIO
-
-Build `esp32s3dev` or `esp32s2dev` using the root `platformio.ini`. Open the 115200 baud monitor. The application creates and owns `Wire`; the driver receives only write and repeated-start read callbacks. Only `setup`/`loop` access the driver or I2C. Wire short-read errors retain generic I2C status because the returned byte count cannot prove which phase failed.
-
-## Native ESP-IDF
-
-From `esp_idf/basic`, with an activated ESP-IDF 5.3 or newer environment:
-
-```text
-idf.py set-target esp32s3
-idf.py build
-idf.py -p PORT flash monitor
-```
-
-Use `esp32s2` for S2. The example uses the configured native IDF console; change console settings with `idf.py menuconfig` when using a USB console instead of UART.
-
-Alternatively, from the repository root, use the existing managed PlatformIO:
+From the repository root, with the existing managed PlatformIO installation:
 
 ```powershell
+.\scripts\pio.cmd run -e esp32s3dev -e esp32s2dev
 .\scripts\pio.cmd run --project-dir examples/esp_idf/basic -e esp32s3 -e esp32s2
 ```
 
-This separate project selects `framework = espidf` and builds the actual IDF
-component and firmware. Its dependency name follows the repository's directory
-name, including checkouts named `24Cxx`.
+The first command builds Arduino examples; the second builds native ESP-IDF.
+Both configurations use a 4 MB firmware flash layout.
+The native example also supports `idf.py` from `esp_idf/basic`. Both use 115200
+baud and the configured board console. Select the right pins and console for
+your actual hardware.
 
-The application creates one `i2c_master` bus and four fixed device handles for addresses 0x48–0x4B. Creating handles does not probe the device. An input task queues characters with backpressure; only `app_main` calls the command processor, driver and bus. There is no Arduino API or compatibility facade in this example. The root component has no framework dependencies; the example depends on IDF I2C, timer, GPIO and task facilities.
+The Arduino loop is the only owner of Wire and the driver. In native IDF,
+`app_main` alone owns the driver and I2C; an input task only queues characters.
+IDF pre-creates handles for 0x50 through 0x57 so bank-address changes do not
+allocate during transfers. No Arduino compatibility layer is involved.
 
-## Typical session
+Both adapters provide the driver's clock hook and the CLI platform clock in
+the same domain. Every CLI tick performs at most one core transaction; scanning
+also checks one address per tick. Commands and buffers are fixed-size, malformed
+or overlong input is rejected, and active jobs retain their input buffers.
+
+## Read-only session
 
 ```text
 help
 color off
+model
+settings
 discover
-end
-model tmp112
-addr 0x48
-begin
-config
-read
-mode shutdown
-start
-poll
-tryread
-threshold 20 30
-alert interrupt
-polarity low
-faults 2
-watch 20 1000
-stop
+read 0 32
+dump 240 16
 health
+stress 20
+stop
 ```
 
-Startup defaults to TMP102, address 0x48, continuous mode and 4 Hz. TMP102/TMP112 have no unique device-ID register: address ACK and configuration plausibility cannot identify the installed model. Select the model from the BOM.
+`read`/`dump` return 1 through 256 bytes, default 16. `stress` performs a finite
+number of reads and never consumes EEPROM write endurance. `settings`, `health`,
+`progress`, `diag` and version/help commands use cached state and do not touch I2C.
+Scans and explicit probe affect adapter counters separately from tracked health.
 
-`read` returns the latest sensor register, including possible stale/reset data. Continuous `watch` may report the same conversion repeatedly. Shutdown-mode `watch` schedules one-shots, polls without blocking the CLI, and stops on a 500 ms completion timeout. Every watch/stress run is finite, accepts `stop`, and has bounded input work per loop. Synchronous `readblocking` is explicitly diagnostic and accepts a bounded deadline.
+Change the model/strap address while ended, then bind or begin again:
 
-`health` reads cached driver state and independent adapter counters. Scans/probes affect adapter statistics but not driver health. OFFLINE is diagnostic; explicit operations can restore READY. `cfg` shows desired settings, not hardware readback. A validated setting is retained when a write fails ambiguously; health reports dirty configuration and `recover` explicitly reapplies it. Raw writes also dirty managed configuration. `end`, `bind` and `unbind` do not touch the bus; `shutdown` explicitly changes sensor power mode. There is no general-call reset command.
+```text
+end
+model zetta
+addr 0x50
+begin
+```
 
-Any sensor-register read can acknowledge the ALERT latch in interrupt mode, including config, dump, health-independent probe and verification reads. The CLI does not configure an ALERT GPIO. An application can separately inject the optional GPIO sampler without changing bus ownership.
+`model` lists the supported profile names. Selecting a name does not validate
+physical identity. The base address must leave the selected model's bank bits
+clear. Use the core's custom geometry API for other confirmed layouts.
 
-Actual hardware and native-IDF build validation are reported in the repository validation notes; successful host tests do not establish those claims.
+## Explicit programming
+
+The following is a syntax example for a region you intend to overwrite:
+
+```text
+wverify 16 0x11 0x22 0x33
+verify 16 0x11 0x22 0x33
+read 16 3
+```
+
+`write`/`writebyte` report transport acceptance and write-cycle completion;
+`wverify` also reads back the requested range. `fill <addr> <value> <len>` and
+`fillverify` apply the equivalent operation over a range without allocating a
+range-sized buffer. Input numbers are decimal or `0x` hexadecimal.
+
+The driver splits programming at page and bank boundaries. Completion prints
+accepted/completed/verified byte counts and commit evidence. WP may suppress
+storage even when a write ACKs, so an unverified successful write is not proof
+that data changed. A verification mismatch reports the first observed differing
+byte without assuming the cause.
+
+`stop`/`cancel` stops future work; `end` also releases the binding. A page already
+sent to the EEPROM can still be programming. The physical-cycle barrier remains
+until it settles. No command automatically replays uncertain writes or resets
+the shared bus. After a fault, reconcile the indicated region by readback before
+choosing another write.
+
+`recover` is a presence check, not restoration of old EEPROM contents. Device
+records, checksums, backups and transactional application storage belong to the
+application above this driver.
+
+See [validation results](../docs/validation.md) for actual build coverage and
+[hardware validation](../docs/hardware-validation.md) for the remaining bench work.

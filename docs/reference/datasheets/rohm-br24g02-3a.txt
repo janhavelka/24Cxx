@@ -1,0 +1,3234 @@
+--- PDF page 1 ---
+ 
+〇Product structure: Silicon monolithic integrated circuit  〇This product is not designed protection against radioactive rays 
+. 
+1/33 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+TSZ22111 • 14 • 001 
+Serial EEPROM series Standard EEPROM 
+I2C BUS EEPROM (2-Wire) 
+BR24G02-3A 
+ 
+●General Description 
+BR24G02-3A is a serial EEPROM of I2C BUS interface method 
+ 
+●Features 
+ All controls available by 2 ports of serial clock(SCL) and 
+serial data(SDA) 
+ Other devices than EEPROM can be connected to the 
+same port, saving microcontroller port 
+ 1.6V to 5.5V single power source action most suitable 
+for battery use 
+ 1MHz action is possible (1.7V to 5.5V) 
+ Up to 8 bytes in page write mode 
+ Self-timed programming cycle 
+ Low current consumption 
+ Prevention of write mistake 
+ Write (write protect) function added 
+ Prevention of write mistake at low voltage 
+ More than 1 million write cycles 
+ More than 40 years data retention 
+ Noise filter built in SCL / SDA terminal 
+ Initial delivery state FFh 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+●BR24G02-3A 
+Capacity Bit Format Type Power Source 
+Voltage Package 
+2Kbit 256×8 
+BR24G02-3A 
+1.6V to 5.5V 
+DIP-T8*1 
+BR24G02F-3A SOP8 
+BR24G02FJ-3A SOP-J8 
+BR24G02FVT-3A TSSOP-B8 
+BR24G02FVJ-3A TSSOP-B8J 
+BR24G02FVM-3A MSOP8 
+BR24G02NUX-3A VSON008X2030 
+*1 Not Recommended for New Designs. 
+ 
+ 
+ 
+●Packages W(Typ.) x D(Typ.)x H(Max.) 
+Figure 1. 
+TSSOP-B8 
+3.00mm x 6.40mm x 1.20mm 
+MSOP8 
+2.90mm x 4.00mm x 0.90mm 
+SOP-J8 
+4.90mm x 6.00mm x 1.65mm 
+SOP8 
+5.00mm x 6.20mm x 1.71mm 
+DIP-T8 
+9.30mm x 6.50mm x 7.10mm 
+TSSOP-B8J 
+3.00mm x 4.90mm x 1.10mm 
+VSON008X2030 
+2.00mm x 3.00mm x 0.60mm 
+Not Recommended for 
+ New Designs 
+Datasheet
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- PDF page 2 ---
+ 
+2/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Absolute Maximum Ratings (Ta=25°C) 
+Parameter Symbol Ratings Unit Remarks 
+Supply voltage VCC -0.3 to +6.5 V  
+Power Dissipation Pd 
+450 (SOP8) 
+mW 
+When using at Ta=25°C or higher 4.5mW to be reduced per 1°C. 
+450 (SOP-J8) When using at Ta=25°C or higher 4.5mW to be reduced per 1°C. 
+330 (TSSOP-B8) When using at Ta=25°C or higher 3.3mW to be reduced per 1°C. 
+310 (TSSOP-B8J) When using at Ta=25°C or higher 3.1mW to be reduced per 1°C. 
+310 (MSOP8)  When using at Ta=25°C or higher 3.1mW to be reduced per 1°C. 
+300 (VSON008X2030)  When using at Ta=25°C or higher 3.0mW to be reduced per 1°C. 
+800 (DIP-T8*1) When using at Ta=25°C or higher 8.0mW to be reduced per 1°C. 
+Storage Temperature Tstg -65 to +150 °C  
+Operation Temperature Topr -40 to +85 °C  
+Input Voltage /  
+Output Voltage - -0.3 to Vcc+1.0 V 
+The Max value of input voltage / output voltage is not over 6.5V.  
+When the pulse width is 50ns or less, the Min value of input voltage 
+/ output voltage is not under -0.8V. 
+Junction Temperature Tjmax 150 °C Junction temperature at the storage condition 
+Electrostatic discharge 
+voltage 
+(human body model) 
+VESD -4000 to +4000 V  
+*1 Not Recommended for New Designs. 
+ 
+●Memory Cell Characteristics (Ta=25°C, Vcc=1.6V to 5.5V) 
+Parameter Limits Unit Min. Typ. Max 
+Write cycles *2 1,000,000 - - Times 
+Data retention *2 40 - - Years 
+*2 Not 100% TESTED  
+ 
+●Recommended Operating Ratings 
+Parameter Symbol Ratings Unit 
+Supply voltage Vcc 1.6 to 5.5  V Input voltage VIN  0 to Vcc 
+ 
+ 
+●DC Characteristics  (Unless otherwise specified, Ta=-40 to +85°C, Vcc =1.6 to 5.5V)  
+Parameter Symbol Limits Unit Conditions Min. Typ. Max. 
+Input High Voltage1 VIH1 0.7Vcc - Vcc+1.0 V 1.7V≤Vcc≤5.5V 
+Input Low Voltage1 VIL1 -0.3*3 - 0.3Vcc V 1.7V≤Vcc≤5.5V 
+Input High Voltage2 VIH2 0.8Vcc - Vcc+1.0 V 1.6V≤Vcc<1.7V 
+Input Low Voltage2 VIL2 -0.3*3 - 0.2Vcc V 1.6V≤Vcc<1.7V 
+Output Low Voltage1 VOL1 - - 0.4 V IOL=3.0mA, 2.5V≤Vcc≤5.5V (SDA) 
+Output Low Voltage2 VOL2 - - 0.2 V IOL=0.7mA, 1.6V≤Vcc<2.5V (SDA) 
+Input Leakage Current ILI -1 - 1 μA VIN=0 to Vcc 
+Output Leakage Current ILO -1 - 1 μA VOUT=0 to Vcc (SDA) 
+Supply Current (Write) ICC1 - - 2.0 
+mA 
+Vcc=5.5V, fSCL=1MHz, tWR=5ms, 
+Byte write, Page write 
+Supply Current (Read) ICC2 - - 2.0 
+Vcc=5.5V, fSCL=1MHz 
+Random read, current read,  
+sequential read 
+Standby Current ISB - - 2.0 μA Vcc=5.5V, SDA, SCL=Vcc 
+A0, A1, A2=GND, WP=GND 
+*3 When the pulse width is 50ns or less, it is -0.8V. 
+
+--- PDF page 3 ---
+ 
+3/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●AC Characteristics (Unless otherwise specified, Ta=-40 to +85°C) 
+Parameter Symbol 
+Limits 
+(1.6V≤Vcc<1.7V) 
+Limits 
+(1.7V≤Vcc≤5.5V) Unit 
+Min. Typ. Max. Min. Typ. Max. 
+Clock Frequency fSCL - - 400 - - 1000 kHz 
+Data Clock “HIGH“ Period tHIGH 0.6 - - 0.3 - - µs 
+Data Clock “LOW“ Period tLOW 1.2 - - 0.5 - - µs 
+SDA, SCL (INPUT) Rise Time *1 tR - - 1 - - 0.12 µs 
+SDA, SCL (INPUT) Fall Time *1 tF1 - - 1 - - 0.12 µs 
+SDA (OUTPUT) Fall Time *1 tF2 - - 0.12 - - 0.12 µs 
+Start Condition Hold Time tHD:STA 0.6 - - 0.25 - - µs 
+Start Condition Setup Time tSU:STA 0.6 - - 0.20 - - µs 
+Input Data Hold Time tHD:DAT 0 - - 0 - - ns 
+Input Data Setup Time tSU:DAT 100 - - 50 - - ns 
+Output Data Delay Time tPD 0.1 - 0.9 0.05 - 0.45 µs 
+Output Data Hold Time tDH 0.1 - - 0.05 - - µs 
+Stop Condition Setup Time tSU:STO 0.6 - - 0.25 - - µs 
+Bus Free Time tBUF 1.2 - - 0.5 - - µs 
+Write Cycle Time tWR - - 5 - - 5 ms 
+Noise Spike Width (SDA, SCL) tI - - 0.05 - - 0.05 µs 
+WP Hold Time tHD:WP 1.0 - - 1.0 - - µs 
+WP Setup Time tSU:WP 0.1 - - 0.1 - - µs 
+WP High Period tHIGH:WP 1.0 - - 1.0 - - µs 
+*1 Not 100% tested 
+ 
+ 
+●AC Characteristics Condition 
+Parameter Symbol Condition Unit 
+Load Capacitance CL 100 pF 
+SDA, SCL (INPUT) Rise Time tR 20 ns 
+SDA, SCL (INPUT) Fall Time tF1 20 ns 
+Input Data Level VIL1/VIH1 0.2Vcc/0.8Vcc V 
+Input/Output Data Timing Reference Level - 0.3Vcc/0.7Vcc V 
+ 
+
+--- PDF page 4 ---
+ 
+4/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Serial Input / Output timing 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+  
+ 
+  
+  
+ 
+Figure 2-(e). WP timing at write cancel 
+Figure 2-(d). WP timing at write execution 
+Figure 2-(c). Write cycle timing 
+Figure 2-(a). Serial input / output timing 
+○Input read at the rise edge of SCL 
+○Data output in sync with the fall of SCL 
+SCL
+SDA
+(入力)
+SDA
+(出力)
+tR tF1 tHIGH
+tSU:DAT
+tLOW tHD:DAT
+tDHtPDtBUF
+tHD:STA
+70%
+30%
+70%
+70%
+30%
+70% 70%
+30% 30%
+70% 70%
+30%
+70% 70%
+70%
+70%
+30%
+30%30% 30%
+tF2
+SDA
+(output)
+70% 70%
+70% 70%
+tSU:STA tHD:STA
+START CONDITION
+tSU:STO
+STOP CONDITION
+30%30%
+70%
+30%30%
+70%
+START CONDITION STOP CONDITION
+30%30%
+D0 ACK
+tWRwrite data
+(n-th address) START CONDITIONSTOP CONDITION
+70%70%
+DATA(1)
+D0 ACKD1
+DATA(n)
+ACK
+tWR
+30%
+70%
+STOP CONDITION
+tHD:WPtSU:WP
+30%
+DATA(1)
+D0D1 ACK
+DATA(n)
+ACK
+tHIGH:WP
+70% 70%
+tWR
+70%
+70%
+Fig1-(4) Write cycle timing
+Fig1-(5) WP timing at write execution
+Fig1-(6) WP timing at write cancel
+STOP CONDITION
+tHD:WPtSU:WP
+DATA(1)
+D0D1 ACK
+DATA(n)
+ACK
+tHIGH:WP
+70% 70%
+tWR
+70%
+Fig1-(5) WP timing at write executionFig1-(6) WP timing at write cancel
+(INPUT) 
+ 
+(OUTPUT) 
+ 
+Figure 2-(b). Start-stop bit timing 
+
+--- PDF page 5 ---
+ 
+5/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Block Diagram 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 3. Block diagram 
+ 
+ 
+ 
+ 
+ 
+●Pin Configuration 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+●Pin Descriptions 
+ 
+Terminal 
+Name 
+Input/ 
+Output Function 
+A0 Input Slave address setting* 
+A1 Input Slave address setting* 
+A2 Input Slave address setting* 
+GND - Reference voltage of all input / output, 0V 
+SDA Input/ 
+output Serial data input serial data output 
+SCL Input Serial clock input 
+WP Input Write protect terminal 
+Vcc - Connect the power source. 
+*A0, A1 and A2 are not allowed to use as open. 
+ 
+ 
+2Kbit  EEPROM array 
+8bit 
+ 
+ 1 
+BR24G02-3A 
+A0 
+A1 
+A2 
+GND 
+Vcc 
+WP 
+SCL 
+SDA 
+ 2 
+ 3 
+ 4 
+ 8 
+ 7 
+ 6 
+ 5 
+  
+8   
+7   
+6   
+5   4   
+3   
+2   
+1   
+SDA   
+SCL   
+WP   
+V cc   
+GND   
+A2   
+A1   
+A0   
+Address   
+decoder   
+Word   
+address   register   
+Data   
+register   
+  
+Control circuit   
+High voltage   generating circuit   
+Power source   voltage detection   
+  
+8bit   
+ACK   
+START   STOP   
+
+--- PDF page 6 ---
+ 
+6/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves 
+    (The following values are Typ. ones) 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 4. Input High Voltage1,2 VIH1,2 
+        (A0, A1, A2, SCL, SDA, WP) 
+Figure 5. Input Low Voltage1,2 VIL1,2 
+       (A0, A1, A2, SCL, SDA, WP) 
+Figure 6. Output Low Voltage1 VOL1 
+(Vcc=2.5V) 
+Figure 7. Output Low Voltage2 VOL2 
+(Vcc=1.6V) 
+0
+1
+2
+3
+4
+5
+6
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT LOW VOLTAGE: VIL1(V) Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+0
+1
+2
+3
+4
+5
+6
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT HIGH VOLTAGE: VIH1(V) Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+0
+0.2
+0.4
+0.6
+0.8
+1
+0 1 2 3 4 5 6
+L OUTPUT CURRENT: IOL(mA)
+OUTPUT LOW VOLTAGE: VOL1(V)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.2
+0.4
+0.6
+0.8
+1
+0 1 2 3 4 5 6
+L OUTPUT CURRENT: IOL(mA)
+OUTPUT LOW VOLTAGE: VOL2(V)
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+
+--- PDF page 7 ---
+ 
+7/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 8. Input Leakage Current ILI 
+(A0, A1, A2, SCL, WP) 
+Figure 9. Output Leakage Current ILO (SDA) 
+Figure 10. Supply Current (WRITE) ICC1 
+(fscl=1MHz) 
+Figure 11. Supply Current (READ) ICC2 
+(fscl=1MHz) 
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT LEAKAGE CURRENT: ILI (µA)
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+OUTPUT LEAKAGE CURRENT: ILO(µA)
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+0
+0.5
+1
+1.5
+2
+2.5
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+SUPPLY CURRENT (WRITE) : Icc1(mA)
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+0
+0.5
+1
+1.5
+2
+2.5
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+SUPPLY CURRENT (READ) : Icc2(mA)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 8 ---
+ 
+8/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 12. Standby Current ISB Figure 13. Clock Frequency fSCL 
+Figure 14. Data Clock High Period tHIGH Figure 15. Data Clock Low Period tLOW 
+0.1
+1
+10
+100
+1000
+10000
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+SCL FREQUENCY: fscl(kHz)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.5
+1
+1.5
+2
+2.5
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+STANDBY CURRENT: I SB (µA)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.1
+0.2
+0.3
+0.4
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+DATA CLK H TIME : t HIGH(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+DATA CLK  L TIME : t LOW(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 9 ---
+ 
+9/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 17. Start Condition Hold Time tHD:STA Figure 16. SDA (OUTPUT) Fall Time tF2 
+Figure 18. Start Condition Setup Time tSU:STA Figure 19. Input Data Hold Time tHD:DAT(HIGH) 
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+START CONDITION HOLD TIME: t HD:STA(µs) SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.02
+0.04
+0.06
+0.08
+0.1
+0.12
+0.14
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+SDA (OUTPUT) FALL TIME: t F2(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+-0.05
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+START CONDITION SETUP TIME: t SU:STA(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+-150
+-100
+-50
+0
+50
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT DATA HOLD TIME: t HD:DAT (ns) SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 10 ---
+ 
+10/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 20. Input Data Hold Time tHD:DAT(LOW) Figure 21. Input Data Setup Time tSU:DAT(HIGH) 
+Figure 22. Input Data Setup Time tSU:DAT(LOW) Figure 23. ‘L’ Output Data Delay Time tPD0 
+-150
+-100
+-50
+0
+50
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT DATA HOLD TIME: t HD:DAT(ns) SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+10
+20
+30
+40
+50
+60
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT DATA SET UP TIME: t SU:DAT(ns)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+10
+20
+30
+40
+50
+60
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INPUT DATA SET UP TIME: t SU:DAT(ns)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+OUTPUT DATA DELAY TIME: t PD(µs)
+SPEC
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 11 ---
+ 
+11/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Figure 26. BUS Free Time tBUF 
+Figure 24. ‘H’ Output Data Delay Time tPD1 Figure 25. Stop Condition Setup Time tSU:STO 
+Figure 27. Write Cycle Time tWR 
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+OUTPUT DATA DELAY TIME: t PD(µs)
+SPEC
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+STOP CONDITION SET UP TIME: t SU:STO(µs) SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+BUS OPEN TIME
+BEFORE TRANSMISSION: t BUF(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+1
+2
+3
+4
+5
+6
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+INTERNAL WRITING
+CYCLE TIME: t WR(ms)
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+SPEC
+
+--- PDF page 12 ---
+ 
+12/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Figure 31. Noise Spike Width tI (SDA L) Figure 30. Noise Spike Width tI (SDA H) 
+Figure 29. Noise Spike Width tI (SCL L) Figure 28. Noise Spike Width tI (SCL H) 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+NOISE REDUCTION
+EFECTIVE TIME: t I(SCL L)(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+NOISE REDUCTION
+EFECTIVE TIME: t I(SCL H)(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+NOISE REDUCTION
+EFECTIVE TIME: t I(SDA L)(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+NOISE REDUCTION
+EFECTIVE TIME: t I(SDA H)(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 13 ---
+ 
+13/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Figure 34. WP High Time tHIGH:WP 
+Figure 33. WP Setup Time tSU:WP Figure 32. WP Hold Time tHD:WP 
+●Typical Performance Curves - Continued 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+WP DATA HOLD TIME: t HD:WP(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+-0.3
+-0.2
+-0.1
+0
+0.1
+0.2
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+WP DATA SET UP TIME: t SU:WP(µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+0 1 2 3 4 5 6
+SUPPLY VOLTAGE: Vcc(v)
+WP EFECTIVE TIME: t HIGH:WP ( µs)
+SPEC
+Ta=-40℃
+Ta= 25℃
+Ta= 85℃
+
+--- PDF page 14 ---
+ 
+14/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Timing Chart 
+ 
+○ I2C BUS data communication 
+I2C BUS data communication starts by start condition input, and ends by stop condition input. Data is always 8bit long, and 
+acknowledge is always required after each byte. I 2C BUS carries out data transmission with plural devices connected by 2 
+communication lines of serial data (SDA) and serial clock (SCL). 
+Among d evices, there are “master” that generates clock and control communication start and end, and “slave” that is 
+controlled by address peculiar to devices. EEPROM becomes “slave”. And the device that outputs data to bus during data 
+communication is called “transmitter”, and the device that receives data is called “receiver”. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+○ Start condition (Start bit recognition) 
+・Before executing each command, start condition (start bit) where SDA goes from  'HIGH' down to 'LOW' when SCL is 
+'HIGH' is necessary. 
+・This IC always detects whether SDA and SCL are in start condition (start bit) or not, therefore, unless this confdition is 
+satisfied, any command is executed. 
+ 
+○ Stop condition (stop bit recongnition) 
+・Each command can be ended by SDA rising from 'LOW' to 'HIGH' when stop condition (stop bit), namely, SCL is 'HIGH' 
+ 
+○ Acknowledge (ACK) signal 
+・This acknowledge (ACK) signal is a software rule to show whether data transfer has been made normally or not. In 
+master and slave, the device ( μ-COM at slave address input of write command, read command, and this IC at data 
+output of read command) at the transmitter (sending) side releases the bus after output of 8bit data. 
+・The device (this IC at slave address input of write command, read command, and μ-COM at data ou tput of read 
+command) at the receiver (receiving) side sets SDA 'LOW' during 9 clock cycles, and outputs acknowledge signal (ACK 
+signal) showing that it has received the 8bit data. 
+・This IC, after recognizing start condition and slave address (8bit), outputs acknowledge signal (ACK signal) 'LOW'. 
+・Each write action outputs acknowledge signal (ACK signal) 'LOW', at receiving 8bit data (word address and write data). 
+・Each read action outputs 8bit data (read data), and detects acknowledge signal (ACK signal) 'LOW'. When acknowledge 
+signal (ACK signal) is detected, and stop condition is not sent from the master ( μ-COM) side, this IC continues data 
+output. When acknowledge signal (ACK signal) is not detected, this IC stops data transfer, and recognizes stop cindi tion 
+(stop bit), and ends read action. And this IC gets in status. 
+ 
+○ Device addressing 
+・Output slave address after start condition from master. 
+・The significant 4 bits of slave address are used for recognizing a device type. 
+The device code of this IC is fixed to '1010'. 
+・Next slave addresses (A2 A1 A0 --- device address) are for selecting devices, and plural ones can be used on a same 
+bus according to the number of device addresses. 
+・The most insignificant bit (R/W --- READ / WRITE) of slave address is used for designating write or read action, and is 
+as shown below. 
+ 
+Setting R / W
+――
+ to 0 ------- write (setting 0 to word address setting of random read) 
+Setting R / W
+――
+ to 1 ------- read 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Type Slave address Maximum number of 
+Connected buses 
+BR24G02-3A 1  0  1  0  A2  A1  A0  R/ W
+――
+ 8 
+ 
+8 9 8 9 8 9
+S P
+condition condition
+ACK STOPACKDATA DATAADDRESSSTART R/W ACK
+1-7
+SDA
+SCL
+1-7 1-7
+Figure 35. Data transfer timing 
+
+--- PDF page 15 ---
+ 
+15/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Write Command 
+ 
+○ Write cycle 
+・Arbitrary data is written to EEPROM. When to write only 1 byte, byte write is normally used, and when to write continuous 
+data of 2 bytes or more, simultaneous write is possible by page write cycle. Up to 8 arbitrary bytes can be written. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+・During internal write execution, all input commands are ignored, therefore ACK is not sent back. 
+・Data is written to the address designated by word address (n-th address) 
+・By issuing stop bit after 8bit data input, write to memory cell inside starts. 
+・When internal write is started, command is not accepted for tWR (5ms at maximum). 
+ ・By page write cycle, data up to 8 bytes can be written in bulk. 
+ 
+And when data of the maximum bytes or higher is sent, data from the first byte is overwritten. 
+(Refer to "Internal address increment") 
+ 
+・As for page write cycle of BR24G02 -3A, after the significant 5 bits of word address are designated arbitrarily, by 
+continuing data input of 2 bytes or more, the address of insignificant 3 bits is incremented internally, and data up to 8 
+bytes can be written. 
+ 
+ 
+Figure 36. Byte write cycle 
+Figure 37. Page write cycle 
+ 
+A1 A2 WA 
+7 D7 1 1 0 0 
+W 
+R 
+I 
+T 
+E 
+S 
+T 
+A 
+R 
+T 
+R 
+/ 
+W 
+S 
+T 
+O 
+P 
+WORD 
+ADDRESS DATA SLAVE 
+ADDRESS 
+A0 WA 
+0 D0 
+A 
+C 
+K 
+SDA 
+LINE 
+A 
+C 
+K 
+A 
+C 
+K 
+ 
+A1 A2 WA 
+7 D7 1 1 0 0 
+W 
+R 
+I 
+T 
+E 
+S 
+T 
+A 
+R 
+T 
+R 
+/ 
+W 
+S 
+T 
+O 
+P 
+WORD 
+ADDRESS(n) DATA(n) SLAVE 
+ADDRESS 
+A0 WA 
+0 D0 
+A 
+C 
+K 
+SDA 
+LINE 
+A 
+C 
+K 
+A 
+C 
+K 
+DATA(n+7) 
+D0 
+A 
+C 
+K 
+
+--- PDF page 16 ---
+ 
+16/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+○ Notes on write cycle continuous input 
+ 
+The maximum page numbers of BR24G02-3A are 8 bytes. Any bytes below these can be written. 
+ 
+1 page=8bytes, but the page write cycle time is 5ms at maximum for 8byte bulk write. 
+It does not stand 5ms at maximum × 8byte=40ms(Max.) 
+ 
+○ Internal address increment 
+Page write mode 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+○ Write protect (WP) terminal 
+・Write protect (WP) function 
+When WP terminal is set Vcc (H level), data rewrite of all addresses is prohibited. When it is set GND (L level), data 
+rewrite of all address is enabled. Be sure to connect this terminal to Vcc or GND, or control it to H level or L level. Do no t 
+use it open. 
+In the case of use it as an ROM, it is recommended to connect it to pull up or Vcc. 
+At extremely low voltage at power ON / OFF, by setting the WP terminal 'H', mistake write can be prevented. 
+ 
+ 
+ 
+ 
+For example, when it is started from address 06h, 
+therefore, increment is made as below, 
+06h→07h→00h→01h･･･ which please note. 
+ 
+※06h･･･06 in hexadecimal, therefore, 00000110 becomes a 
+binary number. 
+ 
+WA7 WA4 WA3 WA2 WA1 WA0
+0 0 0 0 0 0
+0 0 0 0 0 1
+0 0 0 0 1 0
+0 0 0 1 1 0
+0 0 0 1 1 1
+0 0 0 0 0 0
+Increment
+06h
+Significant bit is fixed.
+No digit up
+
+--- PDF page 17 ---
+ 
+17/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Read Command 
+ 
+○ Read cycle 
+Data of EEPROM is read. In read cycle, there are random read cycle and current read cycle. 
+Random read cycle is a command to read data by designating address, and is used generally. 
+Current read cycle is a command to read data of internal address register without designating address, and is used when 
+to verify just after write cycle. In both the read cycles, sequential read cycle is available, and the next address data can 
+be read in succession. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+・In random read cycle, data of designated word address can be read. 
+・When the command just before current read cycle is random read cycle, current read cycle (each including sequential 
+read cycle), data of incremented last read address (n)-th address, i.e., data of the (n+1)-th address is output. 
+・When ACK signal 'LOW' after D0 is detected, and stop condition is not sent from master ( μ-COM) side, the next address 
+data can be read in succession. 
+・Read cycle is ended by stop condition where 'H' is input to AC K signal after D0 and SDA signal is started at SCL signal 
+'H' . 
+・When 'H' is not input to ACK signal after D0, sequential read gets in, and the next data is output. 
+Therefore, read command cycle cannot be ended. When to end read command cycle, be sure input stop condition to input 
+'H' to ACK signal after D0, and to start SDA at SCL signal 'H'. 
+・Sequential read is ended by stop condition where 'H' is input to ACK signal after arbitrary D0 and SDA is started at SCL 
+signal 'H'. 
+ 
+ 
+Figure 38. Random read cycle 
+Figure 40. Sequential read cycle (in the case of current read cycle) 
+ W 
+R 
+I 
+T 
+E 
+S 
+T 
+A 
+R 
+T 
+R 
+/ 
+W 
+A 
+C 
+K 
+S 
+T 
+O 
+P 
+WORD 
+ADDRESS(n) 
+SDA 
+LINE 
+A 
+C 
+K 
+A 
+C 
+K 
+DATA(n) 
+A 
+C 
+K 
+SLAVE 
+ADDRESS 
+1
+0 
+0 0 1 A0 A1 A2 WA 
+7 A0 D0 
+SLAVE 
+ADDRESS 
+1
+0 
+0 0 1
+0 
+A1 A2 
+S 
+T 
+A 
+R 
+T 
+D7 
+R 
+/ 
+W 
+R 
+E 
+A 
+D 
+WA 
+0 
+ S 
+T 
+A 
+R 
+T 
+S 
+T 
+O 
+P 
+SDA 
+LINE 
+A 
+C 
+K 
+DATA(n) 
+A 
+C 
+K 
+SLAVE 
+ADDRESS 
+1
+0 
+0 0 1 A0 A1 A2 D0 D7 
+R 
+/ 
+W 
+R 
+E 
+A 
+D 
+Figure 39. Current read cycle 
+ R 
+E 
+A 
+D 
+S 
+T 
+A 
+R 
+T 
+R 
+/ 
+W 
+A 
+C 
+K 
+S 
+T 
+O 
+P DATA(n) 
+SDA 
+LINE 
+A 
+C 
+K 
+A 
+C 
+K 
+DATA(n+x) 
+A 
+C 
+K 
+SLAVE 
+ADDRESS 
+1
+0 
+0 0 1
+0 
+A0 A1 A2 D0 D7 D0 D7 
+
+--- PDF page 18 ---
+ 
+18/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Software Reset 
+ 
+Software reset is executed when to avoid malfunction after power on, and to reset during command input. Software reset 
+has several kinds, and 3 kinds of them are shown in the figure below. (Refer to Figure 41-(a), Figure 41-(b), Figure 41-(c)) 
+In dummy clock input are a, release the SDA bus ( 'H' by pull up). In dummy clock area, ACK output and read data '0' (both 
+'L' level) may be output from EEPROM, therefore, if 'H' is input forcibly, output may conflict and over current may flow, 
+leading to instantaneous power failure of system power source or influence upon devices. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+●Acknowledge Polling 
+  
+During internal write execution, all input commands are ignored, therefore ACK is not sent back. During internal automatic 
+write execution after write cycle input, next command (slave address) is sent, and if the first ACK signal sends back 'L', then 
+it means end of write action, while if it sends back 'H', it means now in writing. By use of acknowledge polling, next 
+command can be executed without waiting for tWR = 5ms. 
+ When to write continuously, R/W = 0, when to carry out current read cycle after write, slave address R/W = 1 is sent, and if 
+ACK signal sends back 'L', then execute word address input and data output and so forth. 
+ 
+ 
+ 
+ 
+ 
+Figure 41-(a). Dummy clock x 14 + START + START + command input 
+※Start command from START input. 
+Figure 41-(b). START + dummy clock x 9 + START + command input 
+1 2 13 14 SCL 
+Dummy clock x 14 Start x 2 
+Normal command 
+Normal command SDA 
+SCL 2 1 8 9 
+Dummy clock x 9 Start 
+ Start 
+Normal command 
+Normal command SDA 
+Figure 41-(c). START x 9 + command input 
+Start x 9 
+SCL 1 2 3 8 9 7 Normal command 
+Normal command SDA 
+Slave 
+address 
+Word 
+address 
+ 
+… 
+… 
+S 
+T 
+A 
+R 
+T 
+ 
+First write command 
+A 
+C 
+K 
+H 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+Slave 
+address 
+Slave 
+address 
+Slave 
+address Data 
+Write command 
+During internal write,  
+ACK = HIGH is sent back. 
+After completion of internal write, 
+ACK=LOW is sent back, so input 
+next word address and data in 
+succession. 
+tWR 
+tWR 
+Second write command 
+S 
+T 
+A 
+R 
+T 
+ 
+S 
+T 
+A 
+R 
+T 
+ 
+S 
+T 
+A 
+R 
+T 
+ 
+S 
+T 
+A 
+R 
+T 
+ 
+S 
+T 
+O 
+P 
+ 
+ 
+S 
+T 
+O 
+P 
+ 
+ 
+A 
+C 
+K 
+H 
+ 
+A 
+C 
+K 
+H 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+Figure 42. Case to continuously write by acknowledge polling 
+
+--- PDF page 19 ---
+ 
+19/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●WP Valid Timing (Write Cancel) 
+ 
+WP is usually fixed to 'H' or 'L', but when WP is used to cancel write cycle and so forth, pay attention to the following WP 
+valid timing. During write cycle execution, in cancel valid  area, by setting WP='H', write cycle can be cancelled. In both byte 
+write cycle and page write cycle, the area from the first start condition of command to the rise of clock to taken in D0 of 
+data(in page write cycle, the first byte data) is cancel invalid area. 
+WP input in this area becomes d on't care. The area from the rise of SCL to take in D0 to input the stop condition is cancel 
+valid area. And, after execution of forced end by WP , standby status gets in.  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+●Command Cancel by Start Condition and Stop Condition 
+ 
+During command input, by continuously inputting start condition and stop condition, command can be cancelled. (Figure 44) 
+However, in ACK output a rea and during data read, SDA bus may output 'L', and in this case, start condition and stop 
+condition cannot be input, so reset is not available. Therefore, execute software reset. And when command is cancelled by 
+start, stop condition, during random read  cycle, sequential read cycle, or current read cycle, internal setting address is not 
+determined, therefore, it is not possible to carry out current read cycle in succession. When to carry out read cycle in 
+succession, carry out random read cycle. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ ・Rise of D0 taken clock  
+ 
+SCL 
+D0 ACK 
+Enlarged view 
+ 
+SCL 
+SDA ACK D0 
+・Rise of SDA 
+SDA 
+WP 
+  WP cancel invalid area WP cancel valid area 
+Data is not written. 
+Figure 43. WP valid timing 
+Slave 
+addre ss 
+D7 D6 D5 D4 D3 D2 D1 D0 Data 
+tWR 
+SDA D1 
+S 
+T 
+A 
+R 
+T 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+A 
+C 
+K 
+L 
+ 
+ 
+S 
+T 
+O 
+P 
+ 
+Wo rd 
+addre ss 
+Figure 44. Case of cancel by start, stop condition during slave address input 
+SCL 
+SDA 1 1 0 0 
+Start condition Stop condition 
+Enlarged view 
+  WP cancel invalid area 
+
+--- PDF page 20 ---
+ 
+20/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●I/O Peripheral Circuit 
+ 
+○ Pull up resistance of SDA terminal 
+SDA is NMOS open drain, so requires pull up resistance. As for this resistance value (R PU), select an appropriate value to 
+this resistance value from microc ontroller VIL, I L, and VOL-IOL characteristics of this IC. If RPU is large, action frequency is 
+limited. The smaller the RPU, the larger the supply current. 
+○ Maximum value of RPU 
+The maximum value of RPU is determined by the following factors. 
+①SDA rise time to be determined by the capacitance (CBUS) of bus line of RPU and SDA should be tR or below. 
+And AC timing should be satisfied even when SDA rise time is late. 
+②The bus electric potential  A  to be determined by input leak total (I L) of device connect ed to bus at output of 'H' to 
+SDA bus and R PU should sufficiently secure the input 'H' level (V IH) of microcontroller and EEPROM including 
+recommended noise margin 0.2Vcc. 
+         VCC-ILRPU-0.2 VCC ≥ VIH 
+∴ RPU ≦ 0.8VCC－VIH
+IL
+  
+Ex.) VCC =3V  IL=10μA  VIH=0.7  VCC  
+          from② 
+          
+≦ 30 ［kΩ］
+RPU ≦ 0.8×3－0.7×3
+10×10-6  
+ 
+ 
+ 
+○ Minimum value of RPU 
+The minimum value of RPU is determined by the following factors. 
+When IC outputs LOW, it should be satisfied that VOLMAX=0.4V and IOLMAX=3mA. 
+          ②VOLMAX=0.4V should secure the input 'L' level (V IL) of microcontroller and EEPROM including recommended 
+noise margin 0.1Vcc. 
+         VOLMAX ≤ VIL-0.1 VCC 
+                Ex.) VCC =3V, VOL=0.4V, IOL=3mA, microcontroller, EEPROM VIL=0.3Vcc 
+                  And        VOL=0.4 [V] 
+                              VIL=0.3×3 
+                                 =0.9 [V] 
+                    Therefore, the condition ② is satisfied. 
+○ Pull up resistance of SCL terminal 
+When SCL control is made at CMOS output port, there is no need, but in the case there is timing where SCL becomes 
+'Hi-Z', add a pull up resistance. As for the pull up resistance, one of several kΩ to several ten kΩ is recommended in 
+consideration of drive performance of output port of microcontroller. 
+ 
+IOL
+RPU ≧ VCC－VOL
+IOL∴
+VCC－VOL
+RPU ≦
+≧ 867 ［Ω］
+RPU ≧ 3－0.4
+3×10 -3
+from① 
+Microcontroller 
+RPU 
+A SDA terminal 
+IL IL 
+Bus line  
+capacity 
+CBUS 
+Figure 45. I/O circuit diagram 
+EEPROM 
+
+--- PDF page 21 ---
+ 
+21/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Cautions on Microcontroller Connection 
+○ RS 
+In I2C BUS, it is recommended that SDA port is of open drain input/output. However, when to use CMOS input / output of 
+tri state to SDA port, insert a series resistance Rs between the pull up resistance Rpu and the SDA terminal of EEPROM. 
+This is controls over current that occurs when PMOS of the microcontroller and NMOS of EEPROM are turned ON 
+simultaneously. Rs also plays the role of protection of SDA terminal against surge . Therefore, even when SDA port is 
+open drain input/output, Rs can be used. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+○ Maximum value of Rs 
+The maximum value of Rs is determined by the following relations. 
+①SDA rise time to be determined by the capacity (CBUS) of bus line of Rpu and SDA should be tR or below. 
+ And AC timing should be satisfied even when SDA rise time is late. 
+②The bus electric potential A to be determined by Rpu and Rs the moment when EEPROM outputs 'L' to SDA bus 
+sufficiently secure the input 'L' level (VIL) of microcontroller including recommended noise margin 0.1Vcc. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+○ Minimum value of Rs 
+The minimum value of Rs is determined by over current at bus collision. When over current flows, noises in power source 
+line, and instantaneous power failure of power source may occur. When allowable over current is defined as I, the 
+following relation must be satisfied. Determine the allowable current in consideration of impedance of power source line 
+in set and so forth. Set the over current to EEPROM 10mA or below. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+RPU 
+Microcontroller 
+RS 
+EEPROM 
+ 
+Figure 46. I/O circuit diagram Figure 47. Input / output collision timing 
+ACK 
+'L' output of EEPROM 
+'H' output of microcontroller 
+Over current flows to SDA line by 'H' 
+output of microcontroller and 'L' 
+output of EEPROM. 
+SCL 
+SDA 
+ 
+Microcontroller EEPROM 
+'L'output 
+R S 
+R PU 
+'H' output 
+Over current I 
+Figure 49. I/O circuit diagram 
+≦ 1.67［kΩ］
+≦ 0.3×3－0.4－0.1×3 × 20×103
+1.1×3－0.3×3RS
+× RPU
+1.1VCC-VIL
+Ex.）VCC=3V　VIL=0.3VCC　VOL=0.4V　RPU=20kΩ
+∴ RS ≦ VIL－VOL－0.1VCC
+(VCC－VOL)×RS + VOL+0.1VCC≦VILRPU+RS
+VCC
+RS
+VCC
+I
+≧ 300［Ω］
+∴
+Ex.) VCC=3V, I=10mA
+RS ≧ 3
+10×10-3
+≦ I
+RS ≧
+ 
+RPU 
+Micro controller 
+RS 
+EEPROM 
+IOL 
+A 
+Bus line  
+capacity 
+CBUS 
+VOL 
+VCC 
+VIL 
+Figure 48. I/O Circuit Diagram 
+ 
+
+--- PDF page 22 ---
+ 
+22/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●I/O Equivalence Circuit 
+ 
+○Input (A2,A1,A0,SCL, WP)                                 ○Input / output (SDA) 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+●Power-up / Down Conditions                                                    
+At power on, in IC internal circuit and set, Vcc rises through unstable low voltage area, and IC inside is not completely reset, 
+and malfunction may occur. To prevent this, functions of POR circuit and LVCC circuit are equipped. To assure the action, 
+observe the following conditions at power on. 
+ 
+1. Set SDA = 'H' and SCL ='L' or 'H’ 
+2. Start power source so as to satisfy the recommended conditions of tR, tOFF, and Vbot for operating POR circuit. 
+      
+ 
+tOFF 
+tR 
+Vbot 
+0 
+VCC  
+ 
+ 
+3. Set SDA and SCL so as not to become 'Hi-Z'. 
+When the above conditions 1 and 2 cannot be observed, take the following countermeasures.  
+a) In the case when the above condition 1 cannot be observed. When SDA becomes 'L' at power on . 
+      →Control SCL and SDA as shown below, to make SCL and SDA, 'H' and 'H'. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+b) In the case when the above condition 2 cannot be observed. 
+      →After power source becomes stable, execute software reset(P18). 
+c) In the case when the above conditions 1 and 2 cannot be observed. 
+      →Carry out a), and then carry out b). 
+ 
+ 
+●Low Voltage Malfunction Prevention Function 
+LVCC circuit prevents data rewrite action at low power, and prevents wrong write. At LVCC voltage (Typ. =1.2V) or below, it 
+prevent data rewrite. 
+ 
+ 
+●Noise Countermeasures 
+  ○ Bypass capacitor 
+When noise or surge gets in the power source line, malfunction may occur, therefore, for removing these, it is recommended 
+to attach a by pass capacitor (0.1μF) between IC Vcc and GND. At that moment, attach it as close to IC as possible.  
+And, it is also recommended to attach a bypass capacitor between board Vcc and GND. 
+Recommended conditions of tR, tOFF,Vbot 
+tR tOFF Vbot 
+10ms or below 10ms or larger 0.3V or below 
+100ms or below 10ms or larger 0.2V or below 
+Figure 52. Rise waveform diagram 
+ 
+tLOW 
+tSU:DAT tDH 
+After Vcc becomes stable 
+SCL 
+VCC 
+SDA 
+tSU:DAT 
+After Vcc becomes stable 
+Figure 50. Input pin circuit diagram Figure 51. Input / output pin circuit diagram 
+Figure 53. When SCL= 'H' and SDA= 'L' Figure 54. When SCL='L' and SDA='L' 
+
+--- PDF page 23 ---
+ 
+23/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Operational Notes 
+(1) Described numeric values and data are design representative values, and the values are not guaranteed. 
+(2) We believe that application circuit examples are recommendable, however, in actual use, confirm characteristics further 
+sufficiently. In the case of use by changing the fixed number of external parts, make  your decision with sufficient margin in 
+consideration of static characteristics and transition characteristics and fluctuations of external parts and our LSI. 
+(3) Absolute maximum ratings 
+If the absolute maximum ratings such as impressed voltage and actio n temperature range and so forth are exceeded, LSI 
+may be destructed. Do not impress voltage and temperature exceeding the absolute maximum ratings. In the case of fear 
+exceeding the absolute maximum ratings, take physical safety countermeasures such as fu ses, and see to it that conditions 
+exceeding the absolute maximum ratings should not be impressed to LSI. 
+(4) GND electric potential 
+Set the voltage of GND terminal lowest at any action condition. Make sure that each terminal voltage is lower than that of 
+GND terminal. 
+(5) Terminal design 
+In consideration of permissible loss in actual use condition, carry out heat design with sufficient margin. 
+(6) Terminal to terminal shortcircuit and wrong packaging 
+When to package LSI onto a board, pay sufficient attenti on to LSI direction and displacement. Wrong packaging may 
+destruct LSI. And in the case of shortcircuit between LSI terminals and terminals and power source, terminal and GND owing 
+to foreign matter, LSI may be destructed. 
+(7) Use in a strong electromagnetic field may cause malfunction, therefore, evaluate design sufficiently. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- PDF page 24 ---
+ 
+24/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Part Numbering 
+B R 2 4 G 0 2 x x x - 3 A  x x x x 
+ 
+ 
+ 
+ 
+  
+ 
+ 
+ 
+ 
+ 
+  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Lineup 
+Capacity 
+Package 
+Orderable Part Number Remark 
+Type Quantity 
+2K 
+DIP-T8*1 Tube of 2000 BR24G02 -3A Not Halogen free 100% Sn 
+SOP8 Reel of 2500 BR24G02F -3AGTE2 Halogen free 100% Sn 
+SOP-J8 BR24G02FJ -3AGTE2 Halogen free 100% Sn 
+TSSOP-B8 Reel of 3000 BR24G02FVT -3AGE2 Halogen free 100% Sn 
+TSSOP-B8J Reel of 2500 BR24G02FVJ -3AGTE2 Halogen free 100% Sn 
+MSOP8 Reel of 3000 BR24G02FVM -3AGTTR Halogen free 100% Sn 
+VSON008X2030 Reel of 4000 BR24G02NUX -3ATTR Halogen free 100% Sn 
+*1 Not Recommended for New Designs. 
+BUS type 
+24 : I2C 
+Operating temperature/  
+Operating Voltage 
+-40°C to +85°C / 1.6V to 5.5V 
+Process code 
+Packaging and forming specification 
+E2 : Embossed tape and reel 
+   (SOP8, SOP-J8, TSSOP-B8, TSSOP-B8J) 
+TR : Embossed tape and reel 
+   (MSOP8, VSON008X2030) 
+None : Tube 
+   (DIP-T8*1) 
+*1 Not Recommended for New Designs. 
+Revision 
+Package 
+Blank 
+FJ          
+FVJ    
+NUX 
+: DIP-T8*1 
+: SOP-J8         
+: TSSOP-B8J      
+: VSON008X2030 
+F 
+FVT 
+FVM 
+: SOP8 
+: TSSOP-B8 
+: MSOP8 
+Capacity 
+02=2K 
+G : Halogen free 
+Blank : Not Halogen free  
+As an exception, VSON008X2030 package will be Halogen free with “Blank” 
+T : 100% Sn 
+Blank : 100% Sn 
+
+--- PDF page 25 ---
+ 
+25/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Physical Dimensions Tape and Reel Information  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+--- PDF page 26 ---
+ 
+26/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name SOP8 
+ 
+(UNIT: mm) 
+PKG: SOP8 
+Drawing No.: EX112-5001-1 
+(Max 5.35 (include.BURR)) 
+
+
+--- PDF page 27 ---
+ 
+27/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name SOP-J8 
+ 
+
+
+--- PDF page 28 ---
+ 
+28/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name TSSOP-B8 
+ 
+
+
+--- PDF page 29 ---
+ 
+29/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name TSSOP-B8J 
+ 
+
+
+--- PDF page 30 ---
+ 
+30/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name MSOP8 
+ 
+
+
+--- PDF page 31 ---
+ 
+31/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+Physical Dimension and Packing Information 
+Package Name VSON008X2030 
+ 
+
+
+--- PDF page 32 ---
+ 
+32/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Marking Diagrams (TOP VIEW) 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+SOP8(TOP VIEW) 
+4G 02 A 
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+SOP-J8(TOP VIEW) 
+4G 02 A 
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+TSSOP-B8J(TOP VIEW) 
+2 A3  
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+4 G 0  
+VSON008X2030 (TOP VIEW) 
+2 A3  
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+4G 0 
+  
+  
+  
+  
+MSOP8(TOP VIEW) 
+4G B 
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+A  
+TSSOP-B8(TOP VIEW) 
+4 G 0 2 A 
+Part Number Marking 
+LOT Number 
+1PIN MARK 
+ 
+DIP-T8 (TOP VIEW) 
+B R 2 4 G02 A 
+Part Number Marking 
+LOT Number 
+ 
+
+
+--- PDF page 33 ---
+ 
+33/33 
+BR24G02-3A 
+© 2014 ROHM Co., Ltd. All rights reserved. 
+www.rohm.com 
+ TSZ22111 • 15 • 001 
+TSZ02201-0R2R0G100570-1-2 
+11.Jun.2019 Rev.004 
+ 
+●Revision History 
+Date Revision Changes 
+26.Dec.2012 001 New Release 
+31.May.2013 002 
+P1 Change format of package line-up table and change title. 
+P .2 Add VESD in Absolute Maximum Ratings 
+P .5 Add directions in Pin Descriptions 
+27.Aug.2014 003 P .3 Modified tSU:STA  (0.25 ->0.20) 
+P .24 Update Part Numbering. Add Lineup Table 
+11.Jun.2019 004 Added watermarks and words for Not Recommended New Designs category product. 
+Changed a format of “Physical Dimension and Packing Information”. 
+ 
+
+--- PDF page 34 ---
+  Notice-PGA-E Rev.004 
+© 2015 ROHM Co., Ltd. All rights reserved. 
+Notice 
+Precaution on using ROHM Products 
+1. Our Products are designed and manufactured for application in ordinary electronic equipment (such as AV equipment,
+OA equipment, telecommunication equipment, home electronic appliances, amusement equipment, etc.).  If you
+intend to use our Products in devices requiring extremely high reliability (such as medical equipment (Note 1), transport
+equipment, traffic equipment, aircraft/spacecraft, nuclear power controllers, fuel controllers, car equipment including car
+accessories, safety devices, etc.) and whose malfunction or failure may cause loss of human life, bodily injury or
+serious damage to property ( “Specific Applications”), please consult with the ROHM sales representative in advance.
+Unless otherwise agreed in writing by ROHM in advance, ROHM shall not be in any way responsible or liable for any
+damages, expenses or losses incurred by you or third parties arising from the use of any ROHM’s Products for Specific
+Applications.
+(Note1) Medical Equipment Classification of the Specific Applications 
+JAPAN USA EU CHINA 
+CLASSⅢ CLASSⅢ CLASSⅡb CLASSⅢ CLASSⅣ CLASSⅢ 
+2. ROHM designs and manufactures its Products subject to strict quality control system. However, semiconductor
+products can fail or malfunction at a certain rate. Please be sure to implement, at your own responsibilities, adequate
+safety measures including but not limited to fail-safe design against the physical injury, damage to any property, which
+a failure or malfunction of our Products may cause. The following are examples of safety measures:
+[a] Installation of protection circuits or other protective devices to improve system safety 
+[b] Installation of redundant circuits to reduce the impact of single or multiple circuit failure 
+3. Our Products are designed and manufactured for use under standard conditions and not under any special or
+extraordinary environments or conditions, as exemplified below. Accordingly, ROHM shall not be in any way
+responsible or liable for any damages, expenses or losses arising from the use of any ROHM’s Products under any
+special or extraordinary environments or conditions.  If you intend to use our Products under any special or
+extraordinary environments or conditions (as exemplified below), your independent verification and confirmation of
+product performance, reliability, etc, prior to use, must be necessary:
+[a] Use of our Products in any types of liquid, including water, oils, chemicals, and organic solvents 
+[b] Use of our Products outdoors or in places where the Products are exposed to direct sunlight or dust 
+[c] Use of our Products in places where the Products are exposed to sea wind or corrosive gases, including Cl2, 
+H2S, NH3, SO2, and NO2 
+[d] Use of our Products in places where the Products are exposed to static electricity or electromagnetic waves 
+[e] Use of our Products in proximity to heat-producing components, plastic cords, or other flammable items 
+[f] Sealing or coating our Products with resin or other coating materials 
+[g] Use of our Products without cleaning residue of flux (Exclude cases where no-clean type fluxes is used. 
+However, recommend sufficiently about the residue.) ; or Washing our Products by using water or water-soluble 
+cleaning agents for cleaning residue after soldering 
+[h] Use of the Products in places subject to dew condensation 
+4. The Products are not subject to radiation-proof design.
+5. Please verify and confirm characteristics of the final or mounted products in using the Products.
+6. In particular, if a transient load (a large amount of load applied in a short period of time, such as pulse , is applied,  
+confirmation of performance characteristics after on-board mounting is strongly recommended. Avoid applying power 
+exceeding normal rated power; exceeding the power rating under steady-state loading condition may negatively affect 
+product performance and reliability.
+7. De-rate Power Dissipation depending on ambient temperature. When used in sealed area, confirm that it is the use in
+the range that does not exceed the maximum junction temperature.
+8. Confirm that operation temperature is within the specified range described in the product specification.
+9. ROHM shall not be in any way responsible or liable for failure induced under deviant condition from what is defined in
+this document.
+Precaution for Mounting / Circuit board design 
+1. When a highly active halogenous (chlorine, bromine, etc.) flux is used, the residue of flux may negatively affect product
+performance and reliability.
+2. In principle, the reflow soldering method must be used on a surface-mount products, the flow soldering method must
+be used on a through hole mount products. I f the flow soldering method is preferred on a surface-mount products ,
+please consult with the ROHM representative in advance.
+For details, please refer to ROHM Mounting specification 
+
+--- PDF page 35 ---
+ 
+  Notice-PGA-E Rev.004 
+© 2015 ROHM Co., Ltd. All rights reserved. 
+Precautions Regarding Application Examples and External Circuits 
+1. If change is made to the constant of an external circuit, please allow a sufficient margin considering variations of the 
+characteristics of the Products and external components, including transient characteristics, as well as static 
+characteristics. 
+ 
+2. You agree that application notes, reference designs, and associated data and information contained in this document 
+are presented only as guidance for Products use.  Therefore, in case you use such information, you are solely 
+responsible for it and you must exercise your own independent verification and judgment in the use of such information 
+contained in this document.  ROHM shall not be in any way responsible or liable for any damages, expenses or losses 
+incurred by you or third parties arising from the use of such information. 
+ 
+Precaution for Electrostatic 
+This Product is electrostatic sensitive product, which may be damaged due to electrostatic discharge. Please take proper 
+caution in your manufacturing process and storage so that voltage exceeding the Products maximum rating will not be 
+applied to Products. Please take special care under dry condition (e.g. Grounding of human body / equipment / solder iron, 
+isolation from charged objects, setting of Ionizer, friction prevention and temperature / humidity control). 
+ 
+Precaution for Storage / Transportation 
+1. Product performance and soldered connections may deteriorate if the Products are stored in the places where: 
+[a] the Products are exposed to sea winds or corrosive gases, including Cl 2, H2S, NH3, SO2, and NO2 
+[b] the temperature or humidity exceeds those recommended by ROHM 
+[c] the Products are exposed to direct sunshine or condensati on 
+[d] the Products are exposed to high Electrostatic 
+ 
+2. Even under ROHM recommended storage condition, solderability of products out of recommended storage time period 
+may be degraded. It is strongly recommended to confirm solderability before using Products of which storage time is 
+exceeding the recommended storage time period. 
+ 
+3.  Store / transport cartons in the correct direction, which is indicated on a carton with a symbol. Otherwise bent leads 
+may occur due to excessive stress applied when dropping of a carton. 
+ 
+4.  Use Products within the specified time after opening a humidity barrier bag. Baking is required before using Products of 
+which storage time is exceeding the recommended storage time period. 
+ 
+Precaution for Product Label 
+A two-dimensional barcode printed on ROHM Products label is for ROHM’s internal use only. 
+ 
+Precaution for Disposition 
+When disposing Products please dispose them properly using an authorized industry waste company.
+ 
+ 
+Precaution for Foreign Exchange and Foreign Trade act 
+Since concerned goods might be fallen under listed items of export control prescribed by Foreign exchange and Foreign 
+trade act, please consult with ROHM in case of export. 
+ 
+Precaution Regarding Intellectual Property Rights 
+1. All information and data including but not limited to application example contained in this document is for reference 
+only. ROHM does not warrant that foregoing information or data will not infringe any intellectual property rights or any 
+other rights of any third party regarding such information or data. 
+2. ROHM shall not have any obligations where the claims, actions or demands arising from the combination of the 
+Products with other articles such as components, circuits, systems or external equipment (including software). 
+3. No license, expressly or implied, is granted hereby under any intellectual property rights or other rights of ROHM or any 
+third parties with respect to the Products or the information contained in this document. Provided, however, that ROHM 
+will not assert its intellectual property rights or other rights against you or your customers to the extent necessary to 
+manufacture or sell products containing the Products, subject to the terms and conditions herein. 
+Other Precaution 
+1. This document may not be reprinted or reproduced, in whole or in part, without prior written consent of ROHM.  
+2. The Products may not be disassembled, converted, modified, reproduced or otherwise changed without prior written 
+consent of ROHM. 
+3. In no event shall you use in any way whatsoever the Products and the related technical information contained in the 
+Products or this document  for any military purposes, including but not limited to,  the development of mass-destruction 
+weapons. 
+4. The proper name s of companies or products described in this document are trademarks or registered trademarks of 
+ROHM, its affiliated companies or third parties. 
+ 
+
+--- PDF page 36 ---
+DatasheetDatasheet 
+  Notice – WE Rev.001
+© 2015 ROHM Co., Ltd. All rights reserved. 
+General Precaution 
+1. Before you use our Products, you are requested to caref ully read this document and fully understand its contents. 
+ROHM shall not be in any way responsible or liable for failure, malfunction or accident arising from the use of an y 
+ROHM’s Products against warning, caution or note contained in this document.  
+  
+2. All information contained in this documen t is current as of the issuing date and subject to change without any prior 
+notice. Before purchasing or using ROHM’s Products, please confirm the latest information with a ROHM sales  
+representative. 
+ 
+3. The information contained in this document is provided on an “as is” basis and ROHM does not warrant that all 
+information contained in this  document is accurate and/or error-free. ROHM shall not be in any way responsible or 
+liable for any damages, expenses or losses incurred by you or third parties resulting from inaccura cy or errors of or  
+concerning such information. 
+ 
+ 

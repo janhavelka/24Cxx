@@ -1,25 +1,40 @@
-# TMP1x2 repository conventions
+# EEPROM24Cxx repository conventions
 
-- Keep public headers under `include/TMP1x2/` and implementation under `src/`.
-  The core is standard C++17: no Arduino, ESP-IDF, logging, bus ownership,
-  platform delays, dynamic allocation or hidden retries.
-- Follow the documented callback, Status, typed-enum and passive-health contracts.
-  Driver health counts physical tracked transport attempts; configuration trust
-  and failed preconditions are separate. Probes and raw APIs bypass health.
-- Applications own I2C initialization, pins, serialization, clocks and recovery.
-  Callbacks are synchronous, bounded by their timeout, and must not re-enter.
-  `end()` is bus-silent; `shutdown()` is the explicit fallible device operation.
-- Preserve configuration-dirty and pending format-refresh evidence after partial
-  writes. TI's EM transition requires settling in the old format and a completed
-  new-format conversion. The TEMP format marker alone is insufficient.
-- Use `library.json` as the version source and regenerate with
-  `python scripts/generate_version.py sync`; do not hand-edit `Version.h`.
-- Use the existing VS Code-managed PlatformIO through `scripts/pio.cmd` on Windows.
+- This repository implements 24Cxx I2C EEPROMs, defaulting to the exact Zetta
+  ZD24C02B-MAGMT geometry. The former TMP1x2 implementation is Git history only;
+  its vendor references are preserved under `docs/archive/`.
+- Public headers belong in `include/EEPROM24Cxx/`, implementation in `src/`.
+  The C++17 core has no Arduino, ESP-IDF, logging, allocation, tasks, bus handles,
+  platform delays, pin initialization or internal bus ownership.
+- Follow MB85RC's typed terminal transport and write-effect evidence conventions,
+  structured Status, typed enums, passive four-state health and memory vocabulary.
+  Application callbacks own serialization, timeouts, pins, clock and recovery;
+  callbacks must not retain borrowed buffers, retry secretly or re-enter.
+- Bind, operation admission, cancellation, result consumption and teardown are
+  bus-silent. Owner-driven poll performs bounded transfers. Compatibility probe,
+  begin and recover must clearly document their synchronous transfer behavior.
+- EEPROM writes must split at physical page, address-bank and transport limits.
+  Do not wrap ranges, guess capacity by writing, or infer identity from an ACK.
+  Address-pin meanings, page sizes and upper bank bits vary by manufacturer.
+- STOP starts a write cycle. Preserve its wait barrier through failures,
+  cancellation and teardown. Never automatically replay an ambiguous write.
+  ACK/elapsed write time does not prove contents changed: WP may suppress writes.
+  Distinguish accepted bytes, completed work and readback-verified bytes.
+- Expected address NACKs during a known ACK-poll window are busy observations,
+  not transport-health failures. Generic NACKs and ordinary access failures must
+  not be silently reclassified. Probes bypass tracked health.
+- No fictitious register map, chip ID, reset, erase or security-lock commands.
+  Raw main-array byte addressing is the common protocol; vendor extras need an
+  explicitly documented implementation and must never run implicitly.
+- Examples share a framework-neutral CLI with the sibling help layout, ANSI
+  colors, strict parsers and diagnostics. Startup and ordinary diagnostics never
+  program EEPROM. Explicit write/fill commands are the mutation paths.
+- Use `library.json` as version source; regenerate with
+  `python scripts/generate_version.py sync`, never edit Version.h manually.
+- On Windows use `scripts/pio.cmd`, the existing VS Code-managed PlatformIO.
   Do not install another PlatformIO Core.
-- Arduino and native ESP-IDF use the shared framework-neutral example CLI. Keep
-  its help layout, ANSI colors, command parsing and diagnostic semantics aligned.
-- Run relevant native tests and framework-boundary checks after changes. Build
-  ESP32-S2/S3 for public-header or adapter changes. Do not equate SDK-header
-  compilation, mocks or CI configuration with a native IDF link or hardware test.
-- TI reference artifacts retain their own licenses. Keep source URLs and hashes
-  when changing the archive; reference code is not part of the library build.
+- Run native protocol/fault/CLI tests, framework-boundary checks and ESP32-S2/S3
+  Arduino/native-IDF builds after relevant changes. Record actual results;
+  mocks, syntax checks and CI configuration are not physical hardware evidence.
+- Vendor reference artifacts retain original licenses. Preserve source URLs,
+  revisions and SHA-256 checksums. Reference source is excluded from builds.

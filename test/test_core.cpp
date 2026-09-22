@@ -1,233 +1,304 @@
-#include "TMP1x2/TMP1x2.h"
-#include <cmath>
+#include "EEPROM24Cxx/EEPROM24Cxx.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <type_traits>
+#include <vector>
 
-namespace t = TMP1x2;
-static_assert(!std::is_copy_constructible<t::TMP1x2>::value, "driver owns state");
+namespace e = EEPROM24Cxx;
+static_assert(!std::is_copy_constructible<e::EEPROM24Cxx>::value, "Driver state must not alias");
 static int failures = 0;
 #define CHECK(expr) do { if (!(expr)) { std::printf("[FAIL] %s:%d %s\n", __func__, __LINE__, #expr); ++failures; return; } } while (false)
 
-// Device double, deliberately implements bus framing and silicon read-only bits.
-// Fault injection can model failure after hardware accepted a write.
+// Silicon model wraps page writes and bank-local read pointers. Crossing those
+// boundaries in the driver therefore corrupts the independently modeled data.
 struct Bus {
-  uint16_t regs[4] = {0x1900, 0x60A0, 0x4B00, 0x5000};
-  unsigned calls = 0;
-  unsigned writes = 0;
-  unsigned failAt = 0;
-  unsigned corruptAt = 0;
-  bool failAll = false;
-  bool acceptFailedWrite = false;
-  bool clockAdvances = true;
-  uint32_t ms = 0;
-  uint32_t shotAt = 0;
-  bool shot = false;
-  uint32_t shutdownAt = 0;
-  bool prematureEmChange = false;
-  uint32_t observedTimeout = 0;
-  t::Err error = t::Err::I2C_TIMEOUT;
-
+  struct Frame { uint8_t slave; uint32_t address; size_t length; char op; };
+  e::Geometry geometry = e::geometryFor(e::DeviceVariant::ZETTA_ZD24C02B);
+  std::vector<uint8_t> memory = std::vector<uint8_t>(524288, 0xFF);
+  std::vector<Frame> frames;
+  uint32_t ms = 0, busyUntil = 0, callbackAdvance = 0, observedTimeout = 0;
+  bool busy = false;
+  unsigned calls = 0, writes = 0, reads = 0, probes = 0, failAt = 0;
+  bool failAll = false, acceptFailedWrite = false, writeProtected = false;
+  e::TransportResult failure = e::TransportResult::Error(e::TransportCode::TIMEOUT, 77);
+  bool ready() { if (busy && (ms - busyUntil) < 0x80000000UL) busy = false; return !busy; }
+  bool failing() const { return failAll || (failAt && failAt == calls); }
+  uint32_t address(uint8_t slave, const uint8_t* tx) const {
+    const uint32_t bank = (slave >> geometry.bankAddressShift) & ((1UL << geometry.bankAddressBits) - 1UL);
+    const uint32_t word = geometry.wordAddressBytes == 1 ? tx[0] : (static_cast<uint32_t>(tx[0]) << 8U) | tx[1];
+    return (bank << (8U * geometry.wordAddressBytes)) | word;
+  }
   static uint32_t clock(void* p) { return static_cast<Bus*>(p)->ms; }
-  static void yield(void* p) { auto& b = *static_cast<Bus*>(p); if (b.clockAdvances) ++b.ms; }
-  t::Status result() const { return t::Status::Error(error, "injected", 731); }
-  bool failed() const { return failAll || (failAt != 0 && calls == failAt); }
-  void store(uint8_t reg, uint16_t value) {
-    if (reg == 1) {
-      // TI-reported behavior: EM marker can change before sample payload.
-      if (((regs[1] ^ value) & 0x0010U) != 0)
-        regs[0] = static_cast<uint16_t>((regs[0] & 0xFFFEU) | ((value & 0x0010U) != 0 ? 1U : 0U));
-      if (((regs[1] ^ value) & 0x0010U) != 0 &&
-          ((regs[1] & 0x0100U) == 0 || static_cast<uint32_t>(ms - shutdownAt) < 35U))
-        prematureEmChange = true;
-      if ((regs[1] & 0x0100U) == 0 && (value & 0x0100U) != 0) shutdownAt = ms;
-      regs[1] = static_cast<uint16_t>((value & 0x1FD0U) | 0x6020U);
-      if ((value & 0x8100U) == 0x8100U) { shot = true; shotAt = ms; }
-      else if ((value & 0x0100U) != 0) { regs[1] |= 0x8000U; }
-      else { shot = false; }
-    } else { regs[reg] = value; }
-  }
-  static t::Status write(uint8_t addr, const uint8_t* tx, size_t len, uint32_t timeout, void* p) {
-    auto& b = *static_cast<Bus*>(p); ++b.calls; ++b.writes; b.observedTimeout = timeout;
-    if (addr < 0x48 || addr > 0x4B || len != 3 || tx[0] < 1 || tx[0] > 3 || timeout == 0)
-      return t::Status::Error(t::Err::INVALID_PARAM, "invalid framing");
-    if (!b.failed() || b.acceptFailedWrite)
-      b.store(tx[0], static_cast<uint16_t>((static_cast<uint16_t>(tx[1]) << 8U) | tx[2]));
-    return b.failed() ? b.result() : t::Status::Ok();
-  }
-  static t::Status read(uint8_t addr, const uint8_t* tx, size_t len, uint8_t* rx, size_t n, uint32_t timeout, void* p) {
-    auto& b = *static_cast<Bus*>(p); ++b.calls; b.observedTimeout = timeout;
-    if (addr < 0x48 || addr > 0x4B || len != 1 || n != 2 || tx[0] > 3 || timeout == 0)
-      return t::Status::Error(t::Err::INVALID_PARAM, "invalid framing");
-    if (b.failed()) { rx[0] = 0xFF; rx[1] = 0xFF; return b.result(); }
-    if (b.shot && static_cast<uint32_t>(b.ms - b.shotAt) >= 35) {
-      b.shot = false; b.regs[1] |= 0x8000U;
-      b.regs[0] = (b.regs[1] & 0x10U) != 0 ? 0x0C81 : 0x1900;
+  static e::TransportResult write(uint8_t slave, const uint8_t* tx, size_t length, uint32_t timeout, void* p) {
+    auto& b = *static_cast<Bus*>(p); ++b.calls; ++b.writes; b.observedTimeout = timeout; b.ms += b.callbackAdvance;
+    if (!b.ready()) return e::TransportResult::Error(e::TransportCode::NACK_ADDRESS, 0, e::WriteCommit::NOT_COMMITTED);
+    if (length <= b.geometry.wordAddressBytes || !timeout) return e::TransportResult::Error(e::TransportCode::IO_ERROR);
+    const uint32_t a = b.address(slave, tx); const size_t n = length - b.geometry.wordAddressBytes;
+    b.frames.push_back({slave, a, n, 'w'});
+    if (!b.failing() || b.acceptFailedWrite) {
+      if (!b.writeProtected) {
+        const uint32_t pageStart = a - a % b.geometry.pageSizeBytes;
+        for (size_t i = 0; i < n; ++i)
+          b.memory[pageStart + static_cast<uint32_t>((a + i) % b.geometry.pageSizeBytes)] = tx[b.geometry.wordAddressBytes + i];
+      }
+      b.busy = true; b.busyUntil = b.ms + b.geometry.writeCycleMs;
     }
-    auto value = b.regs[tx[0]];
-    if (b.corruptAt == b.calls) value ^= 0x100U;
-    rx[0] = static_cast<uint8_t>(value >> 8U); rx[1] = static_cast<uint8_t>(value);
-    return t::Status::Ok();
+    return b.failing() ? b.failure : e::TransportResult::Ok(length, 0);
   }
-  t::Config config() {
-    t::Config c; c.i2cWrite = write; c.i2cWriteRead = read; c.i2cUser = this;
-    c.nowMs = clock; c.cooperativeYield = yield; c.timeUser = this; return c;
+  static e::TransportResult read(uint8_t slave, const uint8_t* tx, size_t txLen, uint8_t* rx, size_t n, uint32_t timeout, void* p) {
+    auto& b = *static_cast<Bus*>(p); ++b.calls; ++b.reads; b.observedTimeout = timeout; b.ms += b.callbackAdvance;
+    if (!b.ready()) return e::TransportResult::Error(e::TransportCode::NACK_ADDRESS);
+    if (txLen != b.geometry.wordAddressBytes || !n || !timeout) return e::TransportResult::Error(e::TransportCode::IO_ERROR);
+    const uint32_t a = b.address(slave, tx); b.frames.push_back({slave, a, n, 'r'});
+    if (b.failing()) { std::fill(rx, rx + n, 0xAB); return b.failure; }
+    const uint32_t bankSize = 1UL << (8U * b.geometry.wordAddressBytes), bankStart = a - a % bankSize;
+    for (size_t i = 0; i < n; ++i) rx[i] = b.memory[bankStart + static_cast<uint32_t>((a + i) % bankSize)];
+    return e::TransportResult::Ok(txLen, n);
+  }
+  static e::TransportResult probe(uint8_t slave, uint32_t timeout, void* p) {
+    auto& b = *static_cast<Bus*>(p); ++b.calls; ++b.probes; b.observedTimeout = timeout; b.ms += b.callbackAdvance;
+    b.frames.push_back({slave, 0, 0, 'p'});
+    if (b.failing()) return b.failure;
+    return b.ready() ? e::TransportResult::Ok(0, 0) : e::TransportResult::Error(e::TransportCode::NACK_ADDRESS, 0, e::WriteCommit::NOT_COMMITTED);
+  }
+  e::Config config(e::DeviceVariant variant = e::DeviceVariant::ZETTA_ZD24C02B) {
+    geometry = e::geometryFor(variant); e::Config c; c.variant = variant;
+    c.i2cWrite = write; c.i2cWriteRead = read; c.i2cUser = this; c.nowMs = clock; c.timeUser = this; return c;
   }
 };
-
-static void decoding() {
-  const uint16_t words[] = {0x0000, 0x1900, 0xFFF0, 0xE700, 0x7FF0, 0x8000, 0x4B01, 0xFFF9, 0x8001};
-  const float expected[] = {0, 25, -0.0625f, -25, 127.9375f, -128, 150, -0.0625f, -256};
-  for (unsigned i = 0; i < sizeof(words)/sizeof(words[0]); ++i) {
-    t::Sample sample; CHECK(t::TMP1x2::decodeTemperature(words[i], sample).ok());
-    CHECK(sample.celsius == expected[i]); CHECK(sample.raw == words[i]);
+static e::TransferResult finish(e::EEPROM24Cxx& d, Bus& b, size_t budget = 1) {
+  for (unsigned i = 0; i < 200000 && d.settingsSnapshot().transferActive; ++i) {
+    const auto calls = b.calls; d.poll(b.ms, budget);
+    if (b.calls - calls > budget) { std::printf("[FAIL] callback budget\n"); ++failures; break; }
+    ++b.ms;
   }
-  // Exhaust the signed normal/extended code space, independent expected math.
-  for (int extended = 0; extended <= 1; ++extended) {
-    const int limit = extended ? 4096 : 2048;
-    for (int code = -limit; code < limit; ++code) {
-      const unsigned bits = static_cast<unsigned>(code) & (extended ? 8191U : 4095U);
-      const auto word = static_cast<uint16_t>((bits << (extended ? 3U : 4U)) | static_cast<unsigned>(extended));
-      t::Sample sample; CHECK(t::TMP1x2::decodeTemperature(word, sample).ok());
-      CHECK(sample.counts == code); CHECK(sample.celsius == static_cast<float>(code) / 16.0f);
+  e::TransferResult r;
+  if (!d.takeResult(r).ok()) { std::printf("[FAIL] no completion\n"); ++failures; }
+  return r;
+}
+static void lifecycleAndValidation() {
+  Bus b; e::EEPROM24Cxx d; uint8_t data[4] = {};
+  CHECK(d.state() == e::DriverState::UNINIT); CHECK(d.startRead(0, data, 1).is(e::Err::NOT_INITIALIZED));
+  auto c = b.config(); CHECK(d.bind(c).ok()); CHECK(b.calls == 0); auto s = d.settingsSnapshot();
+  CHECK(s.variant == e::DeviceVariant::ZETTA_ZD24C02B && s.capacityBytes == 256 && s.pageSizeBytes == 8);
+  CHECK(s.maxWriteDataBytes == 8 && s.wordAddressBytes == 1 && s.writeCycleMs == 5);
+  CHECK(d.startRead(255, data, 2).is(e::Err::ADDRESS_OUT_OF_RANGE));
+  CHECK(d.startRead(UINT32_MAX, data, 1).is(e::Err::ADDRESS_OUT_OF_RANGE));
+  CHECK(d.startRead(1, data, std::numeric_limits<size_t>::max()).is(e::Err::ADDRESS_OUT_OF_RANGE));
+  CHECK(d.startWrite(0, nullptr, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.startRead(0, data, 1, 0x80000000UL).is(e::Err::INVALID_PARAM)); CHECK(b.calls == 0);
+  c.i2cWrite = nullptr; CHECK(d.bind(c).is(e::Err::INVALID_CONFIG));
+  CHECK(d.isBound()); CHECK(d.probe().ok()); CHECK(b.calls == 1 && d.settingsSnapshot().totalSuccess == 0);
+  CHECK(d.startRead(256, nullptr, 0).ok()); CHECK(d.startRead(0, data, 1).is(e::Err::BUSY));
+  e::TransferResult r; CHECK(d.takeResult(r).ok()); CHECK(r.state == e::TransferState::SUCCEEDED);
+  r.address = 99; CHECK(d.takeResult(r).is(e::Err::NO_RESULT)); CHECK(r.address == 99);
+  CHECK(d.startRead(0, data, 1).ok()); CHECK(d.bind(b.config()).is(e::Err::BUSY));
+  const auto before = b.calls; d.end(); CHECK(b.calls == before && !d.isBound());
+  CHECK(d.bind(b.config()).is(e::Err::BUSY)); CHECK(d.takeResult(r).ok() && r.state == e::TransferState::CANCELLED);
+  CHECK(d.bind(b.config()).ok());
+}
+static void geometryValidation() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(e::DeviceVariant::C16); c.i2cAddress = 0x51;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c = b.config(e::DeviceVariant::MICROCHIP_24LC1025); c.i2cAddress = 0x54;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c.i2cAddress = 0x53; CHECK(d.bind(c).ok());
+  c.variant = e::DeviceVariant::CUSTOM; c.customGeometry = {256, 16, 1, 0, 0, 10}; c.writeCycleMs = 5;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c.writeCycleMs = 10; CHECK(d.bind(c).ok());
+  CHECK(d.settingsSnapshot().pageSizeBytes == 16); c.customGeometry.bankAddressBits = 1;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c.customGeometry = {256, 7, 1, 0, 0, 5};
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c.customGeometry = {256, 8, 3, 0, 0, 5};
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c = b.config(e::DeviceVariant::C32); c.maxTxBytes = 2;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c.maxTxBytes = 3; c.maxRxBytes = 0;
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); c = b.config(); c.variant = static_cast<e::DeviceVariant>(255);
+  CHECK(d.bind(c).is(e::Err::INVALID_CONFIG)); CHECK(b.calls == 0);
+}
+static void pagesAndAllPresets() {
+  for (unsigned variant = 0; variant <= static_cast<unsigned>(e::DeviceVariant::ST_M24M01); ++variant) {
+    Bus b; e::EEPROM24Cxx d; auto c = b.config(static_cast<e::DeviceVariant>(variant)); c.maxTxBytes = 7; c.maxRxBytes = 3;
+    CHECK(d.bind(c).ok()); uint8_t data[37], out[37] = {};
+    for (size_t i = 0; i < sizeof(data); ++i) data[i] = static_cast<uint8_t>(i * 13 + 7);
+    const uint32_t start = b.geometry.pageSizeBytes - 2U;
+    CHECK(d.startWrite(start, data, sizeof(data), true).ok()); CHECK(b.calls == 0); auto r = finish(d, b, 4);
+    CHECK(r.status.ok() && r.bytesAccepted == sizeof(data) && r.bytesCompleted == sizeof(data));
+    CHECK(r.bytesVerified == sizeof(data) && r.match && r.writeCommit == e::WriteCommit::VERIFIED);
+    CHECK(std::equal(data, data + sizeof(data), b.memory.begin() + start));
+    for (const auto& f : b.frames) if (f.op == 'w') {
+      CHECK(f.length + b.geometry.wordAddressBytes <= c.maxTxBytes);
+      CHECK(f.address / b.geometry.pageSizeBytes == (f.address + f.length - 1) / b.geometry.pageSizeBytes);
     }
+    CHECK(d.startRead(start, out, sizeof(out)).ok()); r = finish(d, b, 2);
+    CHECK(r.status.ok() && std::equal(data, data + sizeof(data), out)); CHECK(b.observedTimeout == c.i2cTimeoutMs);
   }
 }
-static void thresholds() {
-  uint16_t out = 0x1234;
-  CHECK(t::TMP1x2::encodeThreshold(-25, false, out).ok()); CHECK(out == 0xE700);
-  CHECK(t::TMP1x2::encodeThreshold(150, true, out).ok()); CHECK(out == 0x4B00);
-  CHECK(t::TMP1x2::decodeThreshold(out, true) == 150);
-  CHECK(t::TMP1x2::encodeThreshold(0.03125f, false, out).ok()); CHECK(out == 0x10);
-  CHECK(t::TMP1x2::encodeThreshold(-0.03125f, false, out).ok()); CHECK(out == 0xFFF0);
-  out = 0x1234;
-  CHECK(!t::TMP1x2::encodeThreshold(128, false, out).ok()); CHECK(out == 0x1234);
-  CHECK(!t::TMP1x2::encodeThreshold(std::numeric_limits<float>::quiet_NaN(), true, out).ok());
-  CHECK(!t::TMP1x2::encodeThreshold(std::numeric_limits<float>::infinity(), true, out).ok());
-}
-static void validation() {
-  Bus b; t::TMP1x2 d; auto c = b.config(); c.i2cAddress = 0x40;
-  CHECK(!d.begin(c).ok()); CHECK(b.calls == 0);
-  c = b.config(); c.i2cWrite = nullptr; CHECK(!d.begin(c).ok()); CHECK(b.calls == 0);
-  c = b.config(); c.mode = static_cast<t::Mode>(9); CHECK(!d.begin(c).ok()); CHECK(b.calls == 0);
-  c = b.config(); c.lowThresholdC = 90; CHECK(!d.begin(c).ok()); CHECK(b.calls == 0);
-  c = b.config(); c.i2cTimeoutMs = 0; CHECK(!d.begin(c).ok()); CHECK(b.calls == 0);
-  CHECK(d.begin(b.config()).ok()); const unsigned calls = b.calls;
-  CHECK(!d.setFaultQueue(static_cast<t::FaultQueue>(7)).ok()); CHECK(b.calls == calls);
-  CHECK(!d.writeRegister(0, 0).ok()); CHECK(b.calls == calls);
-  uint16_t raw = 123; CHECK(!d.readRegister(4, raw).ok()); CHECK(raw == 123);
-  CHECK(d.totalFailures() == 0);
-}
-static void lifecycle() {
-  Bus b; t::TMP1x2 d; CHECK(d.state() == t::DriverState::UNINIT);
-  t::Sample sample; CHECK(!d.readSample(sample).ok()); CHECK(b.calls == 0);
-  CHECK(d.begin(b.config()).ok()); CHECK(d.isInitialized()); CHECK(d.state() == t::DriverState::READY);
-  CHECK((b.regs[1] & 0x1FD0) == 0x0080); CHECK(b.regs[2] == 0x4B00); CHECK(b.regs[3] == 0x5000);
-  CHECK(d.readSample(sample).ok()); CHECK(sample.celsius == 25); CHECK(b.observedTimeout == 50);
-  const unsigned calls = b.calls; d.end(); CHECK(b.calls == calls); CHECK(!d.isInitialized());
-  CHECK(d.state() == t::DriverState::UNINIT);
-}
-static void health() {
-  Bus b; t::TMP1x2 d; auto c = b.config(); c.offlineThreshold = 3; CHECK(d.begin(c).ok());
-  const auto success = d.totalSuccess(); CHECK(d.probe().ok()); CHECK(d.totalSuccess() == success);
-  b.failAll = true; uint16_t raw = 17;
-  CHECK(!d.readRegister(0, raw).ok()); CHECK(raw == 17); CHECK(d.state() == t::DriverState::DEGRADED);
-  CHECK(!d.readRegister(0, raw).ok()); CHECK(!d.readRegister(0, raw).ok());
-  CHECK(d.state() == t::DriverState::OFFLINE); CHECK(d.totalFailures() == 3); CHECK(d.lastError().detail == 731);
-  const auto failed = d.totalFailures(); CHECK(!d.probe().ok()); CHECK(d.totalFailures() == failed);
-  b.failAll = false; CHECK(d.readRegister(0, raw).ok()); CHECK(d.state() == t::DriverState::READY);
-  CHECK(d.consecutiveFailures() == 0);
-}
-static void dirtyRecovery() {
-  Bus b; t::TMP1x2 d; CHECK(d.begin(b.config()).ok());
-  b.failAt = b.calls + 2; b.acceptFailedWrite = true;
-  CHECK(!d.setThresholds(-10, 30).ok()); CHECK(d.hardwareConfigDirty());
-  t::Sample sample; sample.celsius = 999; CHECK(!d.readSample(sample).ok()); CHECK(sample.celsius == 999);
-  b.failAt = 0; CHECK(d.recover().ok()); CHECK(!d.hardwareConfigDirty());
-  float low = 0, high = 0; CHECK(d.readThresholds(low, high).ok()); CHECK(low == -10 && high == 30);
-  CHECK(d.writeRegister(1, 0x6190).ok()); CHECK(d.hardwareConfigDirty());
-  CHECK(d.recover().ok()); CHECK(!d.hardwareConfigDirty());
-  b.regs[2] ^= 0x100; CHECK(!d.verifyConfiguration().ok()); CHECK(d.hardwareConfigDirty());
-  CHECK(d.recover().ok());
-}
-static void oneShot() {
-  Bus b; t::TMP1x2 d; auto c = b.config(); c.mode = t::Mode::SHUTDOWN;
-  CHECK(d.begin(c).ok()); t::Sample s; CHECK(d.tryRead(s).is(t::Err::MEASUREMENT_NOT_READY));
-  CHECK(d.startOneShot().ok()); CHECK(d.startOneShot().is(t::Err::BUSY));
-  const uint32_t started = b.ms;
-  bool ready = true; CHECK(d.isConversionReady(ready).ok()); CHECK(!ready);
-  b.ms = started + 34U; CHECK(d.tryRead(s).is(t::Err::MEASUREMENT_NOT_READY));
-  b.ms = started + 35U; CHECK(d.tryRead(s).ok()); CHECK(s.celsius == 25);
-  CHECK(d.tryRead(s).is(t::Err::MEASUREMENT_NOT_READY));
-  CHECK(d.readBlocking(s, 100).ok()); CHECK(s.celsius == 25);
-  CHECK(d.readBlocking(s, 1).is(t::Err::TIMEOUT));
-}
-static void wraparound() {
-  Bus b; b.ms = UINT32_MAX - 10U; t::TMP1x2 d; auto c = b.config(); c.mode = t::Mode::SHUTDOWN;
-  CHECK(d.begin(c).ok()); CHECK(d.startOneShot().ok()); b.ms += 35U;
-  t::Sample s; CHECK(d.tryRead(s).ok()); CHECK(s.timestampMs == b.ms);
-}
-static void extendedAndAlert() {
-  Bus b; t::TMP1x2 d; CHECK(d.begin(b.config()).ok()); CHECK(d.setExtendedMode(true).ok());
-  CHECK(!b.prematureEmChange); CHECK(b.ms >= 70U);
-  CHECK(b.regs[2] == 0x2580); CHECK(b.regs[3] == 0x2800);
-  b.regs[0] = 0x4B01; t::Sample s; CHECK(d.readSample(s).ok()); CHECK(s.celsius == 150 && s.extendedMode);
-  CHECK(d.setThresholds(140, 150).ok()); CHECK(!d.setExtendedMode(false).ok());
-  for (unsigned polarity = 0; polarity != 2; ++polarity) {
-    for (unsigned al = 0; al != 2; ++al) {
-      const auto raw = static_cast<uint16_t>(0x6000U | (polarity << 10U) | (al << 5U));
-      const auto info = t::TMP1x2::decodeConfiguration(raw);
-      CHECK(info.valid); CHECK(info.alertActive == (al == polarity));
+static void bankBoundaries() {
+  struct Case { e::DeviceVariant v; uint32_t boundary; uint8_t upperSlave; };
+  const Case cases[] = {{e::DeviceVariant::C04, 256, 0x51}, {e::DeviceVariant::C08, 768, 0x53},
+    {e::DeviceVariant::C16, 1792, 0x57}, {e::DeviceVariant::MICROCHIP_24LC1025, 65536, 0x54}, {e::DeviceVariant::ST_M24M01, 65536, 0x51}};
+  for (const auto& item : cases) {
+    Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config(item.v)).ok()); uint8_t data[20];
+    for (size_t i = 0; i < sizeof(data); ++i) data[i] = static_cast<uint8_t>(i);
+    CHECK(d.startWrite(item.boundary - 4, data, sizeof(data), true).ok()); auto r = finish(d, b); CHECK(r.status.ok());
+    bool seen = false;
+    for (const auto& f : b.frames) {
+      if (f.address >= item.boundary && f.slave == item.upperSlave) seen = true;
+      const uint32_t bank = 1UL << (8U * b.geometry.wordAddressBytes);
+      CHECK(f.address / bank == (f.address + f.length - 1) / bank);
     }
+    CHECK(seen);
   }
 }
-static void protocolAndClockGuards() {
-  Bus b; t::TMP1x2 d; CHECK(d.begin(b.config()).ok());
-  b.regs[0] = 0x1902; t::Sample sample; sample.celsius = 999;
-  const auto success = d.totalSuccess(), failuresBefore = d.totalFailures();
-  CHECK(d.readSample(sample).is(t::Err::CONFIG_MISMATCH)); CHECK(sample.celsius == 999);
-  CHECK(d.hardwareConfigDirty()); CHECK(d.totalSuccess() == success + 1U); CHECK(d.totalFailures() == failuresBefore);
-  CHECK(d.recover().ok());
-  b.failAll = true; b.error = t::Err::IN_PROGRESS;
-  uint16_t raw = 99; const auto status = d.readRegister(0, raw);
-  CHECK(!status.ok() && !status.inProgress()); CHECK(status.detail == 731); CHECK(raw == 99);
-  b.failAll = false; CHECK(d.recover().ok());
-  auto noClock = b.config(); noClock.nowMs = nullptr; noClock.cooperativeYield = nullptr;
-  CHECK(d.begin(noClock).ok()); const auto calls = b.writes;
-  CHECK(!d.setExtendedMode(true).ok()); CHECK(b.writes == calls);
-  auto stoppedClock = b.config(); stoppedClock.mode = t::Mode::SHUTDOWN;
-  b.clockAdvances = false;
-  CHECK(!d.begin(stoppedClock).ok()); CHECK(d.hardwareConfigDirty());
-  b.clockAdvances = true;
-  CHECK(d.begin(d.getConfig()).ok()); CHECK(!d.hardwareConfigDirty());
+static void timingAndAckPolling() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.i2cProbe = Bus::probe;
+  CHECK(d.bind(c).ok()); uint8_t bytes[10] = {}; CHECK(d.startWrite(0, bytes, sizeof(bytes)).ok());
+  CHECK(d.poll(0).inProgress()); CHECK(b.writes == 1 && b.probes == 0);
+  CHECK(d.transferSnapshot().bytesAccepted == 8 && d.transferSnapshot().bytesCompleted == 0);
+  b.ms = 1; CHECK(d.poll(b.ms, 50).inProgress()); CHECK(b.probes == 1 && b.writes == 1);
+  auto s = d.settingsSnapshot(); CHECK(s.writeBusyPolls == 1 && s.totalFailures == 0 && s.totalSuccess == 1);
+  b.ms = 5; CHECK(d.poll(b.ms).inProgress()); CHECK(b.probes == 2 && b.writes == 1);
+  CHECK(d.transferSnapshot().bytesCompleted == 8); auto r = finish(d, b); CHECK(r.status.ok() && b.writes == 2);
+  CHECK(d.settingsSnapshot().totalFailures == 0);
+  Bus slow; e::EEPROM24Cxx timer; auto tc = slow.config(); tc.nowMs = nullptr; tc.i2cTimeoutMs = 50;
+  slow.callbackAdvance = 50; CHECK(timer.bind(tc).ok()); CHECK(timer.startWrite(0, bytes, 1).ok());
+  CHECK(timer.poll(0).inProgress()); CHECK(slow.ms == 50 && timer.settingsSnapshot().writeReadyAtMs == 56);
+  timer.tick(55); CHECK(timer.settingsSnapshot().writeCyclePending); CHECK(timer.poll(56).ok());
+  CHECK(timer.takeResult(r).ok()); CHECK(r.bytesCompleted == 1 && slow.calls == 1);
+  CHECK(timer.startRead(0, bytes, 1, 1).is(e::Err::INVALID_CONFIG)); CHECK(slow.calls == 1);
+  // A single poll can complete an ACK and start another write: account for all
+  // callback durations when no post-callback clock sample is available.
+  Bus multi; e::EEPROM24Cxx md; auto mc = multi.config(); mc.nowMs = nullptr; mc.i2cProbe = Bus::probe;
+  multi.callbackAdvance = 10; CHECK(md.bind(mc).ok()); CHECK(md.startWrite(0, bytes, sizeof(bytes)).ok());
+  CHECK(md.poll(0, 3).inProgress()); CHECK(multi.writes == 2 && multi.probes == 1);
+  CHECK(md.settingsSnapshot().writeReadyAtMs == 156); r = finish(md, multi); CHECK(r.status.ok());
 }
-static void formatRecovery() {
-  for (unsigned rebind = 0; rebind < 2; ++rebind) {
-    Bus b; t::TMP1x2 d; CHECK(d.begin(b.config()).ok());
-    // Fail TLOW after old shutdown and EM write reached the device.
-    b.failAt = b.calls + 4U;
-    CHECK(!d.setExtendedMode(true).ok()); CHECK(d.hardwareConfigDirty());
-    CHECK((b.regs[1] & 0x10U) != 0); CHECK(b.regs[0] == 0x1901);
-    b.failAt = 0; CHECK((rebind != 0 ? d.begin(d.getConfig()) : d.recover()).ok());
-    t::Sample sample; CHECK(d.readSample(sample).ok()); CHECK(sample.celsius == 25.0f);
-    CHECK(!d.hardwareConfigDirty());
-  }
+static void healthAndReadFailures() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.offlineThreshold = 2; c.maxRxBytes = 4; b.failAll = true;
+  CHECK(d.begin(c).is(e::Err::I2C_TIMEOUT)); CHECK(d.isBound() && d.state() == e::DriverState::DEGRADED);
+  CHECK(d.probe().is(e::Err::I2C_TIMEOUT)); CHECK(d.settingsSnapshot().totalFailures == 1);
+  CHECK(d.recover().is(e::Err::I2C_TIMEOUT)); CHECK(d.state() == e::DriverState::OFFLINE); b.failAll = false;
+  uint8_t out[8]; std::fill(out, out + 8, 0xCC); CHECK(d.startRead(0, out, 8).ok()); b.failAt = b.calls + 2;
+  auto r = finish(d, b); CHECK(r.status.is(e::Err::I2C_TIMEOUT));
+  CHECK(r.bytesCompleted == 4 && r.failedChunkOffset == 4 && r.failedChunkLength == 4);
+  CHECK(out[0] == 0xFF && out[3] == 0xFF && out[4] == 0xCC && out[7] == 0xCC);
+  CHECK(d.settingsSnapshot().totalSuccess == 1 && d.settingsSnapshot().totalFailures == 3);
+  b.failAt = 0; CHECK(d.recover().ok()); CHECK(d.state() == e::DriverState::READY && d.settingsSnapshot().consecutiveFailures == 0);
 }
-static void failureMatrix() {
-  Bus baseline; t::TMP1x2 good; CHECK(good.begin(baseline.config()).ok()); const unsigned count = baseline.calls;
-  for (unsigned at = 1; at <= count; ++at) {
-    Bus b; t::TMP1x2 d; b.failAt = at; b.acceptFailedWrite = true;
-    CHECK(!d.begin(b.config()).ok()); CHECK(!d.isInitialized()); CHECK(d.state() == t::DriverState::UNINIT);
-    b.failAt = 0; CHECK(d.recover().ok()); CHECK(d.isInitialized()); CHECK(!d.hardwareConfigDirty());
+static void writeProtectionAndFill() {
+  Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config()).ok()); b.writeProtected = true;
+  CHECK(d.startFill(3, 0xAA, 20, true).ok()); auto r = finish(d, b);
+  CHECK(r.status.is(e::Err::VERIFY_MISMATCH) && !r.match && r.expected == 0xAA && r.actual == 0xFF);
+  CHECK(r.bytesAccepted == 20 && r.bytesCompleted == 20 && r.bytesVerified == 0);
+  CHECK(r.writeCommit == e::WriteCommit::ACCEPTED && d.settingsSnapshot().totalFailures == 0);
+  b.writeProtected = false; CHECK(d.startFill(3, 0xAA, 20, true).ok()); r = finish(d, b);
+  CHECK(r.status.ok() && r.match && r.bytesVerified == 20);
+  uint8_t data[20]; std::fill(data, data + 20, 0xAA); data[11] = 0xAB;
+  CHECK(d.startVerify(3, data, 20).ok()); r = finish(d, b);
+  CHECK(r.status.is(e::Err::VERIFY_MISMATCH) && r.bytesVerified == 11 && r.mismatchOffset == 11 && r.bytesCompleted == 11);
+}
+static void writeEvidenceAndNoReplay() {
+  struct Case { e::TransportResult failure; e::WriteCommit expected; size_t accepted; bool pending; };
+  const Case cases[] = {
+    {e::TransportResult::Error(e::TransportCode::NACK_ADDRESS, 1, e::WriteCommit::NOT_COMMITTED), e::WriteCommit::NOT_COMMITTED, 0, false},
+    {e::TransportResult::Error(e::TransportCode::TIMEOUT, 2), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::BUS_ERROR, 3, e::WriteCommit::ACCEPTED, 5), e::WriteCommit::ACCEPTED, 4, true},
+    {e::TransportResult::Error(e::TransportCode::NACK_DATA, 4, e::WriteCommit::ACCEPTED, 5), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::TIMEOUT, 5, e::WriteCommit::NOT_COMMITTED, 3), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Ok(4, 0), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Ok(6, 0), e::WriteCommit::INDETERMINATE, 0, true}};
+  for (const auto& item : cases) {
+    Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config()).ok()); uint8_t data[4] = {1,2,3,4};
+    b.failAt = 1; b.failure = item.failure; b.acceptFailedWrite = item.pending;
+    CHECK(d.startWrite(0, data, 4, true).ok()); CHECK(!d.poll(0, 100).ok()); CHECK(b.writes == 1 && b.reads == 0);
+    auto r = d.transferSnapshot(); CHECK(r.writeCommit == item.expected && r.lastChunkCommit == item.expected);
+    CHECK(r.bytesAccepted == item.accepted && r.bytesCompleted == 0 && r.failedChunkLength == 4);
+    CHECK(d.settingsSnapshot().writeCyclePending == item.pending); CHECK(d.takeResult(r).ok());
+    if (item.pending) {
+      CHECK(d.startRead(0, data, 4).is(e::Err::BUSY)); const auto calls = b.calls;
+      d.tick(5); CHECK(d.settingsSnapshot().writeCyclePending); d.tick(6);
+      CHECK(!d.settingsSnapshot().writeCyclePending && b.calls == calls);
+    }
+    b.failAt = 0; b.ms = 6; CHECK(d.startRead(0, data, 4).ok()); r = finish(d, b);
+    CHECK(r.status.ok() && b.writes == 1);
   }
+  Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config()).ok()); uint8_t data[12] = {};
+  b.failAt = 2; b.failure = e::TransportResult::Error(e::TransportCode::NACK_ADDRESS, 0, e::WriteCommit::NOT_COMMITTED);
+  CHECK(d.startWrite(0, data, 12).ok()); auto r = finish(d, b);
+  CHECK(r.bytesAccepted == 8 && r.bytesCompleted == 8 && r.failedChunkOffset == 8 && r.failedChunkLength == 4);
+  CHECK(r.writeCommit == e::WriteCommit::ACCEPTED && r.lastChunkCommit == e::WriteCommit::NOT_COMMITTED);
+}
+static void cancellationDeadlineAndRollover() {
+  uint8_t data[12] = {}; e::TransferResult r; Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config()).ok());
+  CHECK(d.startWrite(0, data, sizeof(data)).ok()); CHECK(d.poll(0).inProgress());
+  CHECK(d.cancel().ok()); CHECK(d.takeResult(r).ok());
+  CHECK(r.state == e::TransferState::CANCELLED && r.bytesAccepted == 8 && r.bytesCompleted == 0);
+  CHECK(r.failedChunkOffset == 0 && r.failedChunkLength == 8 && r.writeCommit == e::WriteCommit::ACCEPTED);
+  d.end(); CHECK(!d.isBound()); CHECK(d.bind(b.config()).is(e::Err::BUSY)); d.tick(6); b.ms = 6;
+  CHECK(d.bind(b.config()).ok()); CHECK(d.startWrite(0, data, 8, false, 2).ok()); CHECK(d.poll(6).inProgress());
+  b.ms = 8; CHECK(d.poll(8).is(e::Err::TIMEOUT)); CHECK(d.takeResult(r).ok());
+  CHECK(r.state == e::TransferState::TIMED_OUT && r.failedChunkLength == 8);
+  CHECK(d.startRead(0, data, 1).is(e::Err::BUSY)); d.tick(12);
+  b.ms = UINT32_MAX - 2U; b.busy = false; CHECK(d.startWrite(0, data, 1, false, 20).ok());
+  CHECK(d.poll(b.ms).inProgress()); CHECK(d.settingsSnapshot().writeReadyAtMs == 3);
+  b.ms = 2; CHECK(d.poll(2).inProgress()); b.ms = 3; CHECK(d.poll(3).ok());
+  CHECK(d.takeResult(r).ok() && r.bytesCompleted == 1);
+  Bus dl; e::EEPROM24Cxx deadline; auto c = dl.config(); c.maxRxBytes = 1;
+  CHECK(deadline.bind(c).ok()); CHECK(deadline.startRead(0, data, 2, 3).ok());
+  dl.ms = UINT32_MAX - 1U; CHECK(deadline.poll(dl.ms).inProgress()); dl.ms = 1;
+  CHECK(deadline.poll(dl.ms).is(e::Err::TIMEOUT)); CHECK(deadline.takeResult(r).ok() && r.bytesCompleted == 1 && dl.reads == 1);
+  CHECK(deadline.startRead(0, data, 1).ok()); const auto calls = dl.calls;
+  CHECK(deadline.poll(dl.ms, 0).inProgress() && dl.calls == calls);
+  CHECK(deadline.cancel().ok()); CHECK(deadline.takeResult(r).ok());
+}
+static void ackFaultsAndBufferLimits() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.i2cProbe = Bus::probe;
+  CHECK(d.bind(c).ok()); uint8_t data[8] = {}; CHECK(d.startWrite(0, data, sizeof(data)).ok());
+  CHECK(d.poll(0).inProgress()); b.failAt = 2; b.failure = e::TransportResult::Error(e::TransportCode::NACK_UNSPECIFIED);
+  b.ms = 1; CHECK(d.poll(1).is(e::Err::I2C_NACK));
+  CHECK(d.settingsSnapshot().totalFailures == 1 && d.settingsSnapshot().writeBusyPolls == 0);
+  e::TransferResult r; CHECK(d.takeResult(r).ok()); CHECK(r.bytesAccepted == 8 && r.bytesCompleted == 0);
+  CHECK(d.settingsSnapshot().writeCyclePending);
+  Bus absent; e::EEPROM24Cxx ad; auto ac = absent.config(); ac.i2cProbe = Bus::probe;
+  CHECK(ad.bind(ac).ok()); CHECK(ad.startWrite(0, data, 8).ok()); CHECK(ad.poll(0).inProgress());
+  absent.failAll = true; absent.failure = e::TransportResult::Error(e::TransportCode::NACK_ADDRESS);
+  absent.ms = 5; CHECK(ad.poll(5).inProgress());
+  CHECK(ad.settingsSnapshot().writeBusyPolls == 1 && ad.settingsSnapshot().totalFailures == 0);
+  ad.tick(6); CHECK(ad.settingsSnapshot().writeCyclePending); // Time alone cannot replace final ACK.
+  absent.ms = 6; CHECK(ad.poll(6).is(e::Err::I2C_NACK_ADDR));
+  CHECK(ad.takeResult(r).ok()); CHECK(r.bytesAccepted == 8 && r.bytesCompleted == 0);
+  CHECK(ad.settingsSnapshot().totalFailures == 1);
+  ad.tick(6); CHECK(!ad.settingsSnapshot().writeCyclePending);
+  Bus large; e::EEPROM24Cxx ld; auto lc = large.config(e::DeviceVariant::ST_M24M01);
+  lc.maxTxBytes = std::numeric_limits<size_t>::max(); lc.maxRxBytes = lc.maxTxBytes;
+  CHECK(ld.bind(lc).ok()); CHECK(ld.startFill(0, 0x37, 700, true).ok()); r = finish(ld, large, 10);
+  CHECK(r.status.ok() && r.bytesVerified == 700); for (const auto& f : large.frames) CHECK(f.length <= 128);
+}
+static void postCallbackDeadlinesAndShortRead() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.maxRxBytes = 1; b.callbackAdvance = 4;
+  CHECK(d.bind(c).ok()); uint8_t data[4] = {};
+  CHECK(d.startRead(0, data, 4, 3).ok()); CHECK(d.poll(0, 100).is(e::Err::TIMEOUT));
+  e::TransferResult r; CHECK(d.takeResult(r).ok()); CHECK(r.bytesCompleted == 1 && b.reads == 1);
+  CHECK(d.settingsSnapshot().totalSuccess == 1 && d.settingsSnapshot().totalFailures == 0);
+  b.failAt = b.calls + 1; b.failure = e::TransportResult::Ok(1, 0); data[0] = 0x33;
+  CHECK(d.startRead(0, data, 1).ok()); CHECK(d.poll(b.ms).is(e::Err::I2C_ERROR));
+  CHECK(d.takeResult(r).ok()); CHECK(r.bytesCompleted == 0 && data[0] == 0x33);
+  b.failAll = true; b.failure = e::TransportResult::Error(e::TransportCode::BUS_ERROR);
+  for (unsigned i = 0; i < 270; ++i) d.recover();
+  CHECK(d.settingsSnapshot().consecutiveFailures == 255);
+  Bus ack; e::EEPROM24Cxx ad; auto ac = ack.config(); ac.i2cProbe = Bus::probe;
+  CHECK(ad.bind(ac).ok()); CHECK(ad.startWrite(0, data, 1, false, 2).ok());
+  CHECK(ad.poll(0).inProgress()); ack.callbackAdvance = 3; ack.ms = 1;
+  CHECK(ad.poll(1).is(e::Err::TIMEOUT)); CHECK(ad.takeResult(r).ok());
+  CHECK(r.bytesAccepted == 1 && r.failedChunkLength == 1 && ack.probes == 1);
+  CHECK(ad.settingsSnapshot().writeBusyPolls == 1 && ad.settingsSnapshot().totalFailures == 0);
 }
 int main() {
   struct Test { const char* name; void (*run)(); };
-  const Test tests[] = {{"decoding", decoding}, {"thresholds", thresholds}, {"validation", validation},
-    {"lifecycle", lifecycle}, {"health", health}, {"dirty recovery", dirtyRecovery}, {"one-shot", oneShot},
-    {"wraparound", wraparound}, {"extended and alert", extendedAndAlert}, {"initialization failure matrix", failureMatrix},
-    {"protocol and clock guards", protocolAndClockGuards}, {"partial format recovery", formatRecovery}};
+  const Test tests[] = {{"lifecycle and validation", lifecycleAndValidation}, {"geometry validation", geometryValidation},
+    {"pages and all presets", pagesAndAllPresets}, {"bank boundaries", bankBoundaries},
+    {"timing and ACK polling", timingAndAckPolling}, {"passive health and read failure", healthAndReadFailures},
+    {"WP readback and fill", writeProtectionAndFill}, {"write evidence and no replay", writeEvidenceAndNoReplay},
+    {"cancellation deadlines rollover", cancellationDeadlineAndRollover}, {"ACK faults and buffer limits", ackFaultsAndBufferLimits},
+    {"post-callback deadlines and short reads", postCallbackDeadlinesAndShortRead}};
   for (const auto& test : tests) { const int before = failures; test.run(); if (before == failures) std::printf("[PASS] %s\n", test.name); }
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

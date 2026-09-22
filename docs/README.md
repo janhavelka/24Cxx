@@ -1,16 +1,12 @@
 # Documentation
 
-- [Source provenance](provenance.md): reused local implementation and repository identity.
-- [Library comparison](library-comparison.md): all local standalone I2C libraries
-  surveyed and the chosen API/CLI conventions.
-- [Integration](integration.md): external bus ownership, callback contracts,
-  health, configuration trust and timing.
-- [Reference archive](reference/README.md): TI specifications, official source
-  survey, register map, quirks, source URLs and checksums.
-- [Validation results](validation.md): what was actually tested and build limits.
-- [Hardware validation](hardware-validation.md): physical verification procedure.
-- [Examples](../examples/README.md): Arduino/native IDF CLI setup and commands.
+- [Integration and ownership](integration.md)
+- [Local I2C library comparison](library-comparison.md)
+- [EEPROM datasheets, protocol and source inventory](reference/README.md)
+- [Validation results](validation.md)
+- [Hardware validation](hardware-validation.md)
+- [Example CLI](../examples/README.md)
+- [Source provenance](provenance.md)
 
-The repository includes reference PDFs and vendor source snapshots. Binary/vendor
-artifacts are deliberately omitted from the small PlatformIO release package;
-use this repository checkout to access the complete archive.
+The complete checkout includes vendor reference material. Release packages omit
+vendor binaries and the archived documentation from the former sensor request.

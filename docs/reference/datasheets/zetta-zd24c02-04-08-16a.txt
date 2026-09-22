@@ -1,0 +1,545 @@
+--- PDF page 1 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+1
+I2C-Compatible (2-wire) Serial EEPROM
+2K/4K/8K/16K
+DATASHEET
+Features
+ Compatiblewithall I2Cbidirectionaldatatransferprotocol
+ Memoryarray:
+– 2Kbits (256X8)/4Kbits(512X8)/8Kbits (1024X8)/16K bits(2048X8) ofEEPROM
+– Page size:16bytes
+ Single supply voltageandhighspeed
+–1MHz
+ RandomandsequentialReadmodes
+ Write:
+– ByteWritewithin3ms
+– PageWritewithin3ms
+– PartialPageWritesAllowed
+ WriteProtectPinforHardwareDataProtection
+ SchmittTrigger,FilteredInputs forNoiseSuppression
+ HighReliability
+– Endurance:1,000,000WriteCycles
+– DataRetention:100Years
+ Enhanced ESD/Latch-upprotection
+– HBM8000V
+ 8-leadPDIP/SOP/TSSOP/UDFN andWLCSP4packages
+Description
+ TheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16Aprovides2048/4096/8192/16384 bitsofserialelectrically
+erasableandprogrammableread-onlymemory(EEPROM),organizedas256/512/1024/2048 wordsof8bits
+each.
+ Thedeviceisoptimizedforuseinmanyindustrialandcommercial applicationswherelow-powerandlow-
+voltageoperationareessential.
+
+--- PDF page 2 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+2
+1. Pin Descriptions and Pinouts
+Table 1-1.Pin Descriptions
+Pin
+Number
+Pin
+Symbol Pin Name and Functional Description
+Asserted
+State
+Pin
+Type
+1,2，3 NC No Connect:TheNCpinsarenotbondedtoadiepad.Thispincan
+beconnectedtoGND orleftfloating. — NC
+1，2，3
+A2
+A1
+A0
+Device Address Input:TheA2/A1/A0pinisusedtoselectthe
+hardwaredeviceaddress.ThispincanbedirectlyconnectedtoVCC
+orGND.
+RefertoNote1forbehaviorofthepinwhennotconnected.
+— Input
+4 GND
+Ground:Thegroundreferenceforthepowersupply.GND
+shouldbeconnectedtothesystemground. — Power
+5 SDA
+Serial Data:TheSDApinisanopen-drainbidirectional
+input/outputpinusedtoseriallytransferdatatoandfromthe
+device.
+The SDA pin must be pulled-high using an external pull-up resistor
+(not to exceed 10KΩ in value) and may be wire-ORed with any
+number of other open-drain or open-collector pins from other devices
+onthesamebus.
+— Input/
+Output
+6 SCL
+Serial Clock: The SCL pin is used to provide a clock to the device
+and to control the flow of data to and from the device. Command and
+input data present on the SDA pin is always latched in on the rising
+edge of SCL, while output data on the SDA pin is clocked out on the
+fallingedgeofSCL.
+The SCL pin must either be forced high when the serial bus is idle or
+pulled-highusinganexternalpull-upresistor.
+— Input
+7 WP
+Write Protect:ConnectingtheWPpintoGNDwillensurenormal
+writeoperations.WhentheWPpinisconnectedtoVCC,allwrite
+operationstothememoryareinhibited.
+RefertoNote1forbehaviorofthepinwhennotconnected.
+High Input
+8 VCC
+Device Power Supply: The VCC pin is used to supply the source
+voltage to the device. Operations at invalid VCC voltages may
+producespuriousresultsandshouldnotbeattempted.
+— Power
+Note:1. If theA2/A1/A0 or WP pin is not driven, it is internally pulled down to GND. In order to operate in a
+wide variety of application environments, the pull-down mechanism is intentionally designed to be
+somewhat strong. Once these pins are biased above the CMOS input buffer’s trip point (~0.5 x VCC), the
+pull-down mechanism disengages. Zetta recommends connecting these pins to a known state whenever
+possible.
+
+--- PDF page 3 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+3
+2. Device Block Diagram and System Configuration
+Figure 2-2.System Configuration Using 2-Wire Serial EEPROM
+
+--- PDF page 4 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+4
+3. Device Operation and Communication
+TheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A operatesasaslavedeviceandutilizesasimpleI2C-
+compatible2-wiredigitalserial interfacetocommunicatewithahostcontroller,commonlyreferredtoas the
+bus Master.TheMasterinitiatesandcontrols allreadandwriteoperations tothe slavedevices ontheserial
+bus,andboththe Master andtheslavedevicescantransmitandreceivedataonthebus.
+Theserialinterfaceiscomprisedofjusttwosignallines:SerialClock(SCL)andSerial Data(SDA).The
+SCLpin isusedtoreceive theclocksignalfromthe Master,whilethe bidirectional SDApinisusedto
+receivecommandanddatainformationfromtheMaster,aswellas,tosenddatabacktothe Master.Datais
+alwayslatchedintotheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A ontherisingedgeofSCLand
+always outputfromthedeviceonthefalling edgeofSCL.BoththeSCLandSDApinincorporate integrated
+spikesuppressionfiltersandSchmittTriggerstominimizethe effectsofinputspikesandbus noise.
+Allcommandanddata informationis transferredwiththeMost-SignificantBit(MSB) first.Duringbus
+communication,onedatabit istransmittedevery clockcycle, andaftereightbits(onebyte) ofdatahave
+beentransferred,thereceiving devicemustrespondwitheither anAcknowledge(ACK)oraNo-
+Acknowledge(NACK)responsebit duringaninthclockcycle(ACK/NACK clockcycle) generatedbythe
+Master.Therefore,nineclockcyclesarerequiredforevery onebyteofdatatransferred.Thereareno
+unusedclockcycles duringanyreadorwriteoperation,sotheremustnotbeany interruptionsorbreaksin
+thedatastreamduringeachdata byte transferandACKorNACKclockcycle.
+Duringdatatransfers,dataontheSDApinmustonlychangewhileSCLislow,andthedatamustremain
+stablewhileSCLishigh.IfdataontheSDApinchangeswhileSCLis high,then eitheraStartoraStop
+condition willoccur.StartandStopconditionsareusedtoinitiateandend allserialbuscommunication
+betweentheMaster andtheslavedevices.Thenumberofdatabytes transferredbetweenaStartanda
+Stopconditionisnotlimitedandis determinedby theMaster.Inorderfortheserialbus tobeidle,boththe
+SCLandSDApinsmustbeinthelogic-highstateatthesametime.
+3.1 Clock and Data Transition Requirements
+TheSDApin is anopendrainterminalandthereforemustbepulledhighwithanexternal pull-upresistor.
+DataontheSDApinmaychangeonlyduring SCLlowtimeperiods.DatachangesduringSCLhighperiods
+willindicateaStartorStopconditionasdefinedbelow.
+
+--- PDF page 5 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+5
+3.2 Start and Stop Conditions
+3.2.1 Start Condition
+AStartcondition occurswhenthereisahigh-to-lowtransitionontheSDApinwhiletheSCLpinis ata
+stableLogic1stateandwillbring thedeviceoutofstandbymode.TheMasterusesaStartconditionto
+initiateany datatransfersequence,thereforeevery commandmustbeginwithaStartcondition.Thedevice
+willcontinuouslymonitor theSDAandSCLpinsforaStartconditionbutwillnotrespondunless oneis
+detected.PleaserefertoFigure3-1formoredetails.
+3.2.2 Stop Condition
+AStop condition occurs when there is a low-to-high transition on the SDApin while the SCL pin is stable in
+the Logic 1 state. The Master can use the Stop condition to end a data transfer sequence with the
+ZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A which will subsequently return to standby mode. The Master
+can also utilize a repeated Start condition instead of a Stop condition to end the current data transfer if the
+Masterwillperformanother operation.PleaserefertoFigure3-1formoredetails.
+3.3 Acknowledge and No-Acknowledge
+After every byte of data is received, the receiving device must confirm to the Master that it has successfully
+receivedthedatabytebyrespondingwithwhatisknownasanacknowledge(ACK).AnACKisaccomplished
+by the transmitting device firstreleasing the SDAline at the falling edge of the eighth clock cycle followed by
+thereceivingdevicerespondingwithaLogic0duringthe entirehighperiodoftheninthclockcycle.
+WhentheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A istransmittingdatatotheMaster,theMastercan
+indicatethat itisdonereceivingdataandwantstoendtheoperationby sendingaLogic1responsetothe
+ZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A insteadofanACKresponseduringtheninthclockcycle.
+Thisis knownasano-acknowledge(NACK) andisaccomplishedbytheMastersendingaLogic1during
+theninthclockcycle,atwhichpointtheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A willreleasethe
+SDAlinesotheMastercanthen generateaStopcondition.
+Thetransmittingdevice,whichcanbethebusMaster ortheSerialEEPROM,mustreleasetheSDAlineat
+thefallingedgeoftheeighthclockcycle toallowthereceivingdevicetodrivetheSDAlinetoaLogic 0to
+ACKthe previous8-bitword.ThereceivingdevicemustreleasetheSDAlineattheendoftheninth clock
+cycletoallowthetransmitter tocontinuesendingnewdata.Atimingdiagramhasbeenprovidedin
+Figure3-1tobetterillustratetheserequirements.
+Figure 3-1.Start Condition, Data Transitions, Stop Condition and Acknowledge
+SDA SDA
+Allowed Allowed SDAlinelowtoACKtheprevious8-bitword. tocontinuesendingnewdata.
+
+--- PDF page 6 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+6
+Condition Start
+3.4 Standby Mode
+The ZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A features a low-power standby mode which is enabled
+whenanyoneofthefollowing occurs:
+ Avalidpower-upsequenceisperformed(seeSection8.5,“PinCapacitance”).
+ AStopconditionisreceivedbythe deviceunlessitinitiatesaninternal writecycle(seeSection5.,
+“WriteOperations”).
+ Atthecompletionofaninternalwrite cycle(seeSection5.).
+ Anunsuccessfulmatchofthedevicetype identifierorhardwareaddressintheDeviceAddressbyte
+occurs(seeSection4.1, “DeviceAddressing”).
+ ThebusMaster does notACKthe receiptofdatareadoutfromthedevice;insteaditsendsaNACK
+response.(seeSection6.,“Read Operations”).
+3.5 Software Reset
+Afteraninterruptioninprotocol,power loss,orsystemreset,any2-wirepartcanbeprotocolresetby
+followingthesesteps:
+1. CreateaStartcondition(ifpossible).
+2. Clockninecycles.
+3. CreateanotherStartconditionfollowedbyaStopconditionasseenin Figure3-2.
+Thedeviceshouldbe readyforthe nextcommunication afterabovestepshavebeencompleted.In theevent
+that thedevice isstillnon-responsiveor remainsactive onthe SDAbus,apowercyclemustbeusedtoreset
+thedevice.
+Figure 3-2. Software Reset
+DummyClockCycles
+SCL 1 2 3 8 9
+Start
+Condition
+Stop
+Condition
+SDA
+
+--- PDF page 7 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+7
+4. Memory Organization
+ZD24C02A,2KSERIALEEPROM:Internallyorganizedwith16pages of16bytes each,the2K requiresan
+8-bit datawordaddressforrandomwordaddressing.
+ZD24C04A,4KSERIALEEPROM:Internallyorganizedwith32pages of16bytes each,the4K requiresa
+9-bit datawordaddressforrandomwordaddressing.
+ZD24C08A,8KSERIALEEPROM:Internallyorganizedwith64pages of16bytes each,the8K requiresa
+10- bitdatawordaddressforrandomwordaddressing.
+ZD24C16A,16KSERIALEEPROM:Internallyorganizedwith 128pagesof16byteseach,the16K
+requires an11-bitdatawordaddressforrandom wordaddressing.
+4.1 Device Addressing
+The2K/4K/8K/16K EEPROMdevices allrequirean8-bitdeviceaddresswordfollowing astartconditionto
+enablethechipforareadorwriteoperation(seeFigure4-1)
+Thedeviceaddresswordconsistsofamandatory"1","0"sequenceforthefirstfourmostsignificantbitsas
+shown.Thisiscommontoall theSerial EEPROMdevices.
+Thenext3bitsarefixedtozeroforthe2KEEPROM.
+Forthe4KEEPROM,thenexttwobits arefixedtozeroandthethirdbitbeingamemorypageaddressbit.
+Forthe8KEEPROM,thenextonebitisfixedtozeroandthenext2bits beingformemorypageaddressing.
+The16K doesnotuseanydevice addressbitsbutinsteadthe3bitsareusedformemorypageaddressing.
+Thesepageaddressingbitsonthe4K, 8Kand16Kdevices shouldbeconsideredthemostsignificantbitsof
+thedata wordaddresswhichfollows.
+The eighth bit of the device address is the read/write operation select bit. A read operation is initiated if this
+bitis highandawriteoperationisinitiated ifthis bitislow.
+Upon a compare of the device address, the EEPROM will output a "0". If a compare is not made, the chip
+willreturntoastandbystate.
+
+--- PDF page 8 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+8
+Figure 4-1. Device Address
+5. Write Operations
+All write operations for the ZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A begin with the Master sending
+a Start condition, followed by a Device Address byte with the R/W bit set to ‘0’, and then by the Word
+Addressbyte.Thedatavalue(s)tobewrittentothedeviceimmediately followtheWordAddressbyte.
+5.1 Byte Write
+A write operation requires an 8-bit data word address following the device address word and
+acknowledgment. Upon receipt of this address, the EEPROM will again respond with a "0" and then clock
+in the first 8-bit data word. Following receipt of the 8-bit data word, the EEPROM will output a "0" and the
+addressing device, such as a microcontroller, must terminate the write sequence with a stop condition. At
+this time the EEPROM enters an internally timed write cycle, tWR, to the nonvolatile memory. All inputs
+are disabled during this write cycle and the EEPROM will not respond until the write is complete (see
+Figure 5-1)
+Figure 5-1
+
+
+--- PDF page 9 ---
+Zetta
+9
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+5.2 Page Write
+Apagewriteisinitiated thesameasabytewrite,butthemicrocontroller does notsendastop
+conditionafterthefirstdatawordisclockedin.Instead,afterthe EEPROMacknowledgesreceiptofthefirst
+dataword,themicrocontroller cantransmituptofifteenmoredatawords.TheEEPROMwillrespondwith a"0"
+aftereach datawordreceived. Themicrocontrollermustterminatethe pagewritesequencewithastop
+condition(see Figure 5-2).
+Thedata wordaddresslowerfourbitsareinternallyincrementedfollowingthereceipt ofeachdata word.The
+higherdata wordaddressbitsarenot incremented,retainingthememorypagerowlocation.Whentheword
+address,internally generated,reachesthepageboundary,the followingbyteisplacedatthebeginningofthe
+samepage.Ifmorethansixteendata wordsaretransmittedtotheEEPROM,thedatawordaddresswill"roll
+over"andprevious datawillbeoverwritten.
+Figure 5-2
+5.3 Acknowledge Polling
+Oncetheinternally timedwrite cyclehas startedandtheEEPROM inputsaredisabled, acknowledgepolling
+canbeinitiated.This involvessendingastartconditionfollowedbythedeviceaddressword.Theread/write
+bitisrepresentativeoftheoperationdesired.Only ifthe internalwritecyclehascompletedwilltheEEPROM
+respondwitha"0",allowing thereadorwritesequencetocontinue.
+
+--- PDF page 10 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+10
+5.4 Write Cycle Timing
+Figure 5-4. SCL: Serial Clock, SDA: Serial Data I/O
+Notes:
+ThewritecycletimetWRisthetimefromavalidstopconditionofawritesequencetotheend ofthe
+internalclear/writecycle.
+5.5 Write Protection
+TheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A hasaWriteProtectpinthatprovideshardwaredata
+protection.TheWriteProtectpin allowsnormalread/writeoperationswhen connectedtoground(GND).
+WhentheWriteProtectionpin isconnectedtoVcc,the writeprotectionfeatureis enabledandoperates as
+showninthefollowing Table 5-5
+Table5-5 WriteProtectBehavior
+WP Pin Voltage Part of the Array Protected
+VCC FullArray
+GND None—WriteProtectionNotEnabled
+
+--- PDF page 11 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+11
+6. Read Operations
+Readoperations areinitiatedthe samewayasWriteoperationswiththeexceptionthattheRead/Write
+Selectbit inthe DeviceAddresswordmustbeaLogic1.TherearethreeReadoperations:
+ CurrentAddressRead
+ RandomAddressRead
+ SequentialRead
+6.1 Current Address Read
+The internal data word address counter maintains the last address accessed during the last read or write
+operation, incremented by one. This address stays valid between operations as long as the chip power is
+maintained. The address "roll over" during read is from the last byte of the last memory page to the first
+byte of the first page. The address "roll over" during write is from the last byte of the current page to the
+first byte of the same page. Once the device address with the read/write select bit set to "1" is clocked in
+and acknowledged by the EEPROM, the current address data word is serially clocked out. The
+microcontroller does not respond with an input "0" but does generate a following stop condition (see Figure
+6-1).
+Figure 6-1
+6.2 Random Read
+A random read requires a "dummy" byte write sequence to load in the data word address. Once the device
+address word and data word address are clocked in and acknowledged by the EEPROM, the
+microcontroller must generate another start condition. The microcontroller now initiates a current address
+read by sending a device address with the read/write select bit high. The EEPROM acknowledges the
+device address and serially clocks out the data word. The microcontroller does not respond with a "0" but
+doesgenerateafollowingstopcondition(see Figure 6-2)
+
+--- PDF page 12 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+12
+Figure 6-2
+6.3 Sequential Read
+Sequential reads are initiated by either a current address read or a random address read. After the
+microcontroller receives a data word, it responds with an acknowledge. As long as the EEPROM receives
+an acknowledge, it will continue to increment the data word address and serially clock out sequential data
+words. When the memory address limit is reached, the data word address will "roll over" and the
+sequential read will continue. The sequential read operation is terminated when the microcontroller does
+notrespondwitha"0"butdoesgenerateafollowingstopcondition(see Figure 6-3).
+Figure 6-3
+7. Device Default Condition from Zetta Device
+TheZD24C02A/ZD24C04A/ZD24C08A/ZD24C16A is deliveredwiththeEEPROMarraysettoLogic1,
+resultinginFFhdatainalllocations.
+
+--- PDF page 13 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+13
+8. Electrical Specifications
+8.1 Absolute Maximum Ratings
+ DCSupplyVoltage..............................................-0.3Vto+6.5V
+ Input/OutputVoltage......................GND-0.3V toVCC+0.3V
+ OperatingAmbientTemperature.............-40℃to+85℃
+ StorageTemperature.........................-65℃to +150℃
+ Electrostaticpulse(HumanBodymodel) .........8000V
+Comments：
+Stresses above those listed under "Absolute Maximum Ratings" may cause permanent damage to this device. These
+arestressratings only. Functional operation of this device at these or any other conditions above those indicated in the
+operational sections of this specification is not implied or intended. Exposure to the absolute maximum rating
+conditionsforextendedperiods mayaffectdevicereliability.
+8.2 DC and AC Operating Range
+Table 8-1.DC and AC Operating Range
+OperatingTemperature(Case) IndustrialTemperatureRange -40°Cto+85°C
+VCCPowerSupply LowVoltageGrade 1.7Vto5.5V
+
+--- PDF page 14 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+14
+8.3 DC Characteristics
+Applicable over recommended operating range from: TA = -40℃ to +85℃, VCC = +1.7V to +5.5V (unless
+otherwisenoted)
+Parameter Symbol Min Typ Max Unit Condition
+Supply Voltage VCC1 1.7 - 5.5 V -
+Supply Voltage VCC2 2.5 - 5.5 V -
+Supply Current VCC=5.0V ICC1 - 0.14 0.3 mA READ at 400KHZ
+Supply Current VCC=5.0V ICC2 - 0.28 0.5 mA WRITE at 400KHZ
+Supply Current VCC=5.0V ISB1 - 0.03 0.5 μA VIN=VCC or VSS
+Input Leakage Current IL1 - 0.10 1.0 μA VIN=VCC or VSS
+Output Leakage Current ILO - 0.05 1.0 μA VOUT=VCC or VSS
+Input Low Level VIL1 -0.3 - VCC×0.3 V VCC=1.7V to 5.5V
+Input High Level VIH1 VCC×0.7 - VCC+0.3 V VCC=1.7V to 5.5V
+Output Low Level VCC=1.7V VOL1 - - 0.2 V IOL=0.15mA
+Output Low Level VCC=5.0V VOL2 - - 0.4 V IOL=3.0mA
+
+--- PDF page 15 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+15
+8.4 AC Characteristics
+Applicableoverrecommendedoperatingrange fromTA=-40℃to+85℃,VCC=+1.7V to+5.5V,CL=1TTL
+Gateand100pF(unlessotherwisenoted)
+Parameter Symbol 1.7V≤VCC﹤2.5V 2.5V≤VCC﹤5.5V Units
+Min Typ Max Min Typ Max
+ClockFrequency,SCL fSCL - - 400 - - 1000 KHZ
+ClockPulseWidthLow tLOW 0.6 - - 0.6 - - μs
+ClockPulseWidthHigh tHIGH 0.4 - - 0.4 - - μs
+NoiseSuppressionTime tI - - 50 - - 50 ns
+ClockLowtoDataOutValid tAA 0.1 - 0.55 0.1 - 0.55 μs
+Timethebusmustbefreebeforeanew
+transmissioncanstart tBUF 0.5 - - 0.5 - - μs
+StartHoldTime tHD:STA 0.25 - - 0.25 - - μs
+StartSetupTime tSU:DAT 0.25 - - 0.25 - - μs
+DataInHoldTime tHD:DAT 0 - - 0 - - μs
+DatainSetupTime tSU:DAT 100 - - 100 - - ns
+InputRiseTime(1) tR - - 0.3 - - 0.3 μs
+InputFall Time(1) tF - - 0.3 - - 0.3 μs
+StopSetupTime tSu:STO 0.25 - - 0.25 - - μs
+DataOutHoldTime tDH 50 - - 50 - - ns
+WriteCycleTime twR - 1.9 3 - 1.9 3 ms
+5.0V,25℃,ByteMode(1) Endurance 1M - - - - - WriteCycle
+Notes:
+1.This parameter ischaracterizedandis not100% tested.
+2.ACmeasurementconditions:
+RL(connectstoVCC):1.3k
+Inputpulsevoltages:0.3VCCto0.7VCC
+Inputriseandfalltime:50ns
+Inputandoutputtimingreferencevoltages:0.5 VCC
+ThevalueofRLshouldbeconcernedaccordingtotheactual loading onthe user'ssystem.
+
+--- PDF page 16 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+16
+Bus Timing(Figure 8-4)
+Figure 8-4. SCL: Serial Clock, SDA: Serial Data I/O
+8.5 Pin Capacitance
+Applicableover recommendedoperatingrangefromTA=25℃,f=1.0MHz,VCC =+1.7V
+Parameter Symbol Min Typ Max Unit Condition
+Input/OutputCapacitance(SDA) CI/O - - 8 pF VIO=0V
+InputCapacitance(A0,A1,A2,SCL) CIN - - 6 pF VIN=0V
+
+--- PDF page 17 ---
+Zetta ZD24C02A/04A/08A/16A
+www.zettadevice.com
+17
+9. Ordering Information
+ZD 24C 0X A - SS G M T
+Zetta Designator
+Product Family
+24C=StandardI
+2
+C-compatible
+SerialEEPROM
+Device Density
+Device Revision
+Shipping Carrier Option
+T=TapeandReel,StandardQuantityOption
+B=Tubes
+Operating Voltage
+M =1.7Vto5.5V
+Package Device Grade
+G = Low-halogen,Lead(Pb)-free
+P = Lead(Pb)-free
+Package Option
+SS = JEDECSOIC
+X = TSSOP
+MA = 2.0mmx3.0mmUDFN
+P = PDIP
+ST = SOT23
+C = VFBGA
+U = 3x3Grid,5-ballWLCSP
+U1 = 2x2Grid,4-ballWLCSP
+WU = WaferUnsawn
+
+--- PDF page 18 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+18
+10 Packaging Information
+10.1 PDIP Outline Dimensions
+Notes:
+1.Thisdrawingisforgeneralinformationonly;refertoJEDECDrawingMS-001,VariationBAforadditionalinformation.
+2.DimensionsAandLaremeasuredwiththepackageseatedinJEDECseatingplaneGaugeGS-3.
+3.D,D1andE1dimensionsdonotincludemoldFlashorprotrusions.MoldFlashorprotrusionsshallnotexceed
+0.010inch.
+4.EandeAmeasuredwiththeleadsconstrainedtobeperpendiculartodatum.
+5.Pointedorroundedleadtipsarepreferredtoeaseinsertion.
+6.b2andb3maximumdimensionsdonotincludeDambarprotrusions.Dambarprotrusionsshallnotexceed0.010
+(0.25mm).
+
+--- PDF page 19 ---
+Zetta
+19
+www.zettadevice.com
+e.com
+ZD24C02A/04A/08A/16A
+10.2 SOP
+Notes:
+Thesedrawingsareforgeneralinformationonly.RefertoJEDECDrawingMS-012,VariationAAforproper
+dimensions,tolerances,datums,etc.
+
+--- PDF page 20 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+20
+10.3 TSSOP
+Notes:
+1.Thisdrawingisforgeneralinformationonly.RefertoJEDEC DrawingMO-153,VariationAA,forproper
+dimensions,tolerances,datums,etc.
+2.DimensionDdoesnotincludemoldFlash,protrusionsorgateburrs.MoldFlash,protrusionsandgateburrsshallnot
+exceed0.15mm(0.006in)perside.
+3.DimensionE1doesnotincludeinter-leadFlashorprotrusions.Inter-leadFlashandprotrusionsshallnotexceed
+0.25mm(0.010in)perside.
+4.DimensionbdoesnotincludeDambarprotrusion.AllowableDambarprotrusionshallbe0.08mmtotalinexcessoftheb
+dimensionatmaximummaterialcondition.Dambarcannotbelocatedonthelowerradiusofthefoot.Minimumspace
+betweenprotrusionandadjacentleadis0.07mm.
+5.DimensionDandE1tobedeterminedatDatumPlane H.
+
+--- PDF page 21 ---
+Zetta
+www.zettadevice.com
+ZD24C02A/04A/08A/16A
+20
+10.4 UDFN
+
+
+--- PDF page 22 ---
+www.zettadevice.com
+Zetta
+22
+ZD24C02A/04A/08A/16A
+10.5 WLCSP
+NOTES:Allwaferorientationnotchdown.
+
+--- PDF page 23 ---
+www.zettadevice.com
+Zetta
+22
+ZD24C02A/04A/08A/16A
+11. Revision History
+Rev. Date Description
+1.0 2019-10-10 InitialRelease
+1.1 2020-01-02 ModifyPackageInformation

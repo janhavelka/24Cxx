@@ -1,109 +1,131 @@
-# TI TMP1x2 reference archive
+# 24Cxx EEPROM reference archive
 
-Retrieved 2026-09-22. The PDFs are the specification; the notes below are an implementation aid. `manifest.json` records original URLs, document revisions, immutable Git revisions where available, sizes, and SHA-256 digests. `SHA256SUMS` also covers the research inventories and this document. All four sensor PDFs were independently downloaded again from TI on this date and matched the archived bytes exactly.
+The requested part is **Zetta ZD24C02B-MAGMT**, a 256-byte I2C EEPROM. This archive contains the primary manufacturer documents used for the driver and a bounded survey of manufacturer source repositories. It covers the Zetta 24Cxx catalogue from 2 Kbit through 1 Mbit, plus representative Microchip, onsemi, Giantec and ROHM parts. ST and Renesas documents were also inspected online; download failures are recorded, not presented as archived PDFs. It is not an exhaustive inventory of every manufacturer, suffix, revision or Git repository.
 
-## Specifications
+All archived vendor source is for reference only and must remain excluded from library and example builds. The implementation does not depend on vendor SDKs.
 
-| Local document | TI revision | Purpose |
-| --- | --- | --- |
-| [tmp102.pdf](tmp102.pdf) | SBOS397I, June 2024 | Catalog TMP102 register interface and limits |
-| [tmp112.pdf](tmp112.pdf) | SBOS473L, July 2024 | Catalog TMP112 A/B/D/N and X2SON variants |
-| [tmp102-q1.pdf](tmp102-q1.pdf) | SBOS702E, September 2021 | Automotive TMP102; slower conversion timing |
-| [tmp112-q1.pdf](tmp112-q1.pdf) | SLOS887H, August 2026 | Automotive TMP112 and TMP112D differences |
-| [sbaa588a.pdf](sbaa588a.pdf) | SBAA588A, January 2025 | TI fixed-point decoding application note |
+## Exact target: ZD24C02B-MAGMT
 
-The `.txt` files are local `pypdf` extractions for searching; PDF tables and diagrams remain authoritative. Later packaging addenda can have newer dates than the actual electrical-specification revision.
+Source: [Zetta's EEPROM catalogue](http://www.zettadevice.com/detail_10.html), [original PDF](http://www.zettadevice.com/uploads/files/2Kb/1678084063c994026ba112c8a0.pdf), [archived PDF](datasheets/zetta-zd24c02b.pdf), [searchable extraction](datasheets/zetta-zd24c02b.txt). Revision 1.1, 2023-01-02; 19 actual PDF pages (the printed page labels are inconsistent).
 
-## Register and command map
+| Property | Required behavior / value | PDF page |
+|---|---|---|
+| Capacity | 2 Kbit = 256 bytes, offsets 0x00-0xFF | 1, 4 |
+| Page size | **8 bytes**; crossing a page wraps within the same page | 1, 8 |
+| Address | 7-bit `0x50 | (A2 << 2) | (A1 << 1) | A0` | 2, 6 |
+| Memory address | One byte, transmitted after the device address | 6-9 |
+| Write cycle | STOP starts internal programming, maximum 5 ms; device does not ACK while busy | 7-8, 13 |
+| Read | Random read uses an address write followed by repeated START; sequential reads increment internally | 9-10 |
+| Supply | Use 1.7-5.5 V from ordering and operating tables | 12-15 |
+| Bus rate | 400 kHz at 1.7-5.5 V; 1 MHz at 2.5-5.5 V | 13 |
+| WP | High inhibits all memory writes; low enables writes; reads still work | 2-3 |
+| Address/WP inputs | Internal pull-down documented; intentionally strap for a deterministic board design | 2 |
+| Temperature | Operating-characteristic tables cover -40 to +125 C | 12-13 |
+| Endurance | 1 million write cycles under the stated 25 C, 3.3 V, page-mode conditions | 14 |
+| Retention | 100 years, characterization condition as documented | 14 |
+| Part suffix | MA = 2 x 3 mm UDFN; G = low-halogen/Pb-free; M = 1.7-5.5 V; T = tape/reel | 15 |
 
-All register words travel **most significant byte first**. Register reads should send a one-byte pointer then perform a two-byte read, preferably with repeated START. A register write is three bytes: pointer, MSB, LSB. Pointer bits 7:2 must be zero. Registers do not form a documented auto-increment burst interface: read each register separately.
+The eight-pin DFN diagram gives pins **1 A0, 2 A1, 3 A2, 4 GND, 5 SDA, 6 SCL, 7 WP, 8 VCC**. The [rendered pin diagram](datasheets/zetta-zd24c02b-page2.png) was visually checked. The PDF identifies the MA package in its ordering table but does not include its mechanical outline in the B-revision package drawings; do not treat another package's mechanical drawing as a verified MAGMT land pattern.
 
-| Pointer | Register | Access | Power-up state |
-| --- | --- | --- | --- |
-| `0x00` | Temperature | Read | 0 C until first conversion completes |
-| `0x01` | Configuration | Mixed read/write | `0x60A0`; OS and AL subsequently reflect live state |
-| `0x02` | Low threshold | Read/write | 75 C (`0x4B00`, normal format) |
-| `0x03` | High threshold | Read/write | 80 C (`0x5000`, normal format) |
+The first-page feature list claims a 1.6 V minimum, while the operating tables and M ordering code specify 1.7 V. The implementation documentation uses **1.7 V**. The device-address prose also contains a copied reference to page-address bits; the explicit bit table on page 6 assigns all three low address bits to A2/A1/A0 for this 2-Kbit part.
 
-There is **no device ID, manufacturer ID, CRC, EEPROM, or per-address software reset register**. A plausible configuration word establishes interface compatibility, not unique identification as TMP102 versus TMP112. Device model is an application selection.
+**ZD24C02A is different:** the earlier Zetta 02A/04A/08A/16A document specifies 16-byte pages and a 3 ms write cycle. It must not be used to justify a 16-byte page on the requested **02B**.
 
-The only special reset command is I2C **general-call address `0x00`, payload `0x06`**. This resets every compatible target on the bus, so it must not be hidden inside a single-device initialization or recovery operation. SMBus Alert Response uses seven-bit address `0x0C`, and arbitration chooses the lowest responding address. These are bus operations, not device register pointers. A host must explicitly own and authorize such shared-bus operations.
+## Protocol, geometry and vendor differences
 
-## Configuration
+These EEPROMs have a byte array and an internal address pointer. Ordinary memory access has no temperature register, identity register, configuration register, WREN opcode, chip-erase opcode or software shutdown command. A scan/ACK cannot identify capacity, manufacturer, page size or write protection. Configure geometry from the exact BOM part.
 
-| Bits | Mask | Meaning |
-| --- | --- | --- |
-| 15 OS | `0x8000` | In shutdown, writing one triggers a single conversion; reads zero busy and one ready |
-| 14:13 R1:R0 | `0x6000` | Read-only, always binary 11; resolution is not programmable through these bits |
-| 12:11 F1:F0 | `0x1800` | Consecutive fault count: 00=1, 01=2, 10=4, 11=6 |
-| 10 POL | `0x0400` | Zero active-low ALERT; one active-high |
-| 9 TM | `0x0200` | Zero comparator, one interrupt |
-| 8 SD | `0x0100` | One shutdown; active conversion completes before shutdown |
-| 7:6 CR1:CR0 | `0x00C0` | 00=0.25Hz, 01=1Hz, 10=4Hz, 11=8Hz |
-| 5 AL | `0x0020` | Read-only comparator status; depends on POL, unaffected by TM |
-| 4 EM | `0x0010` | Zero normal 12-bit encoding; one extended 13-bit encoding |
-| 3:0 | `0x000F` | Reserved, zero |
+| Memory operation | Bus sequence |
+|---|---|
+| Byte/page write | START, address+W, 1 or 2 memory-address bytes, data, STOP |
+| ACK polling | START, address+W, ACK/NACK, STOP; polling is explicit and bounded |
+| Random/sequential read | START, address+W, memory address, repeated START, address+R, data, master NACK on last byte, STOP |
+| Current-address read | START, address+R, data, master NACK, STOP; depends on external pointer state |
 
-The persistent writable mask is `0x1FD0`; the OS command adds `0x8000`. Ordinary read-modify-write must clear the sampled OS bit before writing, otherwise an idle shutdown device can accidentally start a conversion. Configuration verification should compare persistent writable bits, not OS or AL. Preserve unrelated persistent settings when changing one field.
+A successful write transfer only proves the bus transaction was accepted. It does not prove that programming completed or that WP was low. Check readiness after the write and read back when confirmation matters. WP behavior differs: some devices accept the transaction but suppress programming; Renesas R1EX24002A instead documents a NACK on the data byte when WP is high.
 
-Switching EM changes the interpretation of **both thresholds**. Preserve their Celsius values by decoding in the old format and re-encoding in the new format; reject values that cannot be represented. Multiple writes are not atomic, and a failed transaction can leave partial state. Only report success after all required writes succeed, and document/recover from partial failures.
+Write chunks must stop at the configured page boundary and the transport's payload limit. The address prefix consumes transport buffer space. Read chunks should stop at bank boundaries as well as transport limits; do not assume every multi-address EEPROM rolls reads into the next bank. Never wrap a user request at the end of the array. After an interrupted transfer or power loss, previously transferred bytes may already have been programmed; a transport error cannot establish rollback.
 
-**EM transition caution:** TI support confirmed that changing configuration during a running conversion can produce a temperature word with the new EM marker but the old temperature encoding. Checking bit 0 alone cannot reject that word; decoding it can be wrong by a factor of two. TI recommends first setting SD while preserving the old configuration, waiting 35 ms for any conversion to finish, then applying the new settings. After changing EM, obtain a completed conversion in the new mode before exposing a managed sample. This behavior is documented in the [TMP112 TI engineer response](https://e2e.ti.com/support/sensors-group/sensors/f/sensors-forum/526611/possible-bug-in-the-tmp112-em-mode), with a corresponding [TMP102 discussion](https://e2e.ti.com/support/sensors-group/sensors/f/sensors-forum/503810/tmp102-takes-5-10-seconds-before-giving-valid-13-bits-temperature-reading); offline HTML snapshots are under `ti-e2e/`. A delay after writing SD and the new EM together does not implement the recommended sequence.
+The following are representative geometries, **not a universal guarantee for every similarly named part**. Conservative smaller page chunks remain usable when they divide the physical page size. Voltage, clock, endurance, write timing and address-pin decoding must still be checked for the exact part.
 
-## Temperature encoding
+| Representative family | Capacity bytes | Page bytes | Word-address bytes | Bank bits in 7-bit address |
+|---|---:|---:|---:|---|
+| 24C01 | 128 | 8 typical; ST uses 16 | 1 | none |
+| **ZD24C02B** | **256** | **8** | **1** | **none** |
+| ZD24C02A / ST M24C02 / CAT24C02 / GT24C02 | 256 | 16 | 1 | none |
+| ROHM BR24G02-3A | 256 | 8 | 1 | none |
+| 24C04 | 512 | 16 | 1 | bit 0 = offset bit 8 |
+| 24C08 | 1,024 | 16 | 1 | bits 1:0 = offset bits 9:8 |
+| 24C16 | 2,048 | 16 | 1 | bits 2:0 = offset bits 10:8 |
+| ZD24C32A | 4,096 | 32 | 2, MSB first | none |
+| ZD24C64A | 8,192 | 32 | 2, MSB first | none |
+| ZD24C128A | 16,384 | 64 | 2, MSB first | none |
+| ZD24C256A / Microchip 24LC256 | 32,768 | 64 | 2, MSB first | none |
+| ZD24C512A | 65,536 | 128 | 2, MSB first | none |
+| ZD24C1MA / ST M24M01-R/DF | 131,072 | 256 | 2, MSB first | **bit 0 = offset bit 16** |
+| Microchip 24AA/LC/FC1025 | 131,072 | 128 | 2, MSB first | **bit 2 = offset bit 16** |
 
-Normal mode uses a signed 12-bit two's-complement value in bits 15:4. Extended mode uses signed 13-bit two's complement in bits 15:3. Both have a 0.0625 C LSB. Sign extension should be explicit and portable; avoid left-shifting negative signed integers or relying on implementation-defined right shifts.
+The [ZD24C1MA addressing figure](datasheets/zetta-zd24c1ma-page7.png) was visually checked. Microchip 24XX1025 has an additional A2-pin wiring requirement (tie high) and cannot sequentially read across its 64-KiB halves. Its bank layout must remain separate from the Zetta layout.
 
-**Temperature register bit 0 reports the sample's encoding**: zero normal, one extended. Threshold registers have zero unused low bits, including bit 0 in extended mode. Thus the temperature can be decoded from its own mode marker, while threshold decoding requires EM from configuration.
+ST M24M01-R/DF has E2 and E1 chip-enable inputs: valid base addresses are `0x50`, `0x52`, `0x54`, `0x56`; 7-bit address bit 1 is E1, not reserved. See [ST DocID12943 Rev.14, table 2](https://www.st.com/resource/en/datasheet/m24m01-r.pdf). Do not treat the newer configurable-address M24M01E-F as the same reviewed variant. Microchip 24LC1025 instead uses bases `0x50` through `0x53`; its physical A2-high requirement does not imply setting software address bit 2 (the bank bit) in the base address.
 
-| Temperature | Normal register | Extended temperature register | Extended threshold register |
-| --- | --- | --- | --- |
-| 25 C | `0x1900` | `0x0C81` | `0x0C80` |
-| -0.0625 C | `0xFFF0` | `0xFFF9` | `0xFFF8` |
-| -25 C | `0xE700` | `0xF381` | `0xF380` |
-| 125 C | `0x7D00` | `0x3E81` | `0x3E80` |
+A generic density name also does not guarantee address-pin decoding. Some Microchip small B-series devices ignore pins that other vendors use for chip selection, so several scanned addresses can be aliases of one EEPROM. On banked devices, the base address must leave the bank-selection bits clear.
 
-Representable numbers are -128 through 127.9375 C in normal format and -256 through 255.9375 C in extended format. These **encoding bounds are not operating ratings**. Catalog recommended operating temperature is -40 through 125 C. Threshold APIs should validate finite input, define rounding, and reject overflow rather than wrap it.
+Some larger Zetta/ST variants add identification pages and irreversible lock commands. These are device-specific extensions, separate from the normal array; their presence in an archived datasheet does not mean this library implements or should probe them. FRAM, SPD, MAC-address parts, secure memories and SPI 25xx devices require their own reviewed behavior.
 
-## Conversion timing and alert behavior
+## Archived document inventory
 
-| Part / document | Typical conversion | Maximum conversion |
-| --- | --- | --- |
-| TMP102, SBOS397I | 10 ms | 15 ms |
-| TMP112 catalog, SBOS473L | 10.25 ms | 11.25 ms |
-| TMP102-Q1, SBOS702E | 26 ms | 35 ms |
-| TMP112-Q1, SLOS887H | 26 ms | 35 ms |
-| TMP112D-Q1, SLOS887H | 10.25 ms | 11.25 ms |
+Every successful download has its original URL, final URL, byte count, SHA-256 and searchable-text hash in [manifest.json](manifest.json). Actual downloaded revision identifiers are recorded there. The canonical vendor URL can later serve a newer document; use the stored hash when reproducing this review.
 
-The catalog TMP112 narrative rounds conversion time to 10 ms; use the electrical table for the precise bound. Older drivers often assume 26/35 ms. A 35 ms minimum conversion guard accommodates legacy and Q1 parts; allow additional timeout margin and use OS polling for one-shot completion. Do not equate the conversion interval (4000/1000/250/125 ms) to conversion execution time. A fresh post-power-up temperature is not available immediately.
+| Vendor | Downloaded documents |
+|---|---|
+| Zetta | ZD24C02B; ZD24C02A/04A/08A/16A; ZD24C32A; ZD24C64A; ZD24C128A; ZD24C256A; ZD24C512A; ZD24C1MA; EEPROM catalogue snapshot |
+| Microchip | DS20001941L (24XX1025); DS20001703M (24XX16); DS20001203Y (24XX256) |
+| onsemi | CAT24C01/D Rev.36 covering CAT24C02/04/08/16 |
+| Giantec | GT24C02 A3 |
+| ROHM | BR24G02-3A Rev.004 |
 
-OS is specified as conversion-ready status for the one-shot/shutdown procedure, not as a universal continuous-mode data-ready flag. An SD write lets an already running conversion finish. TI's [shutdown sequencing explanation](https://e2e.ti.com/support/sensors-group/sensors/f/sensors-forum/571503/tmp112-time-to-get-a-brief-moment-data-in-low-power-comsumption) explicitly waits one maximum conversion time after requesting shutdown before requesting a new one-shot. A [local research note](ti-e2e/tmp112-shutdown-sequencing.md) records the guidance and retrieval limitation: indexed discussion text was available, but direct HTML downloads returned HTTP 403. Preserve that settling time when changing EM; an immediate OS observation during the continuous-to-shutdown transition is not a substitute for this conservative sequence.
+Inspected primary references whose local PDF downloads failed:
 
-In comparator mode, ALERT asserts at or above THIGH after the programmed consecutive-fault count, and clears below TLOW after the same count. Normalize AL as `alertActive = (AL == POL)` after converting each bit to a boolean. AL describes comparator state even in interrupt mode; it is **not the interrupt latch/pin state**.
+- [ST M24C01/02 datasheet](https://www.st.com/resource/en/datasheet/m24c02-f.pdf): direct host lookup/connection timed out. ST's [product page](https://www.st.com/en/memories/m24c02-w.html) confirms the 16-byte page difference.
+- [ST M24M01-R/DF datasheet](https://www.st.com/resource/en/datasheet/m24m01-r.pdf), DocID12943 Rev.14, 2017-10: browser-readable PDF; direct ST downloads timed out. Table 2 verifies the named preset's E2/E1/A16 addressing.
+- [Renesas R1EX24002A datasheet](https://www.renesas.com/en/document/dst/r1ex24002asas0ir1ex24002atas0i-datasheet-two-wire-serial-interface-2k-eeprom-256-word-x-8-bit?r=504006), R10DS0221EJ0200 Rev.2.00, 2013-11-07: browser-readable PDF, automated byte download returned HTTP 403.
+- [Renesas R1EX24xxx control-software application note](https://www.renesas.com/en/document/apn/rx-family-rl78-family-renesas-r1ex24xxx-series-serial-eeprom-control-software-rev103?r=504006), R01AN1075EJ0103 Rev.1.03, 2016-03-31: browser-readable PDF, automated byte download returned HTTP 403.
 
-In interrupt mode, a high crossing asserts the pin; after acknowledgement, a qualifying low crossing can assert it again. Register reads may acknowledge the interrupt. Current datasheets are internally inconsistent: their short interrupt-mode description says a temperature-register read clears the pin, while the detailed threshold-register section says any register read, successful SMBus alert response, or shutdown clears it. Treat polling/status/register-dump reads as potentially acknowledging the interrupt. Do not promise nondestructive interrupt-pin diagnostics based on AL.
+The exact Zetta target and its normal-memory protocol are fully covered by the downloaded primary PDFs. These four unavailable local downloads are explicitly marked `unavailable` in the manifest.
 
-The sensor's SMBus timeout resets the serial interface after a line is held low for approximately 30–40 ms; it is not a reset of all user settings. Keep I2C transfers bounded. Use normal 100kHz or 400kHz communication for common cross-platform adapters; special high-speed mode requires a master-code sequence and must not be assumed from a frequency setting alone.
+## Manufacturer repository survey
 
-## Address and model differences
+[repository-inventory.json](repository-inventory.json) records exact repository names, resolved commit IDs, commit dates, tree-search scope, matched paths, selected downloads, upstream URLs and checksums. The source snapshots are:
 
-Classic SOT563 TMP102/TMP112 use 0x48, 0x49, 0x4A, and 0x4B with ADD0 tied respectively to GND, V+, SDA, and SCL. TMP112 offers tighter accuracy grades than TMP102 but the same register protocol. Accuracy and supply limits depend on suffix; resolution alone does not establish accuracy.
+| Repository | Selected material | License boundary |
+|---|---|---|
+| [ST X-CUBE-EEPRMA1](https://github.com/STMicroelectronics/X-CUBE-EEPRMA1) | `M24xx` C driver/header, licenses, evaluation command-tool documentation | M24xx BSD-3-Clause; command utility has separate ST terms |
+| [ST stm32-m24256](https://github.com/STMicroelectronics/stm32-m24256) | Standalone M24256 C driver/header and license | BSD-3-Clause |
+| [Microchip Harmony core](https://github.com/Microchip-MPLAB-Harmony/core) | AT24 driver/template, geometry configuration and public types | Microchip-specific software terms |
+| [Microchip dsPIC 24C08 example](https://github.com/microchip-pic-avr-examples/dspic33ck-curiosity-i2c-eeprom-demo) | 24C08 read/write example, configuration and types | Microchip-specific software terms |
+| [Renesas linux-bsp](https://github.com/renesas-rcar/linux-bsp) | Linux AT24 driver and EEPROM device-tree schema | GPL-2.0 notices retained |
 
-TMP112D in the five-pin X2SON address-select package instead uses **0x40–0x43**, with no ALERT pin. Catalog fixed-address X2SON TMP112D0/D1/D2/D3 use 0x48/0x49/0x4A/0x4B and provide ALERT. Automotive suffix numbering differs: SLOS887H lists D1/D2/D3/D4 for the corresponding fixed-address variants. Refer to the exact package/ordering table rather than inferring capability from the short name. The new TMP112D-Q1 permits a wider supply range than the classic devices; this is an electrical distinction, not an extra register command.
+ST's archived AT-command utility documentation specifically targets the **M95P32 SPI** board and is retained to explain an excluded search hit. It is a host/board interface, not an I2C EEPROM chip opcode list. SPI opcodes do not apply to 24Cxx. The local library CLI follows sibling project conventions rather than adopting those vendor evaluation commands.
 
-## Official code and repository research
+The metadata search found five ST repositories and five Microchip example repositories matching its terms; the results include unrelated emulated EEPROM and SPI code. Harmony's zero metadata hits do not mean it lacks EEPROM code: its tree contains the archived AT24 driver. Renesas's general organization search likewise does not cover the separately named R-Car organization. Corrected ROHM organization, Zetta, Giantec and onsemi metadata queries returned no dedicated driver matches; supplemental web searches did not identify manufacturer-owned dedicated 24Cxx driver repositories for them. Earlier API rate-limit and organization-name errors remain in the inventory alongside successful follow-up queries.
 
-* [TI Linux kernel](https://github.com/TexasInstruments/ti-linux-kernel): immutable snapshot `fff856a50d43288671eaa733f9f59aa25f2fed77` from `ti-linux-6.18.y`. The archived `tmp102.c`, `lm75.c`, `lm75.h`, hwmon documentation, and devicetree bindings provide register definitions and Linux usage. TI's TMP112 product page points to the LM75 driver. These are reference files under their original GPL/SPDX terms; **they are not linked into this library or relicensed by the repository's root license**.
-* [TI SBOC486 Arduino example](https://www.ti.com/tool/download/SBOC486): version 01.00.00.00, released 2017-10-22. `sboc486.zip` is the original TI distribution including schematic and sketch; `sboc486-example.ino` is extracted unchanged. The legacy `/lit/zip/sboc486` link now returns an HTML migration page, archived separately. The actual ZIP was fetched from TI's download host and validated as a ZIP.
-* [TI MAVRK TMP112 reference](https://software-dl.ti.com/analog/analog_public_sw/MAVRK/latest/API_Documentation/Advanced_Documentation/html/_t_m_p112___temp___sensor_8h.html): archived header source, register enums, initialization, and PC interface command documentation. These are historical board-protocol examples; PC commands are **MAVRK commands**, not additional sensor commands. Source comments and original terms remain intact.
-* [TI ASC Studio TMP102](https://www.ti.com/tool/ASC-STUDIO-TMP102) and [TMP112](https://www.ti.com/tool/ASC-STUDIO-TMP112) are official configuration/code-generation tools. No standalone public TMP102/TMP112 repository for ASC was identified in this search.
+This is a reproducible, bounded search of public repository metadata and selected trees, not authenticated global code search. No claim is made that every vendor repository was enumerated. Vendor-owned upstream Linux forks also include community code; ownership of the repository does not make every driver vendor-authored.
 
-**Historical MAVRK discrepancies:** the archived 2012 header defines a 13-bit resolution enum as `2`, whereas current datasheets specify R1:R0 as read-only `3`; EM controls temperature encoding. Its alert-mode enum names also associate read-cleared behavior with `0` and temperature-cleared behavior with `1`, opposite the current TM definitions (0 comparator, 1 interrupt). These historical definitions are not authoritative register encodings. Use the current datasheet tables above when implementing typed enums; keep the unchanged MAVRK files for provenance and the board-level command list.
+## Integrity, refresh and licenses
 
-The GitHub API repository inventory covers public repositories returned for TexasInstruments and TexasInstruments-Sandbox. `ti-repository-search.json` records recursive filename searches for TMP102/TMP112 in TI Linux, SimpleLink F2/F3, MSPM0, MCU+ core, and the TI environmental-sensors repository. Truncated large trees are identified honestly; `ti-repository-subtree-search.json` additionally checks SDK source and example subtrees. No matching filenames were found in the completely returned SDK source trees. Filename searches do not prove that embedded snippets are absent from unrelated files. The environmental-sensors repository currently contains TMP118 and humidity examples, not these devices.
+`SHA256SUMS` is the single integrity entry point: it covers every retained file in this directory except itself and Python bytecode caches, including PDFs, text extractions, rendered figures, source code, licenses, scripts and provenance metadata. `SOURCE-SHA256SUMS` separately covers only downloaded source snapshots.
 
-Search-engine queries also covered TI GitHub and `git.ti.com` with both part names. The TI cgit index was reachable through browsing, but target repository/search URLs returned access failures/HTTP 403 during this session. The current TI-owned GitHub Linux mirror supplies the relevant register drivers. This is a reproducible survey of relevant official repositories and artifacts, **not a claim to have exhaustively inspected every branch and file in every TI repository**.
+From the repository root:
 
-## Archive terms
+```text
+python docs/reference/acquire_references.py
+python docs/reference/acquire_sources.py
+python docs/reference/update_checksums.py
+```
 
-TI datasheets, TI application notes, example archives, and MAVRK HTML retain their original copyright notices and usage terms. Linux reference source retains its original license headers, with the upstream COPYING and GPL-2.0 text alongside it. This archive is documentation/reference material, excluded from the library build. Consult each artifact's original terms before redistributing it independently.
+The acquisition scripts require `requests` and `pypdf`; they record download failures without substituting HTML for a PDF. Re-running refreshes snapshots to the URLs/current branches in the scripts and changes the manifest; source snapshots themselves use resolved commit URLs. Preserve/review revision metadata when refreshing. The two rendered figures are derived from their recorded PDF pages using PyMuPDF at 1.7 scale.
+
+Manufacturer PDFs, extracted text and figures retain their original copyrights and terms. Reference source files retain their original licenses; none is relicensed under this library's license. In particular, Microchip reference software includes Microchip-product restrictions and Linux code remains GPL. Do not copy those references into the platform-neutral implementation without a separate license review.
+
+The previous TMP1x2/TI reference set is preserved separately in [docs/archive/tmp1x2-reference](../archive/tmp1x2-reference/README.md). It belongs to the earlier, corrected request and does not support any EEPROM claims.

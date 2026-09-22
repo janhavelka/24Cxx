@@ -1,25 +1,31 @@
-# Hardware validation checklist
+# Hardware validation
 
-Native tests validate the implementation against a modeled register device.
-They do not establish physical accuracy, bus timing or ALERT pin behavior.
+No board has been flashed and no physical EEPROM result is claimed. Host tests
+use a modeled EEPROM and cannot establish voltage margins, real write timing,
+WP behavior, endurance or recovery after power interruption.
 
-1. Confirm the exact part/package and supply rating against its datasheet.
-   Use common ground and appropriate SDA/SCL pull-ups. Set board pins explicitly.
-2. Build and flash the Arduino or native ESP-IDF CLI for the selected board.
-   Capture `version`, `help`, `scan`, `config`, `health` and `dump` output.
-3. Validate all four ADD0 address straps (GND, supply, SDA, SCL) independently.
-4. Compare room-temperature and negative-temperature measurements with a known
-   reference. Check normal and extended decoding within the exact part's
-   operating limits. Values outside those limits belong in native encoding
-   tests; the extended register range does not expand the sensor's ratings.
-5. Exercise all four continuous conversion rates, shutdown and one-shot. Confirm
-   that one-shot completion comes from OS and that shutdown holds the last value.
-6. Test low/high limits, comparator and interrupt behavior, both polarities and
-   all four fault-queue settings. Record effects of register reads on ALERT.
-7. Disconnect/reconnect the sensor and confirm DEGRADED/OFFLINE/READY transitions,
-   bounded callbacks, error detail, and explicit recovery. Include a second
-   peripheral to verify that sensor recovery does not reset the bus.
-8. Test actual scheduler locking and callback timeout enforcement. Record firmware
-   version, board, chip marking, framework version, pull-ups and clock frequency.
+1. Confirm ZD24C02B-MAGMT marking/package, A0/A1/A2 straps, WP state and supply.
+   Check pin assignments against the archived exact Zetta datasheet. Use correct
+   pull-ups and board-specific SDA/SCL configuration.
+2. Build and flash the selected Arduino or native IDF CLI. Capture version,
+   help, model, settings, discover and health. Confirm startup leaves contents
+   unchanged against an independent programmer dump.
+3. Read the full 256-byte device and validate pointer/repeated-START/STOP behavior
+   with a logic analyzer. Probe all strapped addresses on separate test setups.
+4. On an explicitly disposable region, program known data starting near an 8-byte
+   page boundary and verify neighboring bytes are unchanged. Capture STOP,
+   programming interval and optional ACK-poll NACK/ACK transitions.
+5. Assert WP and repeat a verified write using data different from existing
+   contents. Confirm a mismatch is reported even if the bus write acknowledges.
+6. On each other fitted family layout, test pointer 0xFF/0x100, page boundaries,
+   last valid byte and (where present) 0xFFFF/0x10000 bank transitions. Never use
+   destructive alias tests to auto-detect an unknown chip containing useful data.
+7. Inject disconnects and transfer failures. Check partial accepted/verified
+   counts, retained results, no automatic replay, and bounded recovery. Cancel
+   immediately after a page write and confirm the programming barrier remains.
+8. Use a second bus peripheral to verify that EEPROM programming waits release
+   the shared bus. Test actual adapter locking and timeout behavior in the target
+   application. Record firmware, board, chip, voltage, pull-ups and bus speed.
 
-No board has been flashed or physical validation claimed during repository setup.
+Any power-loss, long-term retention or endurance qualification requires its own
+controlled test and evidence; a successful readback is not that qualification.
