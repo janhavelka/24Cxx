@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Preserve the physical write-cycle barrier for unknown transport outcomes;
+  malformed results can no longer establish that a write had no effect.
+- Preserve distinct write/readback statuses, report mismatch offsets, and reset
+  stale geometry at teardown without discarding pending write/result evidence.
+- Harden Wire buffer/timeout handling and preserve typed native IDF NACK errors.
+- Reject unsupported characters through both CLI input entry points.
+- Fix PlatformIO native discovery so CLI and transport tests actually run.
+
+### Added
+
+- Sibling health/config/settings/memory getters and enum diagnostic names.
+- Correlated requests, qualified polling/cancellation/result consumption, and
+  owner-declared timeouts for clockless integrations.
+- Full-range cooperative hex/ASCII, text, strings and CRC32 CLI tools; variants,
+  size, heap, verbose and read-only selftest diagnostics.
+- Transport regression suite, reproducible exported-package checks, and the
+  documented sixteen-library audit and validation results.
+
 ## EEPROM24Cxx 1.0.0 - 2026-09-22
 
 ### Added

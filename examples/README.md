@@ -44,15 +44,45 @@ settings
 discover
 read 0 32
 dump 240 16
+text 0 64
+strings
+crc 0 256
 health
+selftest
 stress 20
 stop
 ```
 
-`read`/`dump` return 1 through 256 bytes, default 16. `stress` performs a finite
-number of reads and never consumes EEPROM write endurance. `settings`, `health`,
-`progress`, `diag` and version/help commands use cached state and do not touch I2C.
-Scans and explicit probe affect adapter counters separately from tracked health.
+`read`/`dump`/`hexdump` print a hex+ASCII view, default 16 bytes. `text` prints
+escaped ASCII, default 64 bytes, so EEPROM contents cannot inject terminal escape
+sequences. Both accept any nonempty range within the configured capacity.
+`strings [addr N [minLen]]` finds printable ASCII runs, including those crossing
+bank or buffer boundaries; no arguments scans the whole configured chip. The
+minimum length defaults to 4 and accepts 1..64. `crc <addr> <N>` computes
+CRC32/ISO-HDLC (reflected polynomial `0xEDB88320`, initial/final XOR `0xFFFFFFFF`).
+Cancelled or failed CRC jobs never report a full-range checksum.
+
+These views use a fixed 256-byte buffer and advance with at most one physical
+transaction per tick. Admission is bus-silent; `progress` shows completed bytes
+across the entire requested range, and `stop`/`cancel` can interrupt the work
+between transactions. Failed reads expose only the successfully completed prefix.
+Other commands that access the bus are rejected while a view is active; cached
+diagnostics remain available.
+
+`selftest`/`selfcheck` read the first 16 bytes (or the entire chip if its configured
+capacity is smaller). A PASS demonstrates access only, without identifying the
+chip, verifying capacity, testing WP or exercising programming. `stress [N]`
+performs 1..10000 read-only rounds, default 100, with ten milliseconds between
+rounds; `verbose on` enables each round's transfer report. Failures are always
+reported and count toward the finite limit. These diagnostics never consume
+EEPROM write endurance.
+
+`settings`, `health`, `progress`, `diag`, `variants`, `size` and version/help
+commands do not touch I2C. `heap` reports application heap telemetry when the
+adapter provides it; both ESP32 adapters do. Scans and explicit probe affect
+adapter counters separately from tracked health. Health prints binding
+separately from READY/DEGRADED/OFFLINE: a bound driver permits explicit I/O even
+after transport errors. `diag` is a cached report; it does not run a selftest.
 
 Change the model/strap address while ended, then bind or begin again:
 
@@ -63,9 +93,45 @@ addr 0x50
 begin
 ```
 
-`model` lists the supported profile names. Selecting a name does not validate
+`model`/`variants` list supported profiles with their capacity, page size,
+pointer width, bank mapping and write time. `size` reports configured capacity.
+Selecting a name does not validate
 physical identity. The base address must leave the selected model's bank bits
 clear. Use the core's custom geometry API for other confirmed layouts.
+`settings` distinguishes staged geometry from the active binding and includes
+transport limits, ACK-poll availability, clock availability and the offline
+threshold. `addr`, `model` and `timeout` without arguments are cached queries,
+available even while an operation runs.
+
+## Input and diagnostic contract
+
+Commands are lowercase. Integers accept decimal or explicit `0x` hexadecimal;
+leading zeroes remain decimal. Complete tokens must parse within their allowed
+range; signs, overflow, trailing characters, missing/extra arguments, control
+characters and non-ASCII input are rejected before mutation. Serial lines and
+direct `processCommand()` calls follow the same character restrictions. Lines
+longer than 255 characters are discarded as a whole. Backspace edits an ordinary
+serial line but cannot recover an overflowed or invalid line.
+
+Help uses the sibling cyan title/commands, green section labels, 32-character
+command column and `> ` prompt. `color off` removes ANSI codes. `verbose` and
+`color` accept only `0`, `1`, `off` or `on` when setting a value.
+
+The common aliases are `help`/`?`, `version`/`ver`, `init`/`begin`,
+`end`/`unbind`, `cfg`/`settings`/`snapshot`, `drv`/`health`/`state`/`online`,
+`progress`/`status` and `stop`/`cancel`. `bind` performs no transaction;
+`init`/`begin` and `recover` perform one tracked presence check. `probe` performs
+an untracked presence check. `scan` checks 0x08..0x77; `discover` checks
+0x50..0x57, one address per tick. Address aliases can belong to a single chip.
+
+Memory transfer output includes symbolic kind/state/status, structured error
+detail, request ID, requested/accepted/completed/verified counts, aggregate
+commit evidence and the last chunk's evidence. A verification attempt reports
+its separate status and match flag. `progress` retains the last terminal result
+after it is consumed from the driver.
+For a read-only view spanning several core requests, the first request ID is
+retained as the CLI range ID in all progress and terminal reports, including
+failures and cancellation between buffers.
 
 ## Explicit programming
 

@@ -17,11 +17,17 @@ struct TransferStats {
     if (count != UINT32_MAX) ++count;
   }
 };
+struct HeapStats {
+  uint32_t freeBytes = 0;
+  uint32_t minimumFreeBytes = 0;
+  uint32_t largestFreeBlock = 0;
+};
 struct Platform {
   void (*vprintf)(void*, const char*, va_list) = nullptr;
   uint32_t (*nowMs)(void*) = nullptr;
   EEPROM24Cxx::Status (*probeAddress)(uint8_t, void*) = nullptr;
   TransferStats (*transferStats)(void*) = nullptr;
+  HeapStats (*heapStats)(void*) = nullptr;
   void* user = nullptr;
   const char* framework = "unknown";
   const char* frameworkVersion = "unknown";
@@ -41,9 +47,17 @@ class Cli {
   void status(EEPROM24Cxx::Status value);
   void printVersion();
   void printHealth();
+  void printHeap();
   void printSettings();
+  void printModels();
   void printProgress(const EEPROM24Cxx::TransferResult& result);
   void printBytes(uint32_t address, size_t length);
+  enum class ReadView : uint8_t { NONE, HEX_DUMP, TEXT, STRINGS, CRC, SELFTEST };
+  EEPROM24Cxx::Status startReadView(ReadView view, uint32_t address, uint32_t length,
+                                  uint32_t minimumStringLength = 4);
+  void completeReadView(const EEPROM24Cxx::TransferResult& result);
+  void printReadView(uint32_t address, size_t length);
+  void finishString();
   void stop();
   void complete();
   const char* color(unsigned code) const;
@@ -56,9 +70,21 @@ class Cli {
   size_t _length = 0;
   bool _overflow = false;
   bool _color = true;
+  bool _verbose = false;
   bool _operation = false;
   bool _hasResult = false;
   EEPROM24Cxx::TransferResult _lastResult{};
+  ReadView _readView = ReadView::NONE;
+  uint32_t _readRequestId = 0;
+  uint32_t _readAddress = 0;
+  uint32_t _readLength = 0;
+  uint32_t _readCompleted = 0;
+  uint32_t _crc = 0xFFFFFFFFU;
+  uint32_t _minimumStringLength = 4;
+  uint32_t _stringAddress = 0;
+  uint32_t _stringLength = 0;
+  uint32_t _stringCount = 0;
+  char _stringPrefix[64]{};
   bool _scan = false;
   uint8_t _scanNext = 0;
   uint8_t _scanLast = 0;

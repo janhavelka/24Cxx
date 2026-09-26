@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <type_traits>
 #include <vector>
@@ -203,6 +204,12 @@ static void writeEvidenceAndNoReplay() {
     {e::TransportResult::Error(e::TransportCode::BUS_ERROR, 3, e::WriteCommit::ACCEPTED, 5), e::WriteCommit::ACCEPTED, 4, true},
     {e::TransportResult::Error(e::TransportCode::NACK_DATA, 4, e::WriteCommit::ACCEPTED, 5), e::WriteCommit::INDETERMINATE, 0, true},
     {e::TransportResult::Error(e::TransportCode::TIMEOUT, 5, e::WriteCommit::NOT_COMMITTED, 3), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(static_cast<e::TransportCode>(255), 6, e::WriteCommit::NOT_COMMITTED), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::BUS_ERROR, 7, e::WriteCommit::NOT_COMMITTED, 0, 1), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::IO_ERROR, 8, e::WriteCommit::ACCEPTED, 6), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::NACK_UNSPECIFIED, 9, e::WriteCommit::ACCEPTED, 5), e::WriteCommit::INDETERMINATE, 0, true},
+    {e::TransportResult::Error(e::TransportCode::TIMEOUT, 10, e::WriteCommit::NOT_COMMITTED, 1), e::WriteCommit::NOT_COMMITTED, 0, false},
+    {e::TransportResult::Error(e::TransportCode::TIMEOUT, 11, static_cast<e::WriteCommit>(255), 5), e::WriteCommit::INDETERMINATE, 0, true},
     {e::TransportResult::Ok(4, 0), e::WriteCommit::INDETERMINATE, 0, true},
     {e::TransportResult::Ok(6, 0), e::WriteCommit::INDETERMINATE, 0, true}};
   for (const auto& item : cases) {
@@ -291,6 +298,185 @@ static void postCallbackDeadlinesAndShortRead() {
   CHECK(r.bytesAccepted == 1 && r.failedChunkLength == 1 && ack.probes == 1);
   CHECK(ad.settingsSnapshot().writeBusyPolls == 1 && ad.settingsSnapshot().totalFailures == 0);
 }
+static void verificationEvidenceAndLifecycle() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.maxRxBytes = 1;
+  CHECK(d.bind(c).ok()); uint8_t bytes[2] = {0x31, 0x32};
+  CHECK(d.startWrite(0, bytes, 2, true).ok());
+  auto r = d.transferSnapshot(); CHECK(r.writeStatus.inProgress() && !r.verificationAttempted);
+  CHECK(d.cancel().ok()); CHECK(b.calls == 0); CHECK(d.takeResult(r).ok());
+  CHECK(r.writeStatus.inProgress() && r.writeCommit == e::WriteCommit::NOT_APPLICABLE && !r.verificationAttempted);
+
+  CHECK(d.startWrite(0, bytes, 2, true).ok()); CHECK(d.poll(0).inProgress());
+  b.ms = 6; CHECK(d.poll(b.ms).inProgress());
+  r = d.transferSnapshot(); CHECK(r.bytesCompleted == 2 && r.bytesVerified == 1);
+  CHECK(r.writeStatus.ok() && r.verificationAttempted && r.verifyStatus.ok());
+  CHECK(d.cancel().ok()); CHECK(d.takeResult(r).ok());
+  CHECK(r.state == e::TransferState::CANCELLED && r.writeStatus.ok() && r.verifyStatus.ok());
+  CHECK(r.bytesVerified == 1 && r.writeCommit == e::WriteCommit::ACCEPTED);
+
+  CHECK(d.startWrite(0, bytes, 2, true, 7).ok()); CHECK(d.poll(b.ms).inProgress());
+  b.ms = 12; b.callbackAdvance = 2; CHECK(d.poll(b.ms).is(e::Err::TIMEOUT));
+  CHECK(d.takeResult(r).ok()); CHECK(r.bytesVerified == 1 && r.verificationAttempted);
+  CHECK(r.writeStatus.ok() && r.verifyStatus.ok() && r.state == e::TransferState::TIMED_OUT);
+
+  b.callbackAdvance = 0; b.failAt = b.calls + 1;
+  b.failure = e::TransportResult::Error(e::TransportCode::BUS_ERROR, 123);
+  CHECK(d.startVerify(0, bytes, 2).ok()); CHECK(d.poll(b.ms).is(e::Err::I2C_BUS));
+  CHECK(d.takeResult(r).ok()); CHECK(r.verificationAttempted && r.verifyStatus.is(e::Err::I2C_BUS));
+  CHECK(r.verifyStatus.detail == 123 && r.writeCommit == e::WriteCommit::NOT_APPLICABLE);
+
+  b.failAt = 0; bytes[1] ^= 1; CHECK(d.startVerify(0, bytes, 2).ok()); r = finish(d, b);
+  CHECK(r.verifyStatus.is(e::Err::VERIFY_MISMATCH) && r.verifyStatus.detail == 1);
+  CHECK(r.status.detail == 1 && r.verificationAttempted && r.bytesVerified == 1);
+  CHECK(d.startVerify(0, nullptr, 0).ok()); CHECK(d.takeResult(r).ok());
+  CHECK(r.match && r.status.ok() && !r.verificationAttempted);
+}
+static void bankAckAndEndedBarrier() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(e::DeviceVariant::MICROCHIP_24LC1025);
+  c.i2cProbe = Bus::probe; CHECK(d.bind(c).ok());
+  CHECK(d.startFill(65534, 0x6A, 4).ok()); auto r = finish(d, b, 4);
+  CHECK(r.status.ok() && r.bytesAccepted == 4 && r.bytesCompleted == 4);
+  uint8_t writtenAddress = 0; bool upperProbe = false;
+  for (const auto& frame : b.frames) {
+    if (frame.op == 'w') writtenAddress = frame.slave;
+    if (frame.op == 'p') {
+      CHECK(frame.slave == writtenAddress);
+      if (frame.slave == 0x54) upperProbe = true;
+    }
+  }
+  CHECK(upperProbe);
+  CHECK(d.startFill(65536, 0x7B, 1).ok()); CHECK(d.poll(b.ms).inProgress());
+  const auto readyAt = d.settingsSnapshot().writeReadyAtMs; const auto calls = b.calls;
+  d.end(); d.end(); CHECK(b.calls == calls);
+  CHECK(d.transferSnapshot().state == e::TransferState::CANCELLED);
+  CHECK(d.settingsSnapshot().writeCyclePending && d.settingsSnapshot().writeReadyAtMs == readyAt);
+  CHECK(d.settingsSnapshot().variant == e::DeviceVariant::ZETTA_ZD24C02B);
+  CHECK(d.settingsSnapshot().capacityBytes == 256 && d.settingsSnapshot().maxAddress == 255);
+  CHECK(!d.settingsSnapshot().bound && d.state() == e::DriverState::UNINIT);
+  CHECK(d.takeResult(r).ok() && r.bytesAccepted == 1 && r.failedChunkLength == 1);
+  CHECK(d.bind(c).is(e::Err::BUSY)); d.tick(readyAt - 1U);
+  CHECK(d.bind(c).is(e::Err::BUSY)); d.tick(readyAt); CHECK(d.bind(c).ok());
+  CHECK(b.calls == calls && d.settingsSnapshot().bound && d.settingsSnapshot().maxAddress == 131071);
+}
+static void cachedDiagnosticsAndErrorVocabulary() {
+  Bus b; e::EEPROM24Cxx d; e::SettingsSnapshot s; e::TransferResult r;
+  CHECK(d.getSettings(s).ok() && !s.bound);
+  CHECK(d.capacityBytes() == 0 && d.maxAddress() == 0 && d.driverState() == e::DriverState::UNINIT);
+  CHECK(d.maxWriteDataBytes() == 0 && d.maxReadDataBytes() == 0 && std::strcmp(d.variantName(), "unbound") == 0);
+  r.address = 123; CHECK(d.getTransferProgress(r).is(e::Err::NO_RESULT) && r.address == 123);
+  CHECK(!d.isTransferBusy() && d.getTransferStatus().ok());
+  auto c = b.config(e::DeviceVariant::C04); c.offlineThreshold = 1;
+  CHECK(d.bind(c).ok()); CHECK(d.getConfig().i2cUser == &b && d.getSettings().bound);
+  CHECK(d.getSettingsSnapshot().capacityBytes == 512 && d.capacityBytes() == 512 && d.maxAddress() == 511);
+  CHECK(d.maxWriteDataBytes() == 16 && d.maxReadDataBytes() == 128 && std::strcmp(d.variantName(), "24C04") == 0);
+  CHECK(d.totalSuccess() == 0 && d.totalFailures() == 0 && d.lastError().ok() && b.calls == 0);
+  b.ms = 10; b.failAll = true; b.failure = e::TransportResult::Error(e::TransportCode::NACK_DATA, 37);
+  CHECK(d.recover().is(e::Err::I2C_NACK_DATA)); CHECK(d.lastError().detail == 37 && d.lastErrorMs() == 10);
+  CHECK(d.driverState() == e::DriverState::OFFLINE && d.isBound() && d.isOnline() && d.isInitialized());
+  CHECK(d.totalFailures() == 1 && d.consecutiveFailures() == 1 && d.writeBusyPolls() == 0);
+  b.failAll = false; b.ms = 20; CHECK(d.recover().ok());
+  const auto calls = b.calls;
+  CHECK(d.lastOkMs() == 20 && d.lastErrorMs() == 10 && d.lastError().detail == 37);
+  CHECK(d.driverState() == e::DriverState::READY && d.totalSuccess() == 1 && d.totalFailures() == 1);
+  CHECK(d.consecutiveFailures() == 0 && d.getSettings(s).ok() && s.state == d.state());
+  uint8_t data = 0; CHECK(d.startRead(0, &data, 1).ok());
+  CHECK(d.isTransferBusy() && d.getTransferStatus().inProgress());
+  CHECK(d.getTransferProgress(r).ok() && r.bytesRequested == 1 && r.kind == e::TransferKind::READ);
+  CHECK(b.calls == calls); CHECK(d.cancel().ok());
+  CHECK(d.takeTransferResult(r).ok() && !d.isTransferBusy());
+  CHECK(d.getTransferProgress(r).is(e::Err::NO_RESULT) && r.state == e::TransferState::CANCELLED);
+  d.end(); CHECK(d.lastError().ok() && d.totalFailures() == 0 && b.calls == calls);
+  CHECK(std::strcmp(e::toString(e::Err::I2C_NACK), "I2C_NACK") == 0);
+  CHECK(std::strcmp(e::toString(e::WriteCommit::INDETERMINATE), "INDETERMINATE") == 0);
+  CHECK(std::strcmp(e::toString(e::DriverState::OFFLINE), "OFFLINE") == 0);
+  CHECK(std::strcmp(e::toString(e::TransferKind::VERIFIED_FILL), "VERIFIED_FILL") == 0);
+  CHECK(std::strcmp(e::toString(e::TransferState::TIMED_OUT), "TIMED_OUT") == 0);
+  CHECK(std::strcmp(e::toString(e::TransportCode::NACK_UNSPECIFIED), "NACK_UNSPECIFIED") == 0);
+  CHECK(std::strcmp(e::toString(static_cast<e::TransportCode>(255)), "UNKNOWN") == 0);
+}
+static void requestIdentityAndStaleActions() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); c.nowMs = nullptr;
+  CHECK(d.bind(c).ok()); uint8_t bytes[2] = {0x11, 0x22};
+  CHECK(d.requestVerifiedWrite(42, 0, bytes, 2).ok());
+  CHECK(d.transferSnapshot().requestId == 42 && b.calls == 0);
+  CHECK(d.pollTransfer(42, 0, 1).inProgress());
+  CHECK(d.settingsSnapshot().writeCyclePending && d.settingsSnapshot().writeReadyAtMs == 56);
+  const auto calls = b.calls;
+  const auto mismatch = static_cast<int32_t>(e::BusyDetail::REQUEST_ID_MISMATCH);
+  auto s = d.pollTransfer(41, 1000, 50); CHECK(s.is(e::Err::BUSY) && s.detail == mismatch);
+  s = d.cancelTransfer(41); CHECK(s.is(e::Err::BUSY) && s.detail == mismatch);
+  s = d.timeoutTransfer(41); CHECK(s.is(e::Err::BUSY) && s.detail == mismatch);
+  e::TransferResult r; r.requestId = 123;
+  s = d.takeTransferResult(41, r); CHECK(s.is(e::Err::BUSY) && s.detail == mismatch && r.requestId == 123);
+  CHECK(d.isTransferBusy() && d.settingsSnapshot().writeCyclePending && b.calls == calls);
+  CHECK(d.transferSnapshot().bytesCompleted == 0 && d.transferSnapshot().bytesAccepted == 2);
+  CHECK(d.timeoutTransfer(42).ok());
+  CHECK(d.getTransferStatus().is(e::Err::TIMEOUT) && d.settingsSnapshot().writeCyclePending);
+  s = d.takeTransferResult(41, r); CHECK(s.is(e::Err::BUSY) && r.requestId == 123);
+  CHECK(d.takeTransferResult(42, r).ok());
+  CHECK(r.requestId == 42 && r.state == e::TransferState::TIMED_OUT && r.bytesAccepted == 2);
+  CHECK(r.bytesCompleted == 0 && r.failedChunkLength == 2 && r.writeCommit == e::WriteCommit::ACCEPTED);
+  CHECK(r.writeStatus.ok() && !r.verificationAttempted && d.totalFailures() == 0);
+  CHECK(d.pollTransfer(42, 1000, 50).is(e::Err::NO_RESULT));
+  CHECK(d.settingsSnapshot().writeCyclePending && b.calls == calls);
+  CHECK(d.cancelTransfer(42).is(e::Err::NO_RESULT) && d.timeoutTransfer(42).is(e::Err::NO_RESULT));
+  CHECK(d.takeTransferResult(42, r).is(e::Err::NO_RESULT) && r.requestId == 42);
+  d.tick(55); CHECK(d.settingsSnapshot().writeCyclePending); d.tick(56);
+  CHECK(!d.settingsSnapshot().writeCyclePending && b.calls == calls);
+  CHECK(d.requestRead(43, 0, bytes, 2).ok());
+  CHECK(d.cancelTransfer(42).detail == mismatch && d.isTransferBusy());
+  CHECK(d.cancelTransfer(43).ok()); CHECK(d.takeTransferResult(43, r).ok());
+  CHECK(r.state == e::TransferState::CANCELLED && b.calls == calls);
+}
+static void requestIdsAndAdmissionValidation() {
+  Bus b; e::EEPROM24Cxx d; auto c = b.config(); CHECK(d.bind(c).ok());
+  uint8_t byte = 0; const auto automatic = e::AUTOMATIC_REQUEST_ID_FIRST;
+  CHECK(d.requestRead(0, 0, &byte, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestWrite(automatic, 0, &byte, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestFill(UINT32_MAX, 0, 0, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestVerify(0, 0, &byte, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestVerifiedWrite(automatic, 0, &byte, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestVerifiedFill(0, 0, 0, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestWrite(7, 0, nullptr, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.requestRead(7, 256, &byte, 1).is(e::Err::ADDRESS_OUT_OF_RANGE));
+  CHECK(!d.isTransferBusy() && b.calls == 0);
+  CHECK(d.requestVerifiedWrite(7, 256, nullptr, 0).ok());
+  auto r = d.transferSnapshot(); CHECK(r.requestId == 7 && r.state == e::TransferState::SUCCEEDED && r.match);
+  CHECK(d.cancelTransfer(7).is(e::Err::BUSY) && d.timeoutTransfer(7).is(e::Err::BUSY));
+  CHECK(d.takeTransferResult(7, r).ok());
+  CHECK(d.requestRead(0, &byte, 1).ok()); CHECK(d.transferSnapshot().requestId == automatic);
+  d.end(); CHECK(d.takeTransferResult(automatic, r).ok() && r.state == e::TransferState::CANCELLED);
+  CHECK(d.bind(c).ok()); CHECK(d.startRead(0, nullptr, 1).is(e::Err::INVALID_PARAM));
+  CHECK(d.startRead(0, &byte, 1).ok()); CHECK(d.transferSnapshot().requestId == automatic + 1U);
+  CHECK(d.cancelTransfer().ok()); CHECK(d.takeResult(r).ok());
+  CHECK(d.bind(c).ok()); CHECK(d.requestFill(0, 0x77, 1).ok());
+  CHECK(d.transferSnapshot().requestId == automatic + 2U && b.calls == 0);
+  CHECK(d.cancel().ok()); CHECK(d.takeResult(r).ok());
+  CHECK(d.requestRead(automatic - 1U, 0, &byte, 1, 2).ok());
+  CHECK(d.pollTransfer(automatic - 2U, 1000, 0).is(e::Err::BUSY));
+  CHECK(d.pollTransfer(automatic - 1U, 0, 0).inProgress());
+  b.ms = 1; CHECK(d.pollTransfer(automatic - 1U, 1, 1).ok());
+  CHECK(d.takeTransferResult(automatic - 1U, r).ok() && r.bytesCompleted == 1 && b.calls == 1);
+}
+static void siblingRequestOperations() {
+  Bus b; e::EEPROM24Cxx d; CHECK(d.bind(b.config()).ok()); uint8_t data[20], out[20];
+  std::fill(data, data + sizeof(data), 0x19);
+  CHECK(d.requestVerifiedWrite(1, 3, data, sizeof(data)).ok()); auto r = finish(d, b, 4);
+  CHECK(r.requestId == 1 && r.status.ok() && r.writeCommit == e::WriteCommit::VERIFIED);
+  CHECK(d.requestVerifiedFill(2, 3, 0xA9, sizeof(data)).ok()); r = finish(d, b, 4);
+  CHECK(r.requestId == 2 && r.status.ok() && r.match && r.bytesVerified == sizeof(data));
+  std::fill(data, data + sizeof(data), 0xA9);
+  CHECK(d.requestVerify(3, 3, data, sizeof(data)).ok()); r = finish(d, b);
+  CHECK(r.requestId == 3 && r.status.ok() && r.match && r.verificationAttempted);
+  CHECK(d.requestWrite(4, 3, data, sizeof(data)).ok()); r = finish(d, b, 4);
+  CHECK(r.requestId == 4 && r.status.ok() && !r.verificationAttempted);
+  CHECK(d.requestFill(5, 3, 0xB7, sizeof(data)).ok()); r = finish(d, b, 4);
+  CHECK(r.requestId == 5 && r.status.ok() && r.bytesCompleted == sizeof(data));
+  CHECK(d.requestRead(3, out, sizeof(out)).ok()); r = finish(d, b, 4);
+  CHECK(r.status.ok() && r.requestId >= e::AUTOMATIC_REQUEST_ID_FIRST && out[0] == 0xB7 && out[19] == 0xB7);
+  CHECK(d.requestWrite(3, data, sizeof(data)).ok()); r = finish(d, b, 4); CHECK(r.status.ok());
+  CHECK(d.requestVerify(3, data, sizeof(data)).ok()); r = finish(d, b, 4); CHECK(r.status.ok() && r.match);
+}
 int main() {
   struct Test { const char* name; void (*run)(); };
   const Test tests[] = {{"lifecycle and validation", lifecycleAndValidation}, {"geometry validation", geometryValidation},
@@ -298,7 +484,13 @@ int main() {
     {"timing and ACK polling", timingAndAckPolling}, {"passive health and read failure", healthAndReadFailures},
     {"WP readback and fill", writeProtectionAndFill}, {"write evidence and no replay", writeEvidenceAndNoReplay},
     {"cancellation deadlines rollover", cancellationDeadlineAndRollover}, {"ACK faults and buffer limits", ackFaultsAndBufferLimits},
-    {"post-callback deadlines and short reads", postCallbackDeadlinesAndShortRead}};
+    {"post-callback deadlines and short reads", postCallbackDeadlinesAndShortRead},
+    {"verification evidence and lifecycle", verificationEvidenceAndLifecycle},
+    {"bank ACK and ended barrier", bankAckAndEndedBarrier},
+    {"cached diagnostics and error vocabulary", cachedDiagnosticsAndErrorVocabulary},
+    {"request identity and stale actions", requestIdentityAndStaleActions},
+    {"request IDs and admission validation", requestIdsAndAdmissionValidation},
+    {"sibling request operations", siblingRequestOperations}};
   for (const auto& test : tests) { const int before = failures; test.run(); if (before == failures) std::printf("[PASS] %s\n", test.name); }
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

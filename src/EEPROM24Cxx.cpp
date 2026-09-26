@@ -17,6 +17,20 @@ bool writing(TransferKind k) {
 }
 bool filling(TransferKind k) { return k == TransferKind::FILL || k == TransferKind::VERIFIED_FILL; }
 bool verifiedWrite(TransferKind k) { return k == TransferKind::VERIFIED_WRITE || k == TransferKind::VERIFIED_FILL; }
+bool knownFailure(TransportCode code) {
+  switch (code) {
+    case TransportCode::NACK_ADDRESS: case TransportCode::NACK_DATA:
+    case TransportCode::NACK_UNSPECIFIED: case TransportCode::TIMEOUT:
+    case TransportCode::BUS_ERROR: case TransportCode::IO_ERROR: return true;
+    default: return false;
+  }
+}
+bool ownerRequestId(uint32_t id) { return id != 0 && id < AUTOMATIC_REQUEST_ID_FIRST; }
+Status invalidRequestId() { return Status::Error(Err::INVALID_PARAM, "Owner request ID must be in 1..0x7FFFFFFF"); }
+Status mismatchedRequest() {
+  return Status::Error(Err::BUSY, "Request ID does not match retained transfer",
+                       static_cast<int32_t>(BusyDetail::REQUEST_ID_MISMATCH));
+}
 }
 
 Geometry geometryFor(DeviceVariant v) {
@@ -107,6 +121,7 @@ void EEPROM24Cxx::end() {
   if (active()) finish(Status::Error(Err::CANCELLED, "Driver ended"), TransferState::CANCELLED);
   _bound = false;
   _config = {};
+  _geometry = {};
   _health = {};
   _pendingLength = 0;
   // _writePending/_writeReadyAt intentionally survive end/rebind attempts.
@@ -200,11 +215,12 @@ Status EEPROM24Cxx::probe() { return presence(false); }
 Status EEPROM24Cxx::recover() { return presence(true); }
 SettingsSnapshot EEPROM24Cxx::settingsSnapshot() const {
   SettingsSnapshot s = _health;
-  s.initialized = s.online = _bound;
+  s.initialized = s.online = s.bound = _bound;
   s.variant = _config.variant;
   s.variantName = ::EEPROM24Cxx::variantName(_config.variant);
   s.geometry = _geometry;
   s.capacityBytes = _geometry.capacityBytes;
+  s.maxAddress = _geometry.capacityBytes ? _geometry.capacityBytes - 1U : 0;
   s.pageSizeBytes = _geometry.pageSizeBytes;
   s.wordAddressBytes = _geometry.wordAddressBytes;
   s.i2cAddress = _config.i2cAddress;
@@ -239,6 +255,7 @@ Status EEPROM24Cxx::admit(TransferKind kind, uint32_t address, size_t length, ui
   _result.status = progress();
   _result.address = address;
   _result.bytesRequested = length;
+  if (length && writing(kind)) _result.writeStatus = Status::Error(Err::IN_PROGRESS, "Write not attempted");
   _verifyPhase = kind == TransferKind::VERIFY;
   _started = false;
   _timeoutMs = timeoutMs;
@@ -252,27 +269,57 @@ Status EEPROM24Cxx::admit(TransferKind kind, uint32_t address, size_t length, ui
   return Status::Ok();
 }
 Status EEPROM24Cxx::startRead(uint32_t a, uint8_t* p, size_t n, uint32_t timeout) {
-  if (n && !p) return Status::Error(Err::INVALID_PARAM, "Null read buffer");
-  Status s = admit(TransferKind::READ, a, n, timeout);
-  if (s.ok() && active()) _readBuffer = p;
-  return s;
+  return request(0, TransferKind::READ, a, p, nullptr, 0, n, timeout);
 }
 Status EEPROM24Cxx::startWrite(uint32_t a, const uint8_t* p, size_t n, bool verify, uint32_t timeout) {
-  if (n && !p) return Status::Error(Err::INVALID_PARAM, "Null write buffer");
-  Status s = admit(verify ? TransferKind::VERIFIED_WRITE : TransferKind::WRITE, a, n, timeout);
-  if (s.ok() && active()) _sourceBuffer = p;
-  return s;
+  return request(0, verify ? TransferKind::VERIFIED_WRITE : TransferKind::WRITE, a, nullptr, p, 0, n, timeout);
 }
 Status EEPROM24Cxx::startFill(uint32_t a, uint8_t value, size_t n, bool verify, uint32_t timeout) {
-  Status s = admit(verify ? TransferKind::VERIFIED_FILL : TransferKind::FILL, a, n, timeout);
-  if (s.ok() && active()) _fillValue = value;
-  return s;
+  return request(0, verify ? TransferKind::VERIFIED_FILL : TransferKind::FILL, a, nullptr, nullptr, value, n, timeout);
 }
 Status EEPROM24Cxx::startVerify(uint32_t a, const uint8_t* p, size_t n, uint32_t timeout) {
-  if (n && !p) return Status::Error(Err::INVALID_PARAM, "Null verify buffer");
-  Status s = admit(TransferKind::VERIFY, a, n, timeout);
-  if (s.ok() && active()) _sourceBuffer = p;
+  return request(0, TransferKind::VERIFY, a, nullptr, p, 0, n, timeout);
+}
+uint32_t EEPROM24Cxx::allocateRequestId() {
+  const uint32_t id = _nextRequestId;
+  _nextRequestId = id == UINT32_MAX ? AUTOMATIC_REQUEST_ID_FIRST : id + 1U;
+  return id;
+}
+Status EEPROM24Cxx::request(uint32_t id, TransferKind kind, uint32_t address,
+                           uint8_t* data, const uint8_t* source, uint8_t value,
+                           size_t length, uint32_t timeout) {
+  if (length && ((kind == TransferKind::READ && !data) ||
+      ((kind == TransferKind::WRITE || kind == TransferKind::VERIFIED_WRITE ||
+        kind == TransferKind::VERIFY) && !source)))
+    return Status::Error(Err::INVALID_PARAM, "Null transfer buffer");
+  const Status s = admit(kind, address, length, timeout);
+  if (s.ok()) {
+    _result.requestId = id ? id : allocateRequestId();
+    if (active()) {
+      _readBuffer = data;
+      _sourceBuffer = source;
+      _fillValue = value;
+    }
+  }
   return s;
+}
+Status EEPROM24Cxx::requestRead(uint32_t id, uint32_t a, uint8_t* p, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::READ, a, p, nullptr, 0, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestWrite(uint32_t id, uint32_t a, const uint8_t* p, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::WRITE, a, nullptr, p, 0, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestFill(uint32_t id, uint32_t a, uint8_t value, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::FILL, a, nullptr, nullptr, value, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestVerify(uint32_t id, uint32_t a, const uint8_t* p, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::VERIFY, a, nullptr, p, 0, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestVerifiedWrite(uint32_t id, uint32_t a, const uint8_t* p, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::VERIFIED_WRITE, a, nullptr, p, 0, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestVerifiedFill(uint32_t id, uint32_t a, uint8_t value, size_t n, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, TransferKind::VERIFIED_FILL, a, nullptr, nullptr, value, n, timeout) : invalidRequestId();
 }
 void EEPROM24Cxx::finish(Status s, TransferState stateValue) {
   _result.status = s;
@@ -292,12 +339,31 @@ Status EEPROM24Cxx::cancel() {
   finish(Status::Error(Err::CANCELLED, "Cancelled by owner"), TransferState::CANCELLED);
   return Status::Ok();
 }
+Status EEPROM24Cxx::cancelTransfer(uint32_t id) {
+  if (_result.state != TransferState::IDLE && _result.requestId != id) return mismatchedRequest();
+  return cancel();
+}
+Status EEPROM24Cxx::timeoutTransfer(uint32_t id) {
+  if (_result.state != TransferState::IDLE && _result.requestId != id) return mismatchedRequest();
+  if (!active()) return terminal() ? busy(BusyDetail::RESULT_PENDING) : Status::Error(Err::NO_RESULT, "No active transfer");
+  finish(Status::Error(Err::TIMEOUT, "Timed out by owner"), TransferState::TIMED_OUT);
+  return Status::Ok();
+}
 Status EEPROM24Cxx::takeResult(TransferResult& r) {
   if (!terminal()) return Status::Error(Err::NO_RESULT, "No terminal result");
   r = _result;
   _result = {};
   _pendingLength = 0;
   return Status::Ok();
+}
+Status EEPROM24Cxx::takeTransferResult(uint32_t id, TransferResult& result) {
+  if (_result.state != TransferState::IDLE && _result.requestId != id) return mismatchedRequest();
+  return takeResult(result);
+}
+Status EEPROM24Cxx::pollTransfer(uint32_t id, uint32_t nowMs, size_t maxTransactions) {
+  if (_result.state == TransferState::IDLE) return Status::Error(Err::NO_RESULT, "No transfer");
+  if (_result.requestId != id) return mismatchedRequest();
+  return poll(nowMs, maxTransactions);
 }
 
 Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
@@ -368,7 +434,7 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
       WriteCommit commit = WriteCommit::INDETERMINATE;
       const bool validCounts = r.completedTxBytes <= prefix + n && r.completedRxBytes == 0;
       if (s.ok()) commit = WriteCommit::ACCEPTED;
-      else if (r.code != TransportCode::OK && validCounts &&
+      else if (knownFailure(r.code) && validCounts &&
                r.writeCommit == WriteCommit::NOT_COMMITTED && r.completedTxBytes <= prefix)
         commit = WriteCommit::NOT_COMMITTED;
       else if (validCounts && r.completedTxBytes == prefix + n && r.writeCommit == WriteCommit::ACCEPTED &&
@@ -402,6 +468,10 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
       nowMs = afterCallback(nowMs);
       const Status s = transportStatus(r, prefix, n);
       track(s, nowMs);
+      if (_verifyPhase) {
+        _result.verificationAttempted = true;
+        _result.verifyStatus = s;
+      }
       if (!s.ok()) {
         _result.failedChunkOffset = offset;
         _result.failedChunkLength = n;
@@ -417,7 +487,9 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
             _result.actual = _rx[i];
             _result.failedChunkOffset = offset + i;
             _result.failedChunkLength = 1;
-            finish(Status::Error(Err::VERIFY_MISMATCH, "Readback differs; check WP, geometry and ownership"), TransferState::FAILED);
+            _result.verifyStatus = Status::Error(Err::VERIFY_MISMATCH,
+                "Readback differs; check WP, geometry and ownership", static_cast<int32_t>(offset + i));
+            finish(_result.verifyStatus, TransferState::FAILED);
             break;
           }
           ++_result.bytesVerified;

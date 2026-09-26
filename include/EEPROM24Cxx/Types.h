@@ -30,6 +30,18 @@ const char* variantName(DeviceVariant variant);
 enum class TransportCode : uint8_t {
   OK = 0, NACK_ADDRESS, NACK_DATA, TIMEOUT, BUS_ERROR, IO_ERROR, NACK_UNSPECIFIED
 };
+constexpr const char* transportCodeName(TransportCode code) {
+  switch (code) {
+    case TransportCode::OK: return "OK";
+    case TransportCode::NACK_ADDRESS: return "NACK_ADDRESS";
+    case TransportCode::NACK_DATA: return "NACK_DATA";
+    case TransportCode::TIMEOUT: return "TIMEOUT";
+    case TransportCode::BUS_ERROR: return "BUS_ERROR";
+    case TransportCode::IO_ERROR: return "IO_ERROR";
+    case TransportCode::NACK_UNSPECIFIED: return "NACK_UNSPECIFIED";
+    default: return "UNKNOWN";
+  }
+}
 enum class WriteCommit : uint8_t {
   NOT_APPLICABLE = 0, ///< No memory-data write attempted.
   NOT_COMMITTED, ///< Transport proves none of the requested memory data accepted.
@@ -37,11 +49,23 @@ enum class WriteCommit : uint8_t {
   INDETERMINATE, ///< Some/all data may have reached memory. Never replay automatically.
   VERIFIED ///< Complete requested content observed by readback.
 };
+constexpr const char* writeCommitName(WriteCommit commit) {
+  switch (commit) {
+    case WriteCommit::NOT_APPLICABLE: return "NOT_APPLICABLE";
+    case WriteCommit::NOT_COMMITTED: return "NOT_COMMITTED";
+    case WriteCommit::ACCEPTED: return "ACCEPTED";
+    case WriteCommit::INDETERMINATE: return "INDETERMINATE";
+    case WriteCommit::VERIFIED: return "VERIFIED";
+    default: return "UNKNOWN";
+  }
+}
 /// Exact completion counts are mandatory on success. A failed write can claim
 /// NOT_COMMITTED only with independent proof and no completed memory-data bytes.
 /// ACCEPTED on failure needs full counts and TIMEOUT/BUS_ERROR/IO_ERROR after
-/// acceptance. NACKs, malformed counts and contradictory claims normalize to
-/// INDETERMINATE. Failed reads expose no received bytes to application buffers.
+/// acceptance. Unknown codes, malformed counts and contradictory failure
+/// claims normalize to INDETERMINATE. Exact successful counts prove transport
+/// acceptance regardless of the writeCommit hint. Failed reads expose no
+/// received bytes to application buffers.
 struct TransportResult {
   TransportCode code = TransportCode::IO_ERROR;
   int32_t detail = 0;
@@ -73,7 +97,41 @@ constexpr const char* driverStateName(DriverState state) {
 }
 enum class TransferKind : uint8_t { NONE = 0, READ, WRITE, FILL, VERIFY, VERIFIED_WRITE, VERIFIED_FILL };
 enum class TransferState : uint8_t { IDLE = 0, ACTIVE, WAITING_WRITE_CYCLE, SUCCEEDED, FAILED, CANCELLED, TIMED_OUT };
+constexpr const char* transferKindName(TransferKind kind) {
+  switch (kind) {
+    case TransferKind::NONE: return "NONE";
+    case TransferKind::READ: return "READ";
+    case TransferKind::WRITE: return "WRITE";
+    case TransferKind::FILL: return "FILL";
+    case TransferKind::VERIFY: return "VERIFY";
+    case TransferKind::VERIFIED_WRITE: return "VERIFIED_WRITE";
+    case TransferKind::VERIFIED_FILL: return "VERIFIED_FILL";
+    default: return "UNKNOWN";
+  }
+}
+constexpr const char* transferStateName(TransferState state) {
+  switch (state) {
+    case TransferState::IDLE: return "IDLE";
+    case TransferState::ACTIVE: return "ACTIVE";
+    case TransferState::WAITING_WRITE_CYCLE: return "WAITING_WRITE_CYCLE";
+    case TransferState::SUCCEEDED: return "SUCCEEDED";
+    case TransferState::FAILED: return "FAILED";
+    case TransferState::CANCELLED: return "CANCELLED";
+    case TransferState::TIMED_OUT: return "TIMED_OUT";
+    default: return "UNKNOWN";
+  }
+}
+constexpr const char* toString(TransportCode code) { return transportCodeName(code); }
+constexpr const char* toString(WriteCommit commit) { return writeCommitName(commit); }
+constexpr const char* toString(DriverState state) { return driverStateName(state); }
+constexpr const char* toString(TransferKind kind) { return transferKindName(kind); }
+constexpr const char* toString(TransferState state) { return transferStateName(state); }
+inline const char* toString(DeviceVariant variant) { return variantName(variant); }
+/// Automatic request IDs reserve the upper half. Explicit owner IDs are
+/// 1..0x7FFFFFFF and must not be reused while stale owner messages can arrive.
+constexpr uint32_t AUTOMATIC_REQUEST_ID_FIRST = 0x80000000UL;
 struct TransferResult {
+  uint32_t requestId = 0;
   TransferKind kind = TransferKind::NONE;
   TransferState state = TransferState::IDLE;
   Status status = Status::Ok();
@@ -88,7 +146,13 @@ struct TransferResult {
   /// every requested byte was accepted. INDETERMINATE preserves any uncertainty.
   WriteCommit writeCommit = WriteCommit::NOT_APPLICABLE;
   WriteCommit lastChunkCommit = WriteCommit::NOT_APPLICABLE;
+  /// Most recent physical write result, IN_PROGRESS before the first nonempty
+  /// write, or OK for operations that need no memory-data write.
   Status writeStatus = Status::Ok();
+  bool verificationAttempted = false;
+  /// Last readback transport/content result; meaningful only if attempted.
+  /// Overall status can subsequently become CANCELLED/TIMEOUT without losing it.
+  Status verifyStatus = Status::Ok();
   bool match = false;
   size_t mismatchOffset = 0;
   uint8_t expected = 0;

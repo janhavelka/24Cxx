@@ -1,8 +1,11 @@
 # Local library comparison
 
-The sibling Projects directory was surveyed on 2026-09-22. Sixteen existing
+The sibling Projects directory was audited again on 2026-09-26. Sixteen existing
 standalone I2C libraries were found; application repositories, dependencies,
 archives and worktrees are excluded. `EEPROM_24Cxx` is empty.
+
+The [audit findings and parity matrix](audit-2026-09-26.md) record the inspected
+versions, concrete gaps, implemented fixes and intentional protocol differences.
 
 | Library | Protocol | Relevance to 24Cxx EEPROM |
 | --- | --- | --- |
@@ -52,6 +55,10 @@ not runtime dependencies.
   address NACKs during a known EEPROM write-cycle poll are reported as busy;
   they do not establish an offline device. Probe and cached diagnostics are
   distinct from tracked operations.
+- Common cached `driverState`, `getConfig`, `getSettings`, timestamp/error and
+  counter getters; memory capacity/chunk getters; enum names for diagnostics.
+- Request correlation and qualified poll/cancel/timeout/result handling. Both
+  original write and readback statuses survive logical cancellation/deadlines.
 - Cyan title/commands, green section headings, 32-character command column,
   plain descriptions and `> ` prompt. ANSI red 31, green 32, yellow 33, cyan 36,
   gray 90 and reset 0; `color off` removes ANSI styling. Severity tags, health
@@ -59,6 +66,8 @@ not runtime dependencies.
 - Common help/version/init/bind/end/settings/health/probe/recover aliases and
   memory-specific read/write/fill/verify commands. Both firmware adapters run
   the same C++ command processor, not independently maintained parsers.
+- Hex/ASCII dumps, escaped text, printable-string inspection, CRC32, profile
+  listing and read-only selftest/stress, with bounded cooperative reads.
 - `library.json` is the version source; generated Version.h, native CMake,
   ESP-IDF component metadata, managed PlatformIO wrapper and S2/S3 examples.
 

@@ -4,6 +4,7 @@
 #include <climits>
 #include <driver/i2c_master.h>
 #include <esp_err.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
@@ -12,6 +13,7 @@
 #include <sdkconfig.h>
 #include "BoardConfig.h"
 #include "Eeprom24CxxCli.h"
+#include "IdfTransportHelpers.h"
 
 namespace {
 using namespace EEPROM24Cxx;
@@ -22,34 +24,33 @@ struct App {
   QueueHandle_t input = nullptr;
   eeprom24cxx_cli::Cli cli{};
 } app;
-TransportResult finish(esp_err_t error, size_t tx = 0, size_t rx = 0) {
+constexpr eeprom24cxx_cli::IdfResultMapper resultMapper{
+    ESP_OK, ESP_ERR_TIMEOUT, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_RESPONSE, ESP_ERR_NOT_FOUND};
+TransportResult finish(esp_err_t error, size_t tx, size_t rx, bool memoryWrite) {
   app.stats.record(error == ESP_OK);
-  if (error == ESP_OK) return TransportResult::Ok(tx, rx);
-  // IDF transaction errors do not identify NACK phase or accepted byte count.
-  // Never fabricate NOT_COMMITTED or full acceptance from an SDK error alone.
-  return TransportResult::Error(error == ESP_ERR_TIMEOUT ? TransportCode::TIMEOUT : TransportCode::IO_ERROR, error);
+  return resultMapper.transaction(error, tx, rx, memoryWrite);
 }
 TransportResult writeI2c(uint8_t address, const uint8_t* data, size_t length,
                          uint32_t timeoutMs, void*) {
-  if (address < 0x50 || address > 0x57 || !data || !length || !timeoutMs || timeoutMs > INT_MAX)
+  if (address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
+      !data || !length || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_COMMITTED);
-  return finish(i2c_master_transmit(app.devices[address - 0x50], data, length, static_cast<int>(timeoutMs)), length);
+  return finish(i2c_master_transmit(app.devices[address - 0x50], data, length, static_cast<int>(timeoutMs)), length, 0, true);
 }
 TransportResult readI2c(uint8_t address, const uint8_t* tx, size_t txLength,
                         uint8_t* rx, size_t rxLength, uint32_t timeoutMs, void*) {
-  if (address < 0x50 || address > 0x57 || !tx || !txLength || !rx || !rxLength || !timeoutMs || timeoutMs > INT_MAX)
+  if (address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
+      !tx || !txLength || !rx || !rxLength || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
   return finish(i2c_master_transmit_receive(app.devices[address - 0x50], tx, txLength, rx, rxLength,
-                                           static_cast<int>(timeoutMs)), txLength, rxLength);
+                                           static_cast<int>(timeoutMs)), txLength, rxLength, false);
 }
 TransportResult probeI2c(uint8_t address, uint32_t timeoutMs, void*) {
+  if (!app.bus || address < 0x08 || address > 0x77 || !timeoutMs || timeoutMs > INT_MAX)
+    return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
   const esp_err_t result = i2c_master_probe(app.bus, address, static_cast<int>(timeoutMs));
   app.stats.record(result == ESP_OK);
-  if (result == ESP_OK) return TransportResult::Ok(0, 0);
-  // The address-only probe can reliably identify address NACK (including tWR).
-  return TransportResult::Error(result == ESP_ERR_NOT_FOUND ? TransportCode::NACK_ADDRESS :
-      result == ESP_ERR_TIMEOUT ? TransportCode::TIMEOUT : TransportCode::IO_ERROR, result,
-      WriteCommit::NOT_APPLICABLE);
+  return resultMapper.probe(result);
 }
 Status probeAddress(uint8_t address, void*) {
   const auto result = probeI2c(address, board::I2C_TIMEOUT_MS, nullptr);
@@ -60,6 +61,11 @@ Status probeAddress(uint8_t address, void*) {
 uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
 void output(void*, const char* format, va_list args) { std::vprintf(format, args); }
 eeprom24cxx_cli::TransferStats stats(void*) { return app.stats; }
+eeprom24cxx_cli::HeapStats heapStats(void*) {
+  return {static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+          static_cast<uint32_t>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
+          static_cast<uint32_t>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT))};
+}
 void inputTask(void*) {
   while (true) {
     const int value = std::getchar();
@@ -113,6 +119,7 @@ extern "C" void app_main() {
   platform.nowMs = nowMs;
   platform.probeAddress = probeAddress;
   platform.transferStats = stats;
+  platform.heapStats = heapStats;
   platform.framework = "native-esp-idf";
   platform.frameworkVersion = esp_get_idf_version();
   platform.target = CONFIG_IDF_TARGET;

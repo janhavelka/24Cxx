@@ -2,6 +2,7 @@
 
 - [Integration and ownership](integration.md)
 - [Local I2C library comparison](library-comparison.md)
+- [2026-09-26 audit findings and parity matrix](audit-2026-09-26.md)
 - [EEPROM datasheets, protocol and source inventory](reference/README.md)
 - [Validation results](validation.md)
 - [Hardware validation](hardware-validation.md)

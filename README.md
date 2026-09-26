@@ -14,9 +14,11 @@ command processor. See the [library comparison](docs/library-comparison.md).
   24LC1025 and ST M24M01 layouts, and validated custom geometry.
 - Bus-silent operation admission and bounded owner-driven polling.
 - Fixed buffers, typed Status/results, passive health and partial-write evidence.
+- Request IDs, qualified cancellation/owner timeouts and separate readback status.
 - Optional address-only ACK polling; conservative timed completion otherwise.
 - Application owns bus initialization, timing, locking, WP and recovery.
 - ESP32-S2/S3 Arduino and native ESP-IDF examples; no framework in core headers.
+- Shared read-only CLI dumps, text/string inspection, CRC32 and diagnostics.
 
 24Cxx devices are EEPROM memory, not temperature sensors. This repository
 replaces the accidentally requested TMP1x2 implementation; its original commit

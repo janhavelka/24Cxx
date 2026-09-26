@@ -48,6 +48,19 @@ Caller buffers remain valid throughout an active operation; write/verify input
 must remain unchanged. Zero-length requests are valid no-ops at an address up
 to and including capacity.
 
+The sibling-compatible `requestRead`, `requestWrite`, `requestFill` and
+`requestVerify` names use the same scheduler. Explicit-ID overloads accept
+`1..0x7FFFFFFF`; `start*` and unqualified requests allocate upper-half IDs.
+`requestVerifiedWrite` and `requestVerifiedFill` accept explicit IDs and can
+span multiple physical pages. Inspect `TransferResult::requestId`, or pass the
+ID to `pollTransfer`, `cancelTransfer`, `timeoutTransfer` and
+`takeTransferResult`. A mismatched ID returns BUSY with
+`BusyDetail::REQUEST_ID_MISMATCH` without consuming a result, advancing the
+write-cycle barrier or accessing the bus. Keep explicit IDs unique while old
+owner messages can still arrive. Automatic IDs survive bind/end and wrap within
+their reserved half after exhausting that range; they are correlation tokens,
+not globally unique identities.
+
 Logical deadlines start at first poll; zero disables the logical deadline.
 A nonzero deadline requires `Config::nowMs`; admission rejects it without that
 hook. Deadlines are checked between callbacks, so an admitted callback can
@@ -57,6 +70,12 @@ wrapping uint32_t milliseconds; adjacent timestamps must not jump by 2^31 ms or
 more. The clock hook must use the same domain as `poll`/`tick`. Without the hook,
 write waits conservatively include callback timeout bounds so a pre-transfer
 timestamp cannot release a programming barrier too soon.
+
+Clockless owners can also call `timeoutTransfer(requestId)` to retain a
+TIMED_OUT/TIMEOUT result instead of CANCELLED. This call performs no I2C and
+preserves accepted bytes and the physical write-cycle barrier. The existing
+`poll`/`cancel`/`takeResult` methods remain available to a serialized owner
+that does not need ID checks.
 
 STOP starts the physical programming cycle. Without a probe, the driver waits
 its documented maximum plus a millisecond quantization margin. With the optional
@@ -73,6 +92,7 @@ through another instance to bypass a pending write cycle.
 
 | Field | Meaning |
 | --- | --- |
+| requestId | Correlation token retained through terminal completion and end |
 | bytesAccepted | Whole write chunks acknowledged by the transport; not proof WP allowed storage |
 | bytesCompleted | Successful read prefix, or accepted write prefix whose programming wait completed |
 | bytesVerified | Prefix read back equal to the requested contents |
@@ -80,6 +100,7 @@ through another instance to bypass a pending write cycle.
 | lastChunkCommit | Effect evidence for the most recent physical write chunk |
 | failedChunkOffset / failedChunkLength | Region associated with a failed or cancelled write |
 | status / writeStatus | Overall completion versus original write result |
+| verificationAttempted / verifyStatus | Whether readback was attempted and its most recent transport/content outcome |
 
 A failed transaction can leave an accepted prefix and an uncertain current page.
 Never retry the entire request automatically. Read back after settling, reconcile
@@ -88,12 +109,36 @@ Verify mismatch is not proof that WP is asserted: wiring, faults and other owner
 can also cause it. Verification proves the requested bytes are present, not that
 a particular write was responsible for creating them.
 
+An admitted nonempty write has `writeStatus == IN_PROGRESS` until its first
+physical write. A cancelled-before-start write has NOT_APPLICABLE effect and
+zero accepted bytes. `verifyStatus` is meaningful only when
+`verificationAttempted` is true. A later cancellation or owner timeout does not
+erase the last physical write/readback evidence; overall `status` is the
+authority for logical success. A mismatch also reports its request-relative
+offset in `Status::detail`.
+
+Possibly accepted failed writes terminate without automatic replay or
+automatic reconciliation reads. Consume the result, allow the write barrier to
+settle, make the bus usable through application policy, and explicitly admit a
+new verification request if desired. This keeps failed-write evidence available
+while giving the owner control of readback timing.
+
 Health is passive transport telemetry: UNINIT, READY, DEGRADED and OFFLINE.
 OFFLINE never suppresses explicit owner work. Counters saturate; successful tracked
 transport clears consecutive failures. Validation, cancellation, logical deadline
 expiry and content mismatch are separate from physical transport failures.
 Known write-busy address NACKs have their own counter. Cached settings/health do
 no I2C; adapter counters include traffic excluded from driver health.
+
+`state()`/`driverState()`, `getConfig()`, `getSettings()` (including the output
+overload), `getSettingsSnapshot()`/`settingsSnapshot()`, and the health counter,
+timestamp and last-error getters are bus-silent. `isOnline()` follows MB85RC's
+binding shorthand, including DEGRADED/OFFLINE; use `state()` to assess health.
+Both successful bind and end reset per-binding health. `lastError` remains the
+last tracked fault after subsequent successes, while the failure streak resets.
+`capacityBytes()`, `maxAddress()`, `maxWriteDataBytes()` and
+`maxReadDataBytes()` return zero when unbound; snapshot geometry fields are
+meaningful as a selected layout only when `bound` is true.
 
 ## Family and platform boundaries
 
@@ -114,3 +159,13 @@ CRC/journaling and power-failure recovery belong to the application.
 The Arduino and native ESP-IDF examples own their bus and adapt errors to the
 same typed transport. One loop/task alone runs the CLI and driver. The IDF input
 task queues characters only. Neither adapter creates a second owner of the chip.
+
+The Wire example requires Arduino-ESP32 3.3.11 or newer and explicitly reserves
+its controller for each complete callback: Wire mutex acquisition is not bounded
+by its transaction timeout. It establishes buffer capacity before enabling the
+adapter and restores the previous timeout after each callback. A missing or
+short TX buffer is discarded without sending memory data and disables the
+adapter until application reinitialization; the driver cannot repair framework
+state. The native IDF adapter keeps ordinary NACKs unspecified when the SDK
+cannot prove the failing byte. Only an address-only probe can establish the
+address NACK used for expected EEPROM busy polling.

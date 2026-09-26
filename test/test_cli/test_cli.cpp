@@ -1,4 +1,7 @@
+// Arduino Print.h defines HEX before the shared CLI header in the real example.
+#define HEX 16
 #include "Eeprom24CxxCli.h"
+#undef HEX
 #include "WireTransportHelpers.h"
 #include <cstdio>
 #include <cstring>
@@ -94,7 +97,7 @@ struct Fixture {
     return true;
   }
 };
-#define CHECK(x) do { if (!(x)) { std::printf("CLI check failed line %d: %s\n", __LINE__, #x); return 1; } } while (false)
+#define CHECK(x) do { if (!(x)) { std::printf("[FAIL] CLI check line %d: %s\n", __LINE__, #x); return 1; } } while (false)
 int main() {
   // ESP32 Wire code 2 is ambiguous for payload transactions. An address-only
   // probe is the only context in which it proves an address NACK.
@@ -137,7 +140,7 @@ int main() {
   CHECK(f.output.find("fill <addr> <byte> <N>") != std::string::npos);
   CHECK(f.output.find("wverify") != std::string::npos);
   unsigned before = f.transfers;
-  for (const char* command : {"health", "drv", "state", "online", "settings", "cfg", "snapshot", "version", "ver", "diag", "progress", "status", "?"})
+  for (const char* command : {"health", "drv", "state", "online", "settings", "cfg", "snapshot", "version", "ver", "diag", "progress", "status", "?", "variants", "size", "heap", "verbose", "addr", "timeout", "model"})
     cli.processCommand(command);
   CHECK(f.transfers == before && f.writes == 0);
   for (const char* command : {"write 0 256", "write 0 -1", "write 0 1 invalid", "fill 0 1 0", "read -1", "read 0 257", "readbyte 0 2", "verify 0", "addr 0x40", "stress -1", "writebyte 0 1 2", "help extra", "write 4294967296 1"}) {
@@ -150,6 +153,15 @@ int main() {
   // Invalid control characters must not silently combine into a valid mutation.
   for (char ch : std::string("writebyte 0 9") + char(1) + "9\n") cli.feed(ch);
   CHECK(f.transfers == before);
+  // Direct calls have the same strict character contract as serial input.
+  // strtoul accepts leading C whitespace/signs, so reject control characters
+  // before tokenization rather than allowing them to conceal a write operand.
+  for (const char* command : {"writebyte 0 \v+9", "writebyte 0 \f9", "writebyte 0 \r9", "writebyte 0 \n9", "writebyte 0 \x80" "9",
+                              "crc 0", "crc 0 1 extra", "strings 0", "strings 0 1 65", "strings 0 1 0", "text 0 0", "verbose 2", "size extra", "selftest extra"}) {
+    f.output.clear(); cli.processCommand(command);
+    CHECK(f.output.find("INVALID_PARAM") != std::string::npos);
+    CHECK(f.run(cli, 1)); CHECK(f.transfers == before);
+  }
   f.output.clear(); cli.processCommand("wverify 6 0xAA 0xBB 0xCC 0xDD");
   CHECK(f.transfers == before); // Admission only, no synchronous write.
   cli.tick(); CHECK(f.writes == 1);
@@ -175,6 +187,8 @@ int main() {
   f.writeProtected = true;
   f.output.clear(); cli.processCommand("wverify 20 0"); CHECK(f.run(cli));
   CHECK(f.output.find("VERIFY_MISMATCH") != std::string::npos);
+  CHECK(f.output.find("Write: status=OK detail=0") != std::string::npos);
+  CHECK(f.output.find("Verification: status=VERIFY_MISMATCH") != std::string::npos);
   CHECK(f.memory[20] == 0xA5);
   f.writeProtected = false;
   f.failWrite = true;
@@ -249,6 +263,120 @@ int main() {
   clocklessCli.processCommand("writebyte 1 42"); clocklessCli.processCommand("stress 2");
   CHECK(clockless.run(clocklessCli)); CHECK(clockless.transfers == before);
   CHECK(clockless.output.find("requires a clock") != std::string::npos);
-  std::puts("CLI startup, ANSI/help, parsing, page writes, readback, cancellation, bank addressing and read-only stress passed");
+  // MB85RC-compatible read-only views operate on the full configured range,
+  // including address banks, with bounded fixed buffers and one callback/tick.
+  Fixture views;
+  views.geometry = geometryFor(DeviceVariant::C16);
+  auto viewConfig = views.config(); viewConfig.variant = DeviceVariant::C16;
+  auto viewPlatform = views.platform();
+  viewPlatform.heapStats = [](void*) { return eeprom24cxx_cli::HeapStats{1234, 900, 700}; };
+  eeprom24cxx_cli::Cli viewCli;
+  viewCli.setup(viewPlatform, viewConfig); viewCli.processCommand("color off");
+  for (unsigned index = 0; index < 512; ++index) views.memory[index] = static_cast<uint8_t>(index);
+  views.output.clear(); before = views.transfers;
+  viewCli.processCommand("crc 0 512"); CHECK(views.transfers == before);
+  CHECK(views.run(viewCli)); CHECK(views.transfers == before + 32);
+  CHECK(views.output.find("length=512 crc=0x1C613576") != std::string::npos);
+  CHECK(views.output.find("kind=READ state=SUCCEEDED") != std::string::npos);
+  CHECK(views.output.find("requested=512 accepted=0 completed=512") != std::string::npos);
+  views.output.clear(); viewCli.processCommand("status");
+  CHECK(views.output.find("completed=512") != std::string::npos);
+  std::memcpy(views.memory, "123456789", 9);
+  views.output.clear(); viewCli.processCommand("crc 0 9"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("crc=0xCBF43926") != std::string::npos);
+  views.output.clear(); viewCli.processCommand("hexdump 0 9"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("|123456789|") != std::string::npos);
+  views.memory[0] = 'A'; views.memory[1] = '\n'; views.memory[2] = '\033';
+  views.memory[3] = '\\'; views.memory[4] = '"'; views.memory[5] = 0xFF;
+  views.output.clear(); viewCli.processCommand("text 0 6"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("00000: \"A\\x0A\\x1B\\\\\\\"\\xFF\"") != std::string::npos);
+  CHECK(views.output.find('\033') == std::string::npos);
+  std::memset(views.memory, 0, sizeof(views.memory));
+  std::memcpy(views.memory + 253, "cross-bank string", 17);
+  std::memcpy(views.memory + 300, "end", 3);
+  views.output.clear(); viewCli.processCommand("strings 240 80"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("000FD: cross-bank string") != std::string::npos);
+  CHECK(views.output.find(": end") == std::string::npos);
+  CHECK(views.output.find("Strings: 1 found") != std::string::npos);
+  // Retain a possible string prefix across a CLI buffer boundary as well as
+  // a physical read boundary, including the maximum supported minimum.
+  std::memset(views.memory, 0, sizeof(views.memory));
+  std::memset(views.memory + 250, 'Q', 70);
+  views.output.clear(); viewCli.processCommand("strings 0 320 64"); CHECK(views.run(viewCli));
+  CHECK(views.output.find(std::string("000FA: ") + std::string(70, 'Q')) != std::string::npos);
+  CHECK(views.output.find("Strings: 1 found in 320 completed bytes") != std::string::npos);
+  views.output.clear(); viewCli.processCommand("heap");
+  CHECK(views.output.find("Heap: free=1234 minimum-free=900 largest-free-block=700 bytes") != std::string::npos);
+  // Full-chip defaults are finite and read-only.
+  views.output.clear(); before = views.transfers;
+  viewCli.processCommand("strings"); CHECK(views.run(viewCli, 128));
+  CHECK(views.transfers == before + 128);
+  CHECK(views.output.find("2048 completed bytes") != std::string::npos);
+  CHECK(views.writes == 0);
+  // Stop between chunks as well as in a physical chunk; cancelled or failed
+  // reads must never print a checksum as though it covered the entire range.
+  views.output.clear(); viewCli.processCommand("crc 0 512");
+  viewCli.processCommand("progress");
+  const auto idStart = views.output.find("request-id=");
+  CHECK(idStart != std::string::npos);
+  const auto rangeId = views.output.substr(idStart, views.output.find('\n', idStart) - idStart);
+  CHECK(rangeId != "request-id=0");
+  CHECK(views.run(viewCli, 16));
+  views.output.clear();
+  viewCli.processCommand("progress");
+  CHECK(views.output.find("requested=512 accepted=0 completed=256") != std::string::npos);
+  CHECK(views.output.find(rangeId) != std::string::npos);
+  views.output.clear();
+  before = views.transfers; viewCli.processCommand("cancel"); CHECK(views.run(viewCli));
+  CHECK(views.transfers == before);
+  CHECK(views.output.find("state=CANCELLED") != std::string::npos);
+  CHECK(views.output.find(rangeId) != std::string::npos);
+  CHECK(views.output.find("crc=0x") == std::string::npos);
+  views.output.clear(); viewCli.processCommand("crc 0 512"); viewCli.processCommand("progress");
+  const auto nextIdStart = views.output.find("request-id=");
+  CHECK(nextIdStart != std::string::npos);
+  const auto nextRangeId = views.output.substr(nextIdStart, views.output.find('\n', nextIdStart) - nextIdStart);
+  CHECK(views.run(viewCli, 17));
+  views.output.clear(); viewCli.processCommand("progress");
+  CHECK(views.output.find(nextRangeId) != std::string::npos);
+  views.output.clear();
+  before = views.transfers; viewCli.processCommand("cancel"); CHECK(views.run(viewCli));
+  CHECK(views.transfers == before);
+  CHECK(views.output.find(nextRangeId) != std::string::npos);
+  CHECK(views.output.find("completed=272") != std::string::npos);
+  CHECK(views.output.find("crc=0x") == std::string::npos);
+  views.output.clear(); viewCli.processCommand("crc 0 512"); CHECK(views.run(viewCli, 16));
+  views.failRead = true; CHECK(views.run(viewCli));
+  CHECK(views.output.find("status=I2C_TIMEOUT") != std::string::npos);
+  CHECK(views.output.find("completed=256") != std::string::npos);
+  CHECK(views.output.find("chunk-offset=256") != std::string::npos);
+  CHECK(views.output.find("crc=0x") == std::string::npos);
+  views.output.clear(); before = views.transfers;
+  for (const char* command : {"crc 2040 9", "read 0 2049", "text 4294967295 2", "strings 2048 1"}) {
+    viewCli.processCommand(command); CHECK(views.run(viewCli, 1));
+    CHECK(views.transfers == before);
+  }
+  CHECK(views.output.find("ADDRESS_OUT_OF_RANGE") != std::string::npos);
+  // Cached queries remain available while a long read owns its borrowed buffer.
+  views.output.clear(); viewCli.processCommand("read 0 512"); CHECK(views.run(viewCli, 1));
+  before = views.transfers;
+  for (const char* command : {"addr", "model", "size", "timeout", "heap", "variants", "settings", "health", "progress"}) {
+    viewCli.processCommand(command); CHECK(views.transfers == before);
+  }
+  CHECK(views.output.find("BUSY") == std::string::npos);
+  viewCli.processCommand("writebyte 0 1"); CHECK(views.output.find("BUSY") != std::string::npos);
+  viewCli.processCommand("stop");
+  views.output.clear(); viewCli.processCommand("selftest"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("Read-only selftest: PASS") != std::string::npos);
+  views.output.clear(); views.failRead = true;
+  viewCli.processCommand("selfcheck"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("Read-only selftest: FAIL") != std::string::npos);
+  views.output.clear(); viewCli.processCommand("stress 2"); CHECK(views.run(viewCli));
+  CHECK(views.output.find("kind=READ") == std::string::npos);
+  CHECK(views.output.find("Stress stopped: ok=2 fail=0") != std::string::npos);
+  views.output.clear(); viewCli.processCommand("verbose on"); viewCli.processCommand("stress 1");
+  CHECK(views.run(viewCli)); CHECK(views.output.find("kind=READ") != std::string::npos);
+  CHECK(views.writes == 0);
+  std::puts("[PASS] CLI startup, parsing, memory views, CRC, page writes, verification, cancellation, health and read-only diagnostics");
   return 0;
 }

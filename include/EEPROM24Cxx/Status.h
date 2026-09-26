@@ -4,6 +4,10 @@
 #include <cstdint>
 
 namespace EEPROM24Cxx {
+/// Logical/preflight statuses stay separate from physical I2C outcomes.
+/// TIMEOUT is an owner deadline; I2C_TIMEOUT is a callback/controller timeout.
+/// WRITE_PROTECTED is reserved for independently established protection; an
+/// acknowledged write or VERIFY_MISMATCH cannot identify the WP pin state.
 enum class Err : uint8_t {
   OK = 0, NOT_INITIALIZED = 1, INVALID_CONFIG = 2, I2C_ERROR = 3,
   TIMEOUT = 4, INVALID_PARAM = 5, ADDRESS_OUT_OF_RANGE = 8,
@@ -12,7 +16,9 @@ enum class Err : uint8_t {
   I2C_BUS = 15, VERIFY_MISMATCH = 16, UNSUPPORTED = 17,
   NO_RESULT = 18, CANCELLED = 19, I2C_NACK = 20
 };
-enum class BusyDetail : int32_t { TRANSFER_ACTIVE = 2, RESULT_PENDING = 7, WRITE_CYCLE = 10 };
+enum class BusyDetail : int32_t {
+  TRANSFER_ACTIVE = 2, RESULT_PENDING = 7, REQUEST_ID_MISMATCH = 8, WRITE_CYCLE = 10
+};
 constexpr const char* errorName(Err e) {
   switch (e) {
     case Err::OK: return "OK";
@@ -37,6 +43,7 @@ constexpr const char* errorName(Err e) {
     default: return "UNKNOWN";
   }
 }
+constexpr const char* toString(Err e) { return errorName(e); }
 struct Status {
   Err code = Err::OK;
   int32_t detail = 0;
