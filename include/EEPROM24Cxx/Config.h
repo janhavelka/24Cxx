@@ -7,6 +7,8 @@ namespace EEPROM24Cxx {
 /// Callbacks are synchronous, enforce timeout, perform one transaction, do not
 /// re-enter the driver, retain buffers, retry, initialize or recover the bus.
 /// For nonzero TX and RX, writeRead must use repeated START without a STOP.
+/// With supportsCurrentAddressRead, tx=nullptr/txLen=0 requests a pure SLA+R
+/// read followed by master NACK and STOP, without an address-write phase.
 /// Successful completion requires exact TX/RX counts. Failed RX is discarded.
 using I2cWriteFn = TransportResult (*)(uint8_t, const uint8_t*, size_t, uint32_t, void*);
 using I2cWriteReadFn = TransportResult (*)(uint8_t, const uint8_t*, size_t, uint8_t*, size_t, uint32_t, void*);
@@ -41,5 +43,6 @@ struct Config {
   Geometry customGeometry = {};
   uint32_t writeCycleMs = 0; // Zero uses geometry; override cannot shorten its tWR.
   uint8_t offlineThreshold = 0; // Diagnostic only; zero disables OFFLINE.
+  bool supportsCurrentAddressRead = false; // Opt in only if zero-TX reads are supported.
 };
 } // namespace EEPROM24Cxx

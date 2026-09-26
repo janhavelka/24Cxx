@@ -8,6 +8,7 @@
 #include "EEPROM24Cxx/Types.h"
 
 namespace eeprom24cxx_cli {
+enum class WireTransferKind : uint8_t { WRITE, READ, PROBE };
 inline EEPROM24Cxx::TransportResult wireResult(uint8_t code, size_t tx = 0,
                                                size_t rx = 0, bool addressOnly = false,
                                                bool memoryWriteMayCommit = true) {
@@ -46,7 +47,7 @@ template <class WireType>
 class WireTransport {
  public:
   static constexpr size_t MAX_BYTES = 32;
-  explicit WireTransport(WireType& wire, void (*record)(bool) = nullptr)
+  explicit WireTransport(WireType& wire, void (*record)(bool, WireTransferKind) = nullptr)
       : _wire(wire), _record(record) {}
   void setReady(bool ready) { _ready = ready; }
   bool ready() const { return _ready; }
@@ -64,43 +65,47 @@ class WireTransport {
       discard(address, buffered);
       return TransportResult::Error(TransportCode::IO_ERROR, -2, WriteCommit::NOT_COMMITTED);
     }
-    return finish(wireResult(_wire.endTransmission(true), length));
+    return finish(wireResult(_wire.endTransmission(true), length), WireTransferKind::WRITE);
   }
 
   EEPROM24Cxx::TransportResult read(uint8_t address, const uint8_t* tx,
       size_t txLength, uint8_t* rx, size_t rxLength, uint32_t timeoutMs) {
     using namespace EEPROM24Cxx;
-    if (!_ready || !memoryAddress(address) || !tx || !txLength || txLength > 2 ||
+    if (!_ready || !memoryAddress(address) || (txLength && !tx) || txLength > 2 ||
         !rx || !rxLength || rxLength > MAX_BYTES || !validTimeout(timeoutMs))
       return TransportResult::Error(TransportCode::IO_ERROR, -1, WriteCommit::NOT_APPLICABLE);
     Timeout timeout(_wire, static_cast<uint16_t>(timeoutMs));
-    _wire.beginTransmission(address);
-    const size_t buffered = _wire.write(tx, txLength);
-    if (buffered != txLength) {
-      discard(address, buffered);
-      return TransportResult::Error(TransportCode::IO_ERROR, -2, WriteCommit::NOT_APPLICABLE);
+    if (txLength) {
+      _wire.beginTransmission(address);
+      const size_t buffered = _wire.write(tx, txLength);
+      if (buffered != txLength) {
+        discard(address, buffered);
+        return TransportResult::Error(TransportCode::IO_ERROR, -2, WriteCommit::NOT_APPLICABLE);
+      }
+      // ESP32 defers this call until requestFrom, producing one repeated-START
+      // transaction. A failure here performs no bus transfer; release the lock
+      // and invalidate the adapter without sending the buffered address prefix.
+      const uint8_t deferred = _wire.endTransmission(false);
+      if (deferred) {
+        discard(address, buffered);
+        return wireResult(deferred, 0, 0, false, false);
+      }
     }
-    // ESP32 defers this call until requestFrom, producing one repeated-START
-    // transaction. A failure here performs no bus transfer; release the lock
-    // and invalidate the adapter without sending the buffered address prefix.
-    const uint8_t deferred = _wire.endTransmission(false);
-    if (deferred) {
-      discard(address, buffered);
-      return wireResult(deferred, 0, 0, false, false);
-    }
+    // With txLength==0, issue a current-address receive without an address
+    // pointer write or a zero-byte write/probe transaction before it.
     const size_t received = _wire.requestFrom(address, rxLength, true);
     if (received != rxLength) {
       while (_wire.available() > 0) (void)_wire.read();
       return finish(TransportResult::Error(TransportCode::IO_ERROR,
-          static_cast<int32_t>(received), WriteCommit::NOT_APPLICABLE, 0, received));
+          static_cast<int32_t>(received), WriteCommit::NOT_APPLICABLE, 0, received), WireTransferKind::READ);
     }
     for (size_t index = 0; index < rxLength; ++index) {
       const int value = _wire.read();
       if (value < 0) return finish(TransportResult::Error(TransportCode::IO_ERROR,
-          static_cast<int32_t>(index), WriteCommit::NOT_APPLICABLE, 0, index));
+          static_cast<int32_t>(index), WriteCommit::NOT_APPLICABLE, 0, index), WireTransferKind::READ);
       rx[index] = static_cast<uint8_t>(value);
     }
-    return finish(TransportResult::Ok(txLength, rxLength));
+    return finish(TransportResult::Ok(txLength, rxLength), WireTransferKind::READ);
   }
 
   EEPROM24Cxx::TransportResult probe(uint8_t address, uint32_t timeoutMs) {
@@ -109,7 +114,7 @@ class WireTransport {
       return TransportResult::Error(TransportCode::IO_ERROR, -1, WriteCommit::NOT_APPLICABLE);
     Timeout timeout(_wire, static_cast<uint16_t>(timeoutMs));
     _wire.beginTransmission(address);
-    return finish(wireResult(_wire.endTransmission(true), 0, 0, true));
+    return finish(wireResult(_wire.endTransmission(true), 0, 0, true), WireTransferKind::PROBE);
   }
 
  private:
@@ -127,17 +132,17 @@ class WireTransport {
   };
   static bool validTimeout(uint32_t value) { return value > 0 && value <= UINT16_MAX; }
   static bool memoryAddress(uint8_t value) { return value >= 0x50 && value <= 0x57; }
-  EEPROM24Cxx::TransportResult finish(EEPROM24Cxx::TransportResult result) {
-    if (_record) _record(result.ok());
+  EEPROM24Cxx::TransportResult finish(EEPROM24Cxx::TransportResult result, WireTransferKind kind) {
+    if (_record) _record(result.ok(), kind);
     return result;
   }
   void discard(uint8_t address, size_t buffered) {
     const auto result = discardWireTx(_wire, address, buffered);
-    if (result.physicalAttempt) (void)finish(wireResult(result.code, 0, 0, true));
+    if (result.physicalAttempt) (void)finish(wireResult(result.code, 0, 0, true), WireTransferKind::PROBE);
     _ready = false; // A violated buffer invariant needs explicit owner reinitialization.
   }
   WireType& _wire;
-  void (*_record)(bool);
+  void (*_record)(bool, WireTransferKind);
   bool _ready = false;
 };
 } // namespace eeprom24cxx_cli

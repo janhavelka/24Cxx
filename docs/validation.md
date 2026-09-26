@@ -7,11 +7,12 @@ and fixes. No board was flashed and no physical EEPROM/WP result is claimed.
 
 - GCC 15.1.0, C++17, CMake/Ninja: core and shared CLI compile with
   `-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Werror`.
-- CTest: all three executables pass (core, shared CLI and transport).
-  The core has 17 regression groups; the CLI suite exercises command processing
-  against an EEPROM model, and transport tests exercise the firmware helpers.
-- Managed PlatformIO `test -e native`: all three suites are discovered and pass,
-  reporting 19 test cases (17 core groups, CLI and transport). Previously the
+- CTest: all four executables pass (core, shared CLI, transport and field helpers).
+  The core has 24 regression groups; the CLI suite exercises command processing
+  against an EEPROM model, transport tests exercise the firmware helpers, and
+  field helpers exercise typed storage, CRC, update and bounded blocking waits.
+- Managed PlatformIO `test -e native`: all four suites are discovered and pass,
+  reporting 27 test cases (24 core groups, CLI, transport and helpers). Previously the
   nonstandard CLI directory was silently skipped; all suites now use test_*
   directories.
 - Managed PlatformIO `run -e native_core_no_arduino`: strict compile/link passes
@@ -19,10 +20,10 @@ and fixes. No board was flashed and no physical EEPROM/WP result is claimed.
 - `python tools/check_contracts.py`: release metadata and framework boundaries pass.
 - `python tools/check_reference_archive.py`: 15 document artifacts (14 PDFs and
   the catalogue), 28 source/license artifacts and 66 archive checksums pass.
-- PlatformIO package export: 33 files, expected public/core/example files
+- PlatformIO package export: 38 files, expected public/core/example files
   present, vendor source/PDFs and generated build artifacts excluded.
   `tools/check_package_contents.py` validates the actual archive and documents
-  seven intentionally repository-only reference links. The freshly extracted
+  eight intentionally repository-only reference links. The freshly extracted
   package builds as a standalone CMake C++17 library with strict warnings.
 
 The core model emulates page wrapping, bank-local reads, write-cycle NACKs and
@@ -36,6 +37,10 @@ Added coverage includes unknown transport codes falsely claiming no write,
 retained write/readback statuses, bank-specific ACK polling, repeated teardown,
 bus-silent diagnostic getters, explicit/automatic request IDs, stale owner
 actions and owner-declared timeouts that preserve programming barriers.
+Current-address tests cover pure-read opt-in, exact Zetta page/array pointer
+wrap, conservative generic invalidation, transport faults, barriers and callback
+budgets. Update tests cover all-equal skips, changed chunks, comparison failure,
+WP mismatch, cancellation, retained evidence and deadlines.
 
 CLI regressions cover startup without programming, ANSI colors/help columns,
 read-only diagnostics/stress, strict decimal/hex parsing (including leading
@@ -45,12 +50,27 @@ bank selection and cancellation. New checks cover full-range hex/ASCII views,
 escaped text, strings crossing buffers/banks, CRC32 reference vectors, partial
 CRC suppression, stable range IDs, staged/active settings and direct-input
 control characters. The full Arduino builds caught a HEX macro collision in
-the new view enum; it was fixed and a header regression was added.
+the view enum; it was fixed and a header regression was added. Expanded tests
+cover tracked startup and failed presence, full-array selftest across banks,
+current/update/watch, counters/assertions, WP/reset hooks and post-reset settling.
+Scratch suites test distinct patterns and typed layouts, backup and restoration
+failures, WP suppression, cancellation before backup/during programming/during
+restoration, end/rebind retention, mutation gates, and scan blocking during a
+cancelled write's remaining programming cycle.
+
+Field-helper tests cover explicit endian/IEEE encodings, signed extrema, CRC
+reference and split-update vectors, failed-output preservation, page-crossing
+typed writes, range/single-chunk validation, current reads, skipped updates,
+WP and ambiguous-write evidence, stalled clocks, logical deadlines including a
+compound CRC deadline, foreign active-request preservation and explicit idle
+barrier settling without replay.
 
 The dedicated transport suite checks the same Wire/IDF helper implementations
 used by firmware: readiness/argument validation, timeout restoration, deferred
 repeated START, short/absent buffers, unsent-data cleanup, missing received bytes,
-ambiguous NACK mapping and write-effect evidence. It does not emulate electrical
+ambiguous NACK mapping and write-effect evidence. Pure reads check zero pointer
+traffic and exact received counts. GPIO recovery tests cover bounded clock
+pulses, SDA release/stuck low, SCL timeout and timer rollover. It does not emulate electrical
 bus timing or prove SDK/controller behavior on hardware.
 
 ## Firmware builds

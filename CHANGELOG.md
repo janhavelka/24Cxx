@@ -14,6 +14,15 @@
 
 ### Added
 
+- Current-address reads with explicit transport opt-in and conservative pointer
+  tracking; direct synchronous reads and init/unbind lifecycle aliases.
+- Cooperative compare-before-write updates, skipped-byte/comparison evidence,
+  and an optional blocking facade with typed endian-safe storage and CRC32.
+- Comprehensive scratch CLI suites, typed demo, finite watch, full-array selftest,
+  retained backups and explicit recovery after failed/cancelled programming.
+- Tracked startup initialization/health/help, page/timing/threshold diagnostics,
+  transfer counters/assertions, optional WP GPIO and interface recovery hooks.
+- Pure-read transport and bus-recovery regressions plus a field-helper suite.
 - Sibling health/config/settings/memory getters and enum diagnostic names.
 - Correlated requests, qualified polling/cancellation/result consumption, and
   owner-declared timeouts for clockless integrations.

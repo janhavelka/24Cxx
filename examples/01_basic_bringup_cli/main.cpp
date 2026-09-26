@@ -14,13 +14,20 @@
 #include "../common/BoardConfig.h"
 #include "../common/Eeprom24CxxCli.h"
 #include "../common/WireTransportHelpers.h"
+#include "../common/Esp32WriteProtect.h"
+#include "../common/BusRecovery.h"
 
 namespace {
 using namespace EEPROM24Cxx;
 eeprom24cxx_cli::Cli cli;
 bool cliReady = false;
 eeprom24cxx_cli::TransferStats transfers;
-void recordTransfer(bool ok) { transfers.record(ok); }
+void recordTransfer(bool ok, eeprom24cxx_cli::WireTransferKind kind) {
+  transfers.record(ok);
+  auto& count = kind == eeprom24cxx_cli::WireTransferKind::WRITE ? transfers.writeAttempts :
+      kind == eeprom24cxx_cli::WireTransferKind::READ ? transfers.readAttempts : transfers.probeAttempts;
+  if (count != UINT32_MAX) ++count;
+}
 eeprom24cxx_cli::WireTransport<TwoWire> transport(Wire, recordTransfer);
 TransportResult writeI2c(uint8_t address, const uint8_t* data, size_t length,
                          uint32_t timeoutMs, void*) {
@@ -48,6 +55,35 @@ void output(void*, const char* format, va_list args) {
       static_cast<size_t>(length) < sizeof(buffer) ? static_cast<size_t>(length) : sizeof(buffer) - 1);
 }
 eeprom24cxx_cli::TransferStats stats(void*) { return transfers; }
+void resetTransferStats(void*) { transfers = {}; }
+struct RecoveryPins {
+  void sda(bool release) { (void)gpio_set_level(static_cast<gpio_num_t>(board::I2C_SDA), release ? 1 : 0); }
+  void scl(bool release) { (void)gpio_set_level(static_cast<gpio_num_t>(board::I2C_SCL), release ? 1 : 0); }
+  bool sdaHigh() { return gpio_get_level(static_cast<gpio_num_t>(board::I2C_SDA)) != 0; }
+  bool sclHigh() { return gpio_get_level(static_cast<gpio_num_t>(board::I2C_SCL)) != 0; }
+  uint32_t nowUs() { return micros(); }
+  void delayUs(uint32_t value) { delayMicroseconds(value); }
+};
+Status resetInterface(void*) {
+  // The CLI admits this only when the previous operation and tWR have settled.
+  // Reinitialization is owned by this application and never replays a transfer.
+  transport.setReady(false);
+  if (!Wire.end()) return Status::Error(Err::I2C_ERROR, "Wire teardown failed");
+  RecoveryPins pins;
+  pins.sda(true); pins.scl(true);
+  esp_err_t error = gpio_set_direction(static_cast<gpio_num_t>(board::I2C_SDA), GPIO_MODE_INPUT_OUTPUT_OD);
+  if (error == ESP_OK)
+    error = gpio_set_direction(static_cast<gpio_num_t>(board::I2C_SCL), GPIO_MODE_INPUT_OUTPUT_OD);
+  if (error != ESP_OK) return Status::Error(Err::INVALID_CONFIG, "Recovery GPIO setup failed", error);
+  const Status recovered = eeprom24cxx_cli::recoverOpenDrainBus(pins, board::I2C_TIMEOUT_MS * 1000U);
+  if (!recovered.ok()) return recovered;
+  if (Wire.setBufferSize(transport.MAX_BYTES) < transport.MAX_BYTES ||
+      !Wire.begin(board::I2C_SDA, board::I2C_SCL, board::I2C_FREQUENCY_HZ))
+    return Status::Error(Err::I2C_ERROR, "Wire reinitialization failed");
+  Wire.setTimeOut(static_cast<uint16_t>(board::I2C_TIMEOUT_MS));
+  transport.setReady(true);
+  return Status::Ok();
+}
 eeprom24cxx_cli::HeapStats heapStats(void*) {
   return {static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
           static_cast<uint32_t>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
@@ -59,6 +95,8 @@ void setup() {
   Serial.begin(board::SERIAL_BAUD);
   const uint32_t started = millis();
   while (!Serial && millis() - started < 3000U) delay(10);
+  const auto protectedState = eeprom24cxx_cli::initializeWriteProtect();
+  if (!protectedState.ok()) { Serial.println(protectedState.msg); return; }
   if (Wire.setBufferSize(transport.MAX_BYTES) < transport.MAX_BYTES ||
       !Wire.begin(board::I2C_SDA, board::I2C_SCL, board::I2C_FREQUENCY_HZ)) {
     Serial.println("[E] Application failed to initialize I2C"); return;
@@ -69,6 +107,7 @@ void setup() {
   config.i2cWrite = writeI2c;
   config.i2cWriteRead = readI2c;
   config.i2cProbe = probeI2c;
+  config.supportsCurrentAddressRead = true;
   config.nowMs = nowMs;
   config.i2cTimeoutMs = board::I2C_TIMEOUT_MS;
   config.maxTxBytes = transport.MAX_BYTES;
@@ -78,6 +117,10 @@ void setup() {
   platform.nowMs = nowMs;
   platform.probeAddress = probeAddress;
   platform.transferStats = stats;
+  platform.resetTransferStats = resetTransferStats;
+  platform.readWriteProtect = eeprom24cxx_cli::readWriteProtect;
+  platform.setWriteProtect = eeprom24cxx_cli::setWriteProtect;
+  platform.resetInterface = resetInterface;
   platform.heapStats = heapStats;
   platform.framework = "Arduino-ESP32";
 #ifdef ESP_ARDUINO_VERSION_STR

@@ -10,6 +10,8 @@ commands follow the sibling libraries; Arduino and native ESP-IDF share one
 command processor. See the [library comparison](docs/library-comparison.md).
 
 - Byte-addressed reads, page/bank-aware writes, fill and readback verification.
+- Current-address reads and compare-before-write updates that skip equal chunks.
+- Optional blocking facade, endian-safe typed storage, range helpers and CRC32.
 - Exact Zetta preset; common C01 through C512 layouts, explicit Microchip
   24LC1025 and ST M24M01 layouts, and validated custom geometry.
 - Bus-silent operation admission and bounded owner-driven polling.
@@ -19,6 +21,8 @@ command processor. See the [library comparison](docs/library-comparison.md).
 - Application owns bus initialization, timing, locking, WP and recovery.
 - ESP32-S2/S3 Arduino and native ESP-IDF examples; no framework in core headers.
 - Shared read-only CLI dumps, text/string inspection, CRC32 and diagnostics.
+- Explicit scratch tests with backup/verified restoration, mixed stress and
+  typed-data demos; optional WP control and application-owned bus recovery.
 
 24Cxx devices are EEPROM memory, not temperature sensors. This repository
 replaces the accidentally requested TMP1x2 implementation; its original commit
@@ -72,6 +76,10 @@ then service and consume it the same way. Keep `data` unchanged until completion
 Writes are split at page/bank/transport limits and never automatically replayed.
 After a failed or cancelled write, inspect accepted/completed/verified byte
 counts and write-commit evidence before deciding what to do next.
+
+The [chip coverage and field helper guide](docs/field-helpers.md) maps the exact
+chip's functions to APIs and CLI commands, including synchronous typed access.
+See the [CLI command reference](examples/README.md) for comprehensive bench tests.
 
 Read the [ownership and completion contract](docs/integration.md) before writing
 an adapter. WP-high may acknowledge a write while preserving old contents;

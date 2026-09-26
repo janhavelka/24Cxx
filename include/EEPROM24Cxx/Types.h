@@ -95,7 +95,10 @@ constexpr const char* driverStateName(DriverState state) {
     default: return "UNKNOWN";
   }
 }
-enum class TransferKind : uint8_t { NONE = 0, READ, WRITE, FILL, VERIFY, VERIFIED_WRITE, VERIFIED_FILL };
+enum class TransferKind : uint8_t {
+  NONE = 0, READ, WRITE, FILL, VERIFY, VERIFIED_WRITE, VERIFIED_FILL,
+  CURRENT_READ, UPDATE, VERIFIED_UPDATE
+};
 enum class TransferState : uint8_t { IDLE = 0, ACTIVE, WAITING_WRITE_CYCLE, SUCCEEDED, FAILED, CANCELLED, TIMED_OUT };
 constexpr const char* transferKindName(TransferKind kind) {
   switch (kind) {
@@ -106,6 +109,9 @@ constexpr const char* transferKindName(TransferKind kind) {
     case TransferKind::VERIFY: return "VERIFY";
     case TransferKind::VERIFIED_WRITE: return "VERIFIED_WRITE";
     case TransferKind::VERIFIED_FILL: return "VERIFIED_FILL";
+    case TransferKind::CURRENT_READ: return "CURRENT_READ";
+    case TransferKind::UPDATE: return "UPDATE";
+    case TransferKind::VERIFIED_UPDATE: return "VERIFIED_UPDATE";
     default: return "UNKNOWN";
   }
 }
@@ -137,13 +143,18 @@ struct TransferResult {
   Status status = Status::Ok();
   uint32_t address = 0;
   size_t bytesRequested = 0;
-  size_t bytesAccepted = 0; // Definite whole-chunk transport acceptance, not persistence.
-  size_t bytesCompleted = 0; // Read prefix, or accepted write prefix whose tWR elapsed.
+  size_t bytesAccepted = 0; // Definite whole-chunk transport acceptance, not persistence; excludes skipped update chunks.
+  size_t bytesCompleted = 0; // Read/processed prefix; includes skipped updates and accepted writes whose tWR elapsed.
+  size_t bytesSkipped = 0; // Update bytes already equal, with no memory-data write issued.
+  size_t bytesCompared = 0; // Successfully read update comparison bytes, whether equal or different.
+  bool comparisonAttempted = false;
+  Status compareStatus = Status::Ok(); // Last update pre-read result; meaningful only if attempted.
   size_t bytesVerified = 0; // Prefix observed equal by readback.
   size_t failedChunkOffset = 0;
   size_t failedChunkLength = 0;
-  /// Aggregate knowledge: ACCEPTED means a nonempty definite prefix, not that
-  /// every requested byte was accepted. INDETERMINATE preserves any uncertainty.
+  /// Aggregate knowledge: ACCEPTED means definite accepted chunks, not that
+  /// every requested byte was written (updates may skip chunks).
+  /// INDETERMINATE preserves any uncertainty.
   WriteCommit writeCommit = WriteCommit::NOT_APPLICABLE;
   WriteCommit lastChunkCommit = WriteCommit::NOT_APPLICABLE;
   /// Most recent physical write result, IN_PROGRESS before the first nonempty

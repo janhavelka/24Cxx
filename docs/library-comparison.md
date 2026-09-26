@@ -68,6 +68,13 @@ not runtime dependencies.
   the same C++ command processor, not independently maintained parsers.
 - Hex/ASCII dumps, escaped text, printable-string inspection, CRC32, profile
   listing and read-only selftest/stress, with bounded cooperative reads.
+- Sibling-compatible init/unbind and synchronous reads, optional blocking typed
+  memory helpers, current-address access, and compare-before-write updates.
+- Full-array selftest, finite watch, explicit scratch suites with verified
+  restoration, mixed/random stress and typed-data demos. Health, staged settings,
+  page/timing diagnostics and physical transfer counters support bench testing.
+- Optional WP GPIO and explicit application-owned interface recovery, with a
+  conservative wait after any recovery STOP and no automatic write replay.
 - `library.json` is the version source; generated Version.h, native CMake,
   ESP-IDF component metadata, managed PlatformIO wrapper and S2/S3 examples.
 
@@ -86,7 +93,13 @@ layout and custom geometry is available; no capacity detection is attempted.
 Acknowledged writes may be suppressed by WP, so only successful readback proves
 that the requested bytes are present. EEPROM writes consume endurance: ordinary
 startup, self-check and stress diagnostics are read-only.
+The separately named `rw_suite`, `xfer_demo`, `stress_mix`, `randbench` and
+`typed_demo` commands require a scratch address and explicit `confirm`; they
+consume endurance and retain a RAM backup for restoration. They cannot preserve
+that backup through a reset or power loss.
 
 The sibling libraries themselves differ in legacy methods and logical-versus-
 physical health accounting. This repository matches the shared design and CLI
 conventions while retaining the memory device's actual protocol.
+The [chip coverage and field helper guide](field-helpers.md) maps every documented
+function of the default Zetta part to its applicable API/CLI entry point.

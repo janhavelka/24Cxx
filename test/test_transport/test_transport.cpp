@@ -1,5 +1,6 @@
 #include "WireTransportHelpers.h"
 #include "IdfTransportHelpers.h"
+#include "BusRecovery.h"
 #include <cstdio>
 #include <initializer_list>
 #include <limits>
@@ -21,12 +22,13 @@ struct WireStub {
   uint8_t error = 0;
   unsigned physical = 0;
   unsigned payloadSent = 0;
+  unsigned beginnings = 0;
   bool locked = false;
   bool deferred = false;
   bool buffers = true;
   uint16_t getTimeOut() const { return timeout; }
   void setTimeOut(uint16_t value) { timeout = value; }
-  void beginTransmission(uint8_t) { locked = true; deferred = false; tx = 0; }
+  void beginTransmission(uint8_t) { ++beginnings; locked = true; deferred = false; tx = 0; }
   size_t write(const uint8_t*, size_t length) {
     tx = !buffers ? 0 : length < capacity ? length : capacity;
     return tx;
@@ -53,7 +55,31 @@ struct WireStub {
 };
 unsigned observations = 0;
 unsigned failures = 0;
-void record(bool ok) { ++observations; if (!ok) ++failures; }
+unsigned writeAttempts = 0, readAttempts = 0, probeAttempts = 0;
+void record(bool ok, eeprom24cxx_cli::WireTransferKind kind) {
+  ++observations; if (!ok) ++failures;
+  if (kind == eeprom24cxx_cli::WireTransferKind::WRITE) ++writeAttempts;
+  else if (kind == eeprom24cxx_cli::WireTransferKind::READ) ++readAttempts;
+  else ++probeAttempts;
+}
+
+struct RecoveryPins {
+  uint32_t us = 0;
+  bool sclReleased = true;
+  bool sdaReleased = true;
+  bool clockStuck = false;
+  unsigned rises = 0;
+  unsigned dataReleaseAfter = 0;
+  void sda(bool release) { sdaReleased = release; }
+  void scl(bool release) {
+    if (release && !sclReleased) ++rises;
+    sclReleased = release;
+  }
+  bool sclHigh() const { return sclReleased && !clockStuck; }
+  bool sdaHigh() const { return sdaReleased && rises >= dataReleaseAfter; }
+  uint32_t nowUs() const { return us; }
+  void delayUs(uint32_t delay) { us += delay; }
+};
 
 int main() {
   WireStub wire;
@@ -68,6 +94,7 @@ int main() {
   CHECK(!transport.write(0x49, data, 4, 50).ok());
   CHECK(!transport.write(0x50, data, 4, 0).ok());
   CHECK(!transport.read(0x50, data, 3, output, 4, 50).ok());
+  CHECK(!transport.read(0x50, nullptr, 1, output, 4, 50).ok());
   CHECK(!transport.read(0x50, data, 1, output, 4, 65536).ok());
   CHECK(!transport.probe(0x7F, 50).ok());
   CHECK(!transport.probe(0x50, std::numeric_limits<uint32_t>::max()).ok());
@@ -95,8 +122,19 @@ int main() {
   CHECK(result.ok() && result.completedTxBytes == 2 && result.completedRxBytes == 4);
   CHECK(output[0] == 0x20 && output[3] == 0x23 && wire.physical == beforeRead + 1);
   CHECK(!wire.locked && !wire.deferred && wire.timeout == 700 && wire.observedTimeout == 35);
+  const auto beforeCurrent = wire.physical;
+  const auto beforeCurrentTx = wire.payloadSent;
+  const auto beforeCurrentBegins = wire.beginnings;
+  result = transport.read(0x50, nullptr, 0, output, 4, 20);
+  CHECK(result.ok() && result.completedTxBytes == 0 && result.completedRxBytes == 4);
+  CHECK(wire.physical == beforeCurrent + 1 && wire.payloadSent == beforeCurrentTx);
+  CHECK(wire.beginnings == beforeCurrentBegins && !wire.locked && wire.observedTimeout == 20 && wire.timeout == 700);
   wire.delivered = 2; wire.readable = 2;
   result = transport.read(0x50, data, 1, output, 4, 35);
+  CHECK(result.code == TransportCode::IO_ERROR && result.completedRxBytes == 2);
+  CHECK(result.completedTxBytes == 0 && result.writeCommit == WriteCommit::NOT_APPLICABLE);
+  CHECK(wire.available() == 0 && wire.timeout == 700 && !wire.locked);
+  result = transport.read(0x50, nullptr, 0, output, 4, 35);
   CHECK(result.code == TransportCode::IO_ERROR && result.completedRxBytes == 2);
   CHECK(result.completedTxBytes == 0 && result.writeCommit == WriteCommit::NOT_APPLICABLE);
   CHECK(wire.available() == 0 && wire.timeout == 700 && !wire.locked);
@@ -138,6 +176,37 @@ int main() {
   CHECK(idf.probe(3).code == TransportCode::IO_ERROR);
   CHECK(idf.probe(1).code == TransportCode::TIMEOUT);
   CHECK(idf.probe(4).writeCommit == WriteCommit::NOT_APPLICABLE);
-  std::puts("[PASS] Wire and native IDF transport fault/timeout/effect policies");
+  unsigned receives = 0, combinedReads = 0;
+  const auto receive = [&](int device, uint8_t* rx, size_t count, int timeout) {
+    ++receives;
+    return device == 42 && rx == output && count == 4 && timeout == 15 ? 0 : -1;
+  };
+  const auto combined = [&](int device, const uint8_t* tx, size_t txCount, uint8_t* rx, size_t count, int timeout) {
+    ++combinedReads;
+    return device == 42 && tx == data && txCount == 1 && rx == output && count == 4 && timeout == 15 ? 0 : -1;
+  };
+  CHECK(eeprom24cxx_cli::idfReadTransaction(42, nullptr, 0, output, 4, 15, receive, combined) == 0);
+  CHECK(receives == 1 && combinedReads == 0);
+  CHECK(eeprom24cxx_cli::idfReadTransaction(42, data, 1, output, 4, 15, receive, combined) == 0);
+  CHECK(receives == 1 && combinedReads == 1);
+  CHECK(observations == writeAttempts + readAttempts + probeAttempts);
+  CHECK(writeAttempts == 3 && readAttempts == 5 && probeAttempts == 3);
+
+  RecoveryPins pins;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).ok());
+  CHECK(pins.sclReleased && pins.sdaReleased && pins.rises == 1); // STOP only on idle bus.
+  pins = {}; pins.dataReleaseAfter = 3; pins.us = UINT32_MAX - 10U;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).ok());
+  CHECK(pins.rises == 4 && pins.sclReleased && pins.sdaReleased); // Three clocks then STOP.
+  pins = {}; pins.clockStuck = true;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).is(Err::I2C_TIMEOUT));
+  CHECK(pins.us == 100 && pins.sclReleased && pins.sdaReleased);
+  pins = {}; pins.dataReleaseAfter = 100;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 1000).is(Err::I2C_BUS));
+  CHECK(pins.rises == 10 && pins.sclReleased && pins.sdaReleased); // Nine clocks and STOP.
+  pins = {}; pins.dataReleaseAfter = 4;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 10).is(Err::I2C_TIMEOUT));
+  CHECK(pins.sclReleased && pins.sdaReleased);
+  std::puts("[PASS] Wire/IDF random/current reads, transport effects, counters and bounded GPIO recovery");
   return 0;
 }

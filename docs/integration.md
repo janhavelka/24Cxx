@@ -15,6 +15,12 @@ retries and do not retain stack-buffer pointers. Their timeout includes acquirin
 the bus lock and completing the transaction. Release the lock before returning;
 never hold it across an EEPROM programming wait.
 
+Current-address access requires explicit `supportsCurrentAddressRead = true`.
+Then `i2cWriteRead` must also accept a null TX pointer with zero TX length and
+issue a pure read. Existing adapters can leave this capability disabled. The
+core admits current reads only while its pointer is known; external bus access
+or recovery must call `invalidateCurrentAddress()`.
+
 `TransportResult` contains a typed transport code, numeric detail, TX/RX completion
 counts and write-effect evidence. Successful callbacks must report exact counts.
 Failure RX data is discarded. If the controller cannot prove whether a failed
@@ -39,17 +45,27 @@ operation. `probe()` checks reachability without driver-health effects;
 `recover()` performs a tracked presence check and does not reset the device,
 replay a write or repair the bus.
 
-`startRead`, `startWrite`, `startFill` and `startVerify` admit one operation without
+`init()` aliases `begin()` and `unbind()` aliases `end()`. Direct synchronous
+`readByte`, `readOnce`, `read` and `readCurrentAddress` reject active work, retained
+results and programming barriers. They neither wait nor retry. `readOnce` requires
+a nonempty range fitting one bank and RX transaction. The optional
+[blocking facade and typed helpers](field-helpers.md) provide synchronous writes
+using an application-owned wait callback.
+
+`startRead`, `startCurrentRead`, `startWrite`, `startFill`, `startUpdate` and
+`startVerify` admit one operation without
 I2C. An OK admission does not mean the transfer completed. `poll(nowMs, budget)`
 performs at most the given number of physical callbacks. The owner schedules
 polling and consumes the retained terminal result once with `takeResult()`.
 New work cannot overwrite an active request or an unconsumed terminal result.
 Caller buffers remain valid throughout an active operation; write/verify input
-must remain unchanged. Zero-length requests are valid no-ops at an address up
-to and including capacity.
+must remain unchanged. Addressed zero-length requests are valid no-ops at an
+address up to and including capacity. Zero-length current reads still require
+the pure-read transport capability and a known pointer.
 
 The sibling-compatible `requestRead`, `requestWrite`, `requestFill` and
-`requestVerify` names use the same scheduler. Explicit-ID overloads accept
+`requestVerify`, `requestCurrentRead` and `requestUpdate` names use the same
+scheduler. Explicit-ID overloads accept
 `1..0x7FFFFFFF`; `start*` and unqualified requests allocate upper-half IDs.
 `requestVerifiedWrite` and `requestVerifiedFill` accept explicit IDs and can
 span multiple physical pages. Inspect `TransferResult::requestId`, or pass the
@@ -94,12 +110,14 @@ through another instance to bypass a pending write cycle.
 | --- | --- |
 | requestId | Correlation token retained through terminal completion and end |
 | bytesAccepted | Whole write chunks acknowledged by the transport; not proof WP allowed storage |
-| bytesCompleted | Successful read prefix, or accepted write prefix whose programming wait completed |
+| bytesCompleted | Successful read/work prefix; writes count programming-completed chunks and updates also count skipped chunks |
 | bytesVerified | Prefix read back equal to the requested contents |
-| writeCommit | Aggregate NOT_COMMITTED, ACCEPTED, INDETERMINATE or VERIFIED effect evidence |
+| bytesCompared / bytesSkipped | Update comparison bytes and matching bytes that needed no programming |
+| comparisonAttempted / compareStatus | Whether an update comparison ran and its latest transport outcome |
+| writeCommit | Aggregate NOT_APPLICABLE, NOT_COMMITTED, ACCEPTED, INDETERMINATE or VERIFIED effect evidence |
 | lastChunkCommit | Effect evidence for the most recent physical write chunk |
-| failedChunkOffset / failedChunkLength | Region associated with a failed or cancelled write |
-| status / writeStatus | Overall completion versus original write result |
+| failedChunkOffset / failedChunkLength | Request-relative failed read/write chunk or mismatch; cancellation/deadline uses phase progress (verification prefix during readback), with pending-write length when applicable |
+| status / writeStatus | Overall completion versus the most recent physical write result |
 | verificationAttempted / verifyStatus | Whether readback was attempted and its most recent transport/content outcome |
 
 A failed transaction can leave an accepted prefix and an uncertain current page.
@@ -110,12 +128,26 @@ can also cause it. Verification proves the requested bytes are present, not that
 a particular write was responsible for creating them.
 
 An admitted nonempty write has `writeStatus == IN_PROGRESS` until its first
-physical write. A cancelled-before-start write has NOT_APPLICABLE effect and
+physical write. An update that skips every chunk changes this to OK when its
+comparison phase completes, without issuing a write. A cancelled-before-start
+write has NOT_APPLICABLE effect and
 zero accepted bytes. `verifyStatus` is meaningful only when
 `verificationAttempted` is true. A later cancellation or owner timeout does not
 erase the last physical write/readback evidence; overall `status` is the
 authority for logical success. A mismatch also reports its request-relative
 offset in `Status::detail`.
+
+Updates compare bounded page/bank/transport chunks and program only differing
+chunks. Their `bytesAccepted` is a payload total rather than an address prefix
+because earlier chunks may have been skipped. `bytesCompleted` remains a
+contiguous work prefix. Verified updates perform a separate full-range readback,
+including skipped chunks; initial comparisons do not increment `bytesVerified`.
+An all-equal update performs no write; a successful separate verification pass
+can still report VERIFIED because it proves the requested content is present.
+Without that separate pass, its effect remains NOT_APPLICABLE. `bytesCompared`
+counts successful comparison reads, including differing chunks; `bytesSkipped`
+counts only wholly matching chunks. See the
+[field helper guide](field-helpers.md) for the complete update contract.
 
 Possibly accepted failed writes terminate without automatic replay or
 automatic reconciliation reads. Consume the result, allow the write barrier to
@@ -153,8 +185,10 @@ clear. Select the exact layout or provide validated custom geometry.
 
 The common driver covers the main EEPROM array. Vendor-specific identification,
 lockable pages, security registers, proprietary reset and high-speed protocols
-are outside the common API. WP GPIO control and application record formats,
-CRC/journaling and power-failure recovery belong to the application.
+are outside the common API. WP GPIO control, record formats, journaling and
+power-failure recovery belong to the application.
+Optional endian/CRC codecs and WP/recovery example hooks assist that policy
+without placing pins, allocation or platform delays in the core.
 
 The Arduino and native ESP-IDF examples own their bus and adapt errors to the
 same typed transport. One loop/task alone runs the CLI and driver. The IDF input

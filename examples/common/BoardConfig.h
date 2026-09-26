@@ -16,6 +16,11 @@
 #ifndef EEPROM24CXX_SERIAL_BAUD
 #define EEPROM24CXX_SERIAL_BAUD 115200
 #endif
+// Opt-in board-owned WP control. Leave -1 when WP is physically strapped or
+// controlled elsewhere. A configured GPIO starts HIGH (writes protected).
+#ifndef EEPROM24CXX_WP_PIN
+#define EEPROM24CXX_WP_PIN -1
+#endif
 namespace board {
 inline constexpr int I2C_SDA = EEPROM24CXX_I2C_SDA;
 inline constexpr int I2C_SCL = EEPROM24CXX_I2C_SCL;
@@ -23,7 +28,9 @@ inline constexpr int I2C_SCL = EEPROM24CXX_I2C_SCL;
 inline constexpr unsigned I2C_FREQUENCY_HZ = EEPROM24CXX_I2C_FREQUENCY_HZ;
 inline constexpr unsigned I2C_TIMEOUT_MS = EEPROM24CXX_I2C_TIMEOUT_MS;
 inline constexpr unsigned SERIAL_BAUD = EEPROM24CXX_SERIAL_BAUD;
+inline constexpr int WP_PIN = EEPROM24CXX_WP_PIN;
 static_assert(I2C_SDA >= 0 && I2C_SCL >= 0 && I2C_SDA != I2C_SCL, "Select distinct valid I2C pins");
 static_assert(I2C_FREQUENCY_HZ > 0 && SERIAL_BAUD > 0, "Bus and serial rates must be positive");
 static_assert(I2C_TIMEOUT_MS > 0 && I2C_TIMEOUT_MS <= 1000, "I2C timeout must be 1..1000 ms");
+static_assert(WP_PIN >= -1 && WP_PIN != I2C_SDA && WP_PIN != I2C_SCL, "WP must be disabled or use a separate GPIO");
 }  // namespace board

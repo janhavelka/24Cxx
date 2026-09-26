@@ -14,12 +14,14 @@
 #include "BoardConfig.h"
 #include "Eeprom24CxxCli.h"
 #include "IdfTransportHelpers.h"
+#include "Esp32WriteProtect.h"
 
 namespace {
 using namespace EEPROM24Cxx;
 struct App {
   i2c_master_bus_handle_t bus = nullptr;
   i2c_master_dev_handle_t devices[8]{};
+  bool ready = false;
   eeprom24cxx_cli::TransferStats stats{};
   QueueHandle_t input = nullptr;
   eeprom24cxx_cli::Cli cli{};
@@ -28,28 +30,31 @@ constexpr eeprom24cxx_cli::IdfResultMapper resultMapper{
     ESP_OK, ESP_ERR_TIMEOUT, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_RESPONSE, ESP_ERR_NOT_FOUND};
 TransportResult finish(esp_err_t error, size_t tx, size_t rx, bool memoryWrite) {
   app.stats.record(error == ESP_OK);
+  auto& count = memoryWrite ? app.stats.writeAttempts : app.stats.readAttempts;
+  if (count != UINT32_MAX) ++count;
   return resultMapper.transaction(error, tx, rx, memoryWrite);
 }
 TransportResult writeI2c(uint8_t address, const uint8_t* data, size_t length,
                          uint32_t timeoutMs, void*) {
-  if (address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
+  if (!app.ready || address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
       !data || !length || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_COMMITTED);
   return finish(i2c_master_transmit(app.devices[address - 0x50], data, length, static_cast<int>(timeoutMs)), length, 0, true);
 }
 TransportResult readI2c(uint8_t address, const uint8_t* tx, size_t txLength,
                         uint8_t* rx, size_t rxLength, uint32_t timeoutMs, void*) {
-  if (address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
-      !tx || !txLength || !rx || !rxLength || !timeoutMs || timeoutMs > INT_MAX)
+  if (!app.ready || address < 0x50 || address > 0x57 || !app.devices[address - 0x50] ||
+      (txLength && !tx) || txLength > 2 || !rx || !rxLength || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
-  return finish(i2c_master_transmit_receive(app.devices[address - 0x50], tx, txLength, rx, rxLength,
-                                           static_cast<int>(timeoutMs)), txLength, rxLength, false);
+  return finish(eeprom24cxx_cli::idfReadTransaction(app.devices[address - 0x50], tx, txLength, rx, rxLength,
+      static_cast<int>(timeoutMs), i2c_master_receive, i2c_master_transmit_receive), txLength, rxLength, false);
 }
 TransportResult probeI2c(uint8_t address, uint32_t timeoutMs, void*) {
-  if (!app.bus || address < 0x08 || address > 0x77 || !timeoutMs || timeoutMs > INT_MAX)
+  if (!app.ready || !app.bus || address < 0x08 || address > 0x77 || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
   const esp_err_t result = i2c_master_probe(app.bus, address, static_cast<int>(timeoutMs));
   app.stats.record(result == ESP_OK);
+  if (app.stats.probeAttempts != UINT32_MAX) ++app.stats.probeAttempts;
   return resultMapper.probe(result);
 }
 Status probeAddress(uint8_t address, void*) {
@@ -61,6 +66,20 @@ Status probeAddress(uint8_t address, void*) {
 uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
 void output(void*, const char* format, va_list args) { std::vprintf(format, args); }
 eeprom24cxx_cli::TransferStats stats(void*) { return app.stats; }
+void resetTransferStats(void*) { app.stats = {}; }
+Status resetInterface(void*) {
+  if (!app.bus) return Status::Error(Err::NOT_INITIALIZED, "I2C bus is not initialized");
+  app.ready = false;
+  // IDF resets the controller FSM in place; the registered device handles stay
+  // attached to the same bus. No asynchronous callbacks/queued traffic exist.
+  const esp_err_t error = i2c_master_bus_reset(app.bus);
+  if (error != ESP_OK) return Status::Error(Err::I2C_ERROR, "IDF interface reset failed", error);
+  if (!gpio_get_level(static_cast<gpio_num_t>(board::I2C_SDA)) ||
+      !gpio_get_level(static_cast<gpio_num_t>(board::I2C_SCL)))
+    return Status::Error(Err::I2C_BUS, "I2C line remains low after interface reset");
+  app.ready = true;
+  return Status::Ok();
+}
 eeprom24cxx_cli::HeapStats heapStats(void*) {
   return {static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
           static_cast<uint32_t>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
@@ -78,6 +97,8 @@ void inputTask(void*) {
 }  // namespace
 
 extern "C" void app_main() {
+  const auto protectedState = eeprom24cxx_cli::initializeWriteProtect();
+  if (!protectedState.ok()) { std::printf("[E] %s\n", protectedState.msg); return; }
   i2c_master_bus_config_t bus{};
   bus.i2c_port = I2C_NUM_0;
   bus.sda_io_num = static_cast<gpio_num_t>(board::I2C_SDA);
@@ -101,6 +122,7 @@ extern "C" void app_main() {
       (void)i2c_del_master_bus(app.bus); return;
     }
   }
+  app.ready = true;
   app.input = xQueueCreate(384, sizeof(char));
   if (!app.input || xTaskCreate(inputTask, "eeprom_input", 3072, nullptr, 4, nullptr) != pdPASS) {
     std::puts("[E] Input queue/task creation failed");
@@ -112,6 +134,7 @@ extern "C" void app_main() {
   config.i2cWrite = writeI2c;
   config.i2cWriteRead = readI2c;
   config.i2cProbe = probeI2c;
+  config.supportsCurrentAddressRead = true;
   config.nowMs = nowMs;
   config.i2cTimeoutMs = board::I2C_TIMEOUT_MS;
   eeprom24cxx_cli::Platform platform{};
@@ -119,6 +142,10 @@ extern "C" void app_main() {
   platform.nowMs = nowMs;
   platform.probeAddress = probeAddress;
   platform.transferStats = stats;
+  platform.resetTransferStats = resetTransferStats;
+  platform.readWriteProtect = eeprom24cxx_cli::readWriteProtect;
+  platform.setWriteProtect = eeprom24cxx_cli::setWriteProtect;
+  platform.resetInterface = resetInterface;
   platform.heapStats = heapStats;
   platform.framework = "native-esp-idf";
   platform.frameworkVersion = esp_get_idf_version();

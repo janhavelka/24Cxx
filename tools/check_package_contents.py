@@ -18,12 +18,14 @@ REQUIRED = {
     "include/EEPROM24Cxx/Config.h", "include/EEPROM24Cxx/Types.h",
     "include/EEPROM24Cxx/Status.h", "include/EEPROM24Cxx/Version.h",
     "include/EEPROM24Cxx/CommandTable.h", "examples/README.md",
+    "include/EEPROM24Cxx/BlockingMemory.h", "include/EEPROM24Cxx/MemoryHelpers.h",
     "examples/01_basic_bringup_cli/main.cpp", "examples/common/BoardConfig.h",
     "examples/common/Eeprom24CxxCli.h", "examples/common/Eeprom24CxxCli.cpp",
     "examples/common/WireTransportHelpers.h", "examples/common/IdfTransportHelpers.h",
+    "examples/common/BusRecovery.h", "examples/common/Esp32WriteProtect.h",
     "examples/esp_idf/basic/CMakeLists.txt", "examples/esp_idf/basic/main/CMakeLists.txt",
     "examples/esp_idf/basic/main/main.cpp", "examples/esp_idf/basic/sdkconfig.defaults",
-    "docs/integration.md", "docs/validation.md", "docs/reference/README.md",
+    "docs/integration.md", "docs/field-helpers.md", "docs/validation.md", "docs/reference/README.md",
 }
 FORBIDDEN_PARTS = {".git", ".github", ".pio", ".vscode", "managed_components", "__pycache__"}
 FORBIDDEN_ROOTS = {"test", "tools", "scripts"}

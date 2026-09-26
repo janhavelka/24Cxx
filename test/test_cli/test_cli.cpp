@@ -17,12 +17,18 @@ struct Fixture {
   unsigned writes = 0;
   unsigned reads = 0;
   unsigned probes = 0;
+  unsigned resets = 0;
+  bool failReset = false;
+  uint32_t pointer = 0;
+  eeprom24cxx_cli::TransferStats counters{};
   uint32_t ms = 0;
   uint32_t busyUntil = 0;
   bool writeProtected = false;
   bool failWrite = false;
+  unsigned failWriteAttempt = 0;
   bool nackWrite = false;
   bool failRead = false;
+  bool failProbe = false;
   Geometry geometry = geometryFor(DeviceVariant::ZETTA_ZD24C02B);
   static uint32_t clock(void* user) { return static_cast<Fixture*>(user)->ms; }
   static void print(void* user, const char* format, va_list args) {
@@ -35,11 +41,16 @@ struct Fixture {
     const uint32_t bank = (bus >> geometry.bankAddressShift) & ((1U << geometry.bankAddressBits) - 1U);
     return value | (bank << (8U * geometry.wordAddressBytes));
   }
-  static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t, void* user) {
+  static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t timeout, void* user) {
+    auto& f = *static_cast<Fixture*>(user);
+    const auto result = writeBody(bus, tx, n, timeout, user);
+    f.counters.record(result.ok()); ++f.counters.writeAttempts; return result;
+  }
+  static TransportResult writeBody(uint8_t bus, const uint8_t* tx, size_t n, uint32_t, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     ++f.transfers; ++f.writes; f.addresses.push_back(bus);
     if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED);
-    if (f.failWrite) { f.failWrite = false; f.busyUntil = f.ms + 5; return TransportResult::Error(TransportCode::TIMEOUT); }
+    if (f.failWrite || f.writes == f.failWriteAttempt) { f.failWrite = false; f.busyUntil = f.ms + 5; return TransportResult::Error(TransportCode::TIMEOUT); }
     if (f.nackWrite) { f.nackWrite = false; return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED); }
     const uint32_t start = f.address(bus, tx);
     if (n <= f.geometry.wordAddressBytes) return TransportResult::Error(TransportCode::IO_ERROR);
@@ -50,24 +61,35 @@ struct Fixture {
       f.memory[target] = tx[i];
     }
     f.busyUntil = f.ms + 5;
+    f.pointer = (start + static_cast<uint32_t>(n) - f.geometry.wordAddressBytes) % f.geometry.capacityBytes;
     return TransportResult::Ok(n, 0);
   }
   static TransportResult read(uint8_t bus, const uint8_t* tx, size_t n,
+                               uint8_t* out, size_t count, uint32_t timeout, void* user) {
+    auto& f = *static_cast<Fixture*>(user);
+    const auto result = readBody(bus, tx, n, out, count, timeout, user);
+    f.counters.record(result.ok()); ++f.counters.readAttempts; return result;
+  }
+  static TransportResult readBody(uint8_t bus, const uint8_t* tx, size_t n,
                                uint8_t* out, size_t count, uint32_t, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     ++f.transfers; ++f.reads; f.addresses.push_back(bus);
     if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS);
     if (f.failRead) { f.failRead = false; return TransportResult::Error(TransportCode::TIMEOUT); }
-    const uint32_t start = f.address(bus, tx);
-    if (n != f.geometry.wordAddressBytes || start + count > sizeof(f.memory))
+    const uint32_t start = n ? f.address(bus, tx) : f.pointer;
+    if ((n && n != f.geometry.wordAddressBytes) || start + count > sizeof(f.memory))
       return TransportResult::Error(TransportCode::IO_ERROR);
     std::memcpy(out, f.memory + start, count);
+    f.pointer = (start + static_cast<uint32_t>(count)) % f.geometry.capacityBytes;
     return TransportResult::Ok(n, count);
   }
   static TransportResult probe(uint8_t bus, uint32_t, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     ++f.transfers; ++f.probes; f.addresses.push_back(bus);
-    if (bus < 0x50 || bus > 0x57 || f.ms < f.busyUntil)
+    if (f.failProbe) { f.failProbe = false; f.counters.record(false); ++f.counters.probeAttempts; return TransportResult::Error(TransportCode::TIMEOUT); }
+    const bool acknowledged = bus >= 0x50 && bus <= 0x57 && f.ms >= f.busyUntil;
+    f.counters.record(acknowledged); ++f.counters.probeAttempts;
+    if (!acknowledged)
       return TransportResult::Error(TransportCode::NACK_ADDRESS);
     return TransportResult::Ok(0, 0);
   }
@@ -80,11 +102,20 @@ struct Fixture {
     c.i2cWrite = write; c.i2cWriteRead = read; c.i2cProbe = probe; c.i2cUser = this;
     c.nowMs = clock; c.timeUser = this; c.maxTxBytes = 17; c.maxRxBytes = 16;
     c.offlineThreshold = 2;
+    c.supportsCurrentAddressRead = true;
     return c;
   }
   eeprom24cxx_cli::Platform platform() {
     eeprom24cxx_cli::Platform p;
     p.vprintf = print; p.nowMs = clock; p.probeAddress = scan; p.user = this;
+    p.transferStats = [](void* user) { return static_cast<Fixture*>(user)->counters; };
+    p.resetTransferStats = [](void* user) { static_cast<Fixture*>(user)->counters = {}; };
+    p.readWriteProtect = [](bool& value, void* user) { value = static_cast<Fixture*>(user)->writeProtected; return Status::Ok(); };
+    p.setWriteProtect = [](bool value, void* user) { static_cast<Fixture*>(user)->writeProtected = value; return Status::Ok(); };
+    p.resetInterface = [](void* user) {
+      auto& f = *static_cast<Fixture*>(user); ++f.resets;
+      return f.failReset ? Status::Error(Err::I2C_BUS, "injected reset failure") : Status::Ok();
+    };
     return p;
   }
   bool run(eeprom24cxx_cli::Cli& cli, unsigned ticks = 80) {
@@ -133,6 +164,13 @@ int main() {
   Fixture f; eeprom24cxx_cli::Cli cli;
   cli.setup(f.platform(), f.config());
   CHECK(f.writes == 0 && f.probes == 1);
+  CHECK(f.output.find("bound=yes consec=0 ok=1 fail=0") != std::string::npos);
+  CHECK(f.output.find("=== EEPROM24Cxx CLI Help ===") != std::string::npos);
+  Fixture failedStartup; failedStartup.failProbe = true;
+  eeprom24cxx_cli::Cli failedStartupCli; failedStartupCli.setup(failedStartup.platform(), failedStartup.config());
+  CHECK(failedStartup.writes == 0 && failedStartup.probes == 1);
+  CHECK(failedStartup.output.find("DEGRADED") != std::string::npos);
+  CHECK(failedStartup.output.find("bound=yes consec=1 ok=0 fail=1") != std::string::npos);
   f.output.clear(); cli.processCommand("help");
   CHECK(f.output.find("\033[36m=== EEPROM24Cxx CLI Help ===\033[0m") != std::string::npos);
   CHECK(f.output.find("\033[32m[Configuration]\033[0m") != std::string::npos);
@@ -366,8 +404,11 @@ int main() {
   CHECK(views.output.find("BUSY") == std::string::npos);
   viewCli.processCommand("writebyte 0 1"); CHECK(views.output.find("BUSY") != std::string::npos);
   viewCli.processCommand("stop");
-  views.output.clear(); viewCli.processCommand("selftest"); CHECK(views.run(viewCli));
+  views.output.clear(); before = views.transfers; viewCli.processCommand("selftest"); CHECK(views.run(viewCli, 160));
   CHECK(views.output.find("Read-only selftest: PASS") != std::string::npos);
+  CHECK(views.output.find("bytes=2048 crc=0x") != std::string::npos);
+  CHECK(views.transfers == before + 128);
+  CHECK(views.output.find("00000:") == std::string::npos); // Compact full-array report.
   views.output.clear(); views.failRead = true;
   viewCli.processCommand("selfcheck"); CHECK(views.run(viewCli));
   CHECK(views.output.find("Read-only selftest: FAIL") != std::string::npos);
@@ -377,6 +418,171 @@ int main() {
   views.output.clear(); viewCli.processCommand("verbose on"); viewCli.processCommand("stress 1");
   CHECK(views.run(viewCli)); CHECK(views.output.find("kind=READ") != std::string::npos);
   CHECK(views.writes == 0);
-  std::puts("[PASS] CLI startup, parsing, memory views, CRC, page writes, verification, cancellation, health and read-only diagnostics");
+  // Cooperative field diagnostics, counters and current-address reads.
+  Fixture field; eeprom24cxx_cli::Cli fieldCli;
+  fieldCli.setup(field.platform(), field.config()); fieldCli.processCommand("color off");
+  for (unsigned index = 0; index < sizeof(field.memory); ++index)
+    field.memory[index] = static_cast<uint8_t>(index ^ 0x63U);
+  before = field.transfers;
+  for (const char* command : {"geometry", "timing", "page 7", "offline", "stats", "xfer_stats", "wp", "job", "result", "scratch"})
+    fieldCli.processCommand(command);
+  CHECK(field.transfers == before);
+  CHECK(field.output.find("number=0 offset=7 remaining=1") != std::string::npos);
+  fieldCli.processCommand("xfer_reset"); field.output.clear(); fieldCli.processCommand("xfer_assert 0 0 0 0");
+  CHECK(field.output.find("[I] OK") != std::string::npos);
+  field.output.clear(); fieldCli.processCommand("xfer_assert 1");
+  CHECK(field.output.find("VERIFY_MISMATCH") != std::string::npos);
+  fieldCli.processCommand("readbyte 10"); CHECK(field.run(fieldCli));
+  field.output.clear(); fieldCli.processCommand("current 2"); CHECK(field.run(fieldCli));
+  CHECK(field.output.find("kind=CURRENT_READ") != std::string::npos);
+  CHECK(field.output.find("0000B: 68 6F") != std::string::npos);
+  CHECK(field.writes == 0);
+  field.output.clear(); fieldCli.processCommand("watch 10 4 3 2"); CHECK(field.run(fieldCli));
+  CHECK(field.output.find("Watch stopped: ok=3 fail=0") != std::string::npos);
+  before = field.transfers; CHECK(field.run(fieldCli)); CHECK(field.transfers == before);
+  fieldCli.processCommand("watch 10 4 10 5"); fieldCli.tick();
+  before = field.transfers; fieldCli.processCommand("stop"); CHECK(field.run(fieldCli)); CHECK(field.transfers == before);
+  fieldCli.processCommand("wp 1"); CHECK(field.writeProtected);
+  fieldCli.processCommand("wp 0"); CHECK(!field.writeProtected);
+  fieldCli.processCommand("end"); fieldCli.processCommand("offline 3"); fieldCli.processCommand("init 0x52");
+  CHECK(field.addresses.back() == 0x52);
+  field.output.clear(); fieldCli.processCommand("settings"); CHECK(field.output.find("offline-threshold=3") != std::string::npos);
+  fieldCli.processCommand("iface_reset"); CHECK(field.resets == 1);
+  before = field.transfers; fieldCli.processCommand("readbyte 0"); CHECK(field.transfers == before);
+  CHECK(field.run(fieldCli, 7)); CHECK(field.transfers == before);
+  fieldCli.processCommand("readbyte 0"); CHECK(field.run(fieldCli));
+  CHECK(field.transfers == before + 1);
+  // Even a failed electrical recovery may emit STOP. Stop/end and probes/scans
+  // cannot bypass its post-callback settling barrier.
+  field.failReset = true; fieldCli.processCommand("iface_reset");
+  CHECK(field.resets == 2); before = field.transfers;
+  fieldCli.processCommand("stop"); fieldCli.processCommand("end");
+  for (const char* command : {"probe", "discover", "current", "begin"}) fieldCli.processCommand(command);
+  CHECK(field.run(fieldCli, 5)); CHECK(field.transfers == before);
+  CHECK(field.run(fieldCli, 2)); fieldCli.processCommand("bind"); field.failReset = false;
+  field.output.clear(); fieldCli.processCommand("stats reset");
+  CHECK(field.output.find("total=0 ok=0 fail=0") != std::string::npos);
+  CHECK(field.output.find("passive driver health preserved") != std::string::npos);
+  before = field.transfers;
+  for (const char* command : {"rw_suite 0 8", "rw_suite 0 257 confirm", "rw_suite 0 8 yes", "stress_mix 0 8 0 confirm",
+                              "randbench 0 8 1001 confirm", "typed_demo 0 extra confirm", "restore yes", "current 0",
+                              "watch 0 257", "watch 0 4 1 0", "xfer_assert 0 0", "wp 2", "init 0x58", "page -1"}) {
+    field.output.clear(); fieldCli.processCommand(command); CHECK(field.run(fieldCli, 1));
+    CHECK(field.output.find("INVALID_PARAM") != std::string::npos); CHECK(field.transfers == before);
+  }
+  fieldCli.processCommand("end"); fieldCli.processCommand("model 24c01");
+  field.output.clear(); fieldCli.processCommand("page 127");
+  CHECK(field.output.find("remaining=1 bank-remaining=1") != std::string::npos);
+  CHECK(field.transfers == before);
+  // All scratch commands restore nontrivial original data, including an
+  // unaligned region spanning physical pages. Each tick remains bounded.
+  Fixture scratch; eeprom24cxx_cli::Cli scratchCli;
+  scratchCli.setup(scratch.platform(), scratch.config()); scratchCli.processCommand("color off");
+  for (unsigned index = 0; index < sizeof(scratch.memory); ++index)
+    scratch.memory[index] = static_cast<uint8_t>((index * 29U) ^ 0xD3U);
+  const std::vector<uint8_t> original(scratch.memory, scratch.memory + sizeof(scratch.memory));
+  before = scratch.transfers; scratchCli.processCommand("rw_suite 6 19 confirm"); CHECK(scratch.transfers == before);
+  CHECK(scratch.run(scratchCli, 500));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  CHECK(scratch.output.find("primary=OK detail=0 restore=OK") != std::string::npos);
+  CHECK(scratch.output.find("compared=19 skipped=19") != std::string::npos);
+  CHECK(scratch.output.find("Original scratch bytes observed") != std::string::npos);
+  scratch.output.clear(); before = scratch.writes;
+  scratchCli.processCommand("stress_mix 32 8 4 confirm"); CHECK(scratch.run(scratchCli, 200));
+  CHECK(scratch.writes == before + 5);
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  scratch.output.clear(); before = scratch.writes;
+  scratchCli.processCommand("randbench 32 16 5 confirm"); CHECK(scratch.run(scratchCli, 200));
+  CHECK(scratch.writes == before + 7);
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  scratch.output.clear(); scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli, 100));
+  CHECK(scratch.output.find("rounds=1/1") != std::string::npos);
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  before = scratch.writes; scratchCli.processCommand("typed_demo 32 confirm");
+  for (unsigned i = 0; i < 40 && scratch.writes < before + 2; ++i) CHECK(scratch.run(scratchCli, 1));
+  const uint8_t typed[] = {0x5A, 0xA5, 0x78, 0x56, 0x34, 0x12, 0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01};
+  CHECK(std::memcmp(scratch.memory + 32, typed, sizeof(typed)) == 0);
+  CHECK(scratch.run(scratchCli, 100));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  // A backup read failure cannot schedule any programming or claim restore.
+  scratch.output.clear(); before = scratch.writes; scratch.failRead = true;
+  scratchCli.processCommand("rw_suite 32 8 confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(scratch.writes == before && scratch.output.find("backup=none") != std::string::npos);
+  CHECK(scratch.output.find("primary=I2C_TIMEOUT") != std::string::npos);
+  // Stop after the first page is issued: no restoration or subsequent page is
+  // silently sent. Backup survives end/rebind and rejects target changes.
+  scratch.output.clear(); scratchCli.processCommand("rw_suite 6 16 confirm");
+  CHECK(scratch.run(scratchCli, 2)); // Backup, then first physical page write.
+  before = scratch.transfers; const unsigned stoppedWrites = scratch.writes;
+  scratchCli.processCommand("stop"); CHECK(scratch.transfers == before);
+  scratch.output.clear(); scratchCli.processCommand("discover"); scratchCli.processCommand("wp 1");
+  CHECK(scratch.transfers == before && !scratch.writeProtected);
+  CHECK(scratch.output.find("BUSY") != std::string::npos);
+  scratchCli.processCommand("scratch");
+  CHECK(scratch.run(scratchCli)); CHECK(scratch.writes == stoppedWrites);
+  CHECK(scratch.output.find("backup=retained restore-required=yes primary=CANCELLED") != std::string::npos);
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) != 0);
+  scratchCli.processCommand("end");
+  scratch.output.clear(); scratchCli.processCommand("model 24c04"); scratchCli.processCommand("begin 0x51");
+  scratchCli.processCommand("writebyte 0 1");
+  CHECK(scratch.output.find("BUSY") != std::string::npos); CHECK(scratch.transfers == before);
+  scratchCli.processCommand("bind");
+  scratch.output.clear(); scratchCli.processCommand("restore confirm"); CHECK(scratch.transfers == before);
+  CHECK(scratch.run(scratchCli, 200));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  CHECK(scratch.output.find("primary=CANCELLED detail=0 restore=OK") != std::string::npos);
+  // An ambiguous pattern failure retains backup, requires explicit restore,
+  // and is never silently replayed even after its physical barrier settles.
+  scratch.output.clear(); before = scratch.writes; scratch.failWrite = true;
+  scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(scratch.writes == before + 1);
+  CHECK(scratch.output.find("commit=INDETERMINATE") != std::string::npos);
+  CHECK(scratch.output.find("primary=I2C_TIMEOUT detail=0 restore=NO_RESULT") != std::string::npos);
+  scratchCli.processCommand("restore confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  // Restore failure preserves a successful primary result and the original
+  // backup. The second explicit restore is a new owner-authorized attempt.
+  scratch.output.clear(); scratch.failWriteAttempt = scratch.writes + 2;
+  scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(scratch.output.find("primary=OK detail=0 restore=I2C_TIMEOUT") != std::string::npos);
+  CHECK(scratch.output.find("backup=retained restore-required=yes") != std::string::npos);
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) != 0);
+  before = scratch.writes; CHECK(scratch.run(scratchCli)); CHECK(scratch.writes == before);
+  scratchCli.processCommand("restore confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  // WP suppression fails verification and never becomes a claimed test pass.
+  scratch.output.clear(); scratch.writeProtected = true;
+  scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(scratch.output.find("primary=VERIFY_MISMATCH") != std::string::npos);
+  scratch.writeProtected = false; scratchCli.processCommand("restore confirm"); CHECK(scratch.run(scratchCli));
+  CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
+  // Direct update command distinguishes skips from physical programming.
+  scratch.output.clear(); before = scratch.writes;
+  scratchCli.processCommand("uverify 0 211"); CHECK(scratch.run(scratchCli));
+  CHECK(scratch.writes == before); CHECK(scratch.output.find("skipped=1") != std::string::npos);
+  // Stop before any backup/pattern traffic and while the automatic restore is
+  // programming. Neither cancellation can initiate a compensating write.
+  Fixture restoreCancel; eeprom24cxx_cli::Cli restoreCancelCli;
+  restoreCancelCli.setup(restoreCancel.platform(), restoreCancel.config()); restoreCancelCli.processCommand("color off");
+  std::memset(restoreCancel.memory, 0x37, sizeof(restoreCancel.memory));
+  before = restoreCancel.transfers;
+  restoreCancelCli.processCommand("xfer_demo 32 16 confirm"); restoreCancelCli.processCommand("cancel");
+  CHECK(restoreCancel.run(restoreCancelCli)); CHECK(restoreCancel.transfers == before);
+  restoreCancel.output.clear(); restoreCancelCli.processCommand("restore confirm");
+  CHECK(restoreCancel.output.find("NO_RESULT") != std::string::npos);
+  restoreCancel.output.clear(); restoreCancelCli.processCommand("xfer_demo 32 16 confirm");
+  for (unsigned i = 0; i < 60 && restoreCancel.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") == std::string::npos; ++i)
+    CHECK(restoreCancel.run(restoreCancelCli, 1));
+  CHECK(restoreCancel.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") != std::string::npos);
+  CHECK(restoreCancel.run(restoreCancelCli, 1)); // First restore page issued.
+  before = restoreCancel.transfers; restoreCancel.output.clear(); restoreCancelCli.processCommand("cancel");
+  CHECK(restoreCancel.transfers == before);
+  CHECK(restoreCancel.output.find("primary=OK detail=0 restore=CANCELLED") != std::string::npos);
+  CHECK(restoreCancel.output.find("backup=retained") != std::string::npos);
+  restoreCancelCli.processCommand("restore confirm"); CHECK(restoreCancel.transfers == before);
+  CHECK(restoreCancel.run(restoreCancelCli, 1)); CHECK(restoreCancel.transfers == before);
+  CHECK(restoreCancel.run(restoreCancelCli, 100));
+  for (const auto value : restoreCancel.memory) CHECK(value == 0x37);
+  std::puts("[PASS] CLI parsing, memory views, current/update, watch, counters, scratch programming, fault/restore and cancellation");
   return 0;
 }

@@ -33,6 +33,9 @@ struct SettingsSnapshot {
   Status lastError = Status::Ok();
   bool hasNowMsHook = false;
   bool hasAckPolling = false;
+  bool supportsCurrentAddressRead = false;
+  bool currentAddressKnown = false;
+  uint32_t currentAddress = 0; // Next read address; meaningful only while known.
   bool writeCyclePending = false;
   uint32_t writeReadyAtMs = 0;
   bool transferActive = false;
@@ -56,8 +59,10 @@ public:
   /// Bind, then one tracked nondestructive presence transaction. An I2C failure
   /// preserves the valid binding so the owner can diagnose/recover later.
   Status begin(const Config& config);
+  Status init(const Config& config) { return begin(config); }
   /// Bus silent, cancel/retain result, release callbacks; keep physical busy barrier.
   void end();
+  void unbind() { end(); }
   /// Time bookkeeping only; no bus or health changes. An active ACK-polling
   /// write still needs poll() for its final readiness check.
   void tick(uint32_t nowMs);
@@ -91,6 +96,15 @@ public:
   }
   size_t maxWriteDataBytes() const { return _bound ? settingsSnapshot().maxWriteDataBytes : 0; }
   size_t maxReadDataBytes() const { return _bound ? settingsSnapshot().maxReadDataBytes : 0; }
+  uint16_t pageSizeBytes() const { return _bound ? _geometry.pageSizeBytes : 0; }
+  size_t pageRemaining(uint32_t address) const {
+    return _bound && address < _geometry.capacityBytes ? _geometry.pageSizeBytes - address % _geometry.pageSizeBytes : 0;
+  }
+  bool currentAddressKnown() const { return _currentAddressKnown; }
+  uint32_t currentAddress() const { return _currentAddress; }
+  /// Bus silent. Call after external chip access, bus recovery or power loss.
+  /// Also discards a pending write's candidate pointer, without clearing tWR.
+  void invalidateCurrentAddress();
   /// Passive per-binding telemetry, reset by successful bind()/end(). Counts
   /// saturate. lastError survives tracked successes. Expected busy ACK polls,
   /// validation and logical/content failures do not increment totalFailures.
@@ -101,6 +115,22 @@ public:
   uint32_t totalFailures() const { return _health.totalFailures; }
   uint32_t totalSuccess() const { return _health.totalSuccess; }
   uint32_t writeBusyPolls() const { return _health.writeBusyPolls; }
+
+  /// Synchronous compatibility reads, tracked by health. readByte/readOnce
+  /// perform at most one callback; read loops over bounded bank/RX chunks.
+  /// All obey active/result/write-cycle gates. No wait, retries or allocation.
+  /// Failed chunks leave output untouched; read may expose an earlier prefix.
+  /// Zero length is allowed for read; readOnce requires 1..maxReadDataBytes()
+  /// and cannot cross a bank boundary. Use startRead for owner-paced work.
+  Status readByte(uint32_t address, uint8_t& value);
+  Status readOnce(uint32_t address, uint8_t* data, size_t length);
+  Status read(uint32_t address, uint8_t* data, size_t length);
+  /// Pure current-address reads require transport opt-in and a known pointer.
+  /// These synchronous helpers split at RX limits, never wrap or cross banks.
+  /// The exact Zetta preset tracks read array wrap and write page wrap; other
+  /// presets track only read positions that remain within the same bank.
+  Status readCurrentAddress(uint8_t* data, size_t length);
+  Status readCurrentAddress(uint8_t& value) { return readCurrentAddress(&value, 1); }
 
   /// Admission is bus silent; Ok means queued, not completed. Buffers remain
   /// borrowed through terminal completion/cancel/end and must not be mutated.
@@ -115,6 +145,13 @@ public:
   Status startFill(uint32_t address, uint8_t value, size_t length,
                    bool verify = false, uint32_t timeoutMs = 0);
   Status startVerify(uint32_t address, const uint8_t* data, size_t length, uint32_t timeoutMs = 0);
+  Status startCurrentRead(uint8_t* data, size_t length, uint32_t timeoutMs = 0);
+  /// Read each bounded page chunk, skip if already equal, otherwise issue one
+  /// write and preserve its tWR/effect evidence. verify adds final full readback.
+  /// No retries or ambiguity reconciliation. bytesAccepted excludes skips;
+  /// bytesCompleted includes skipped chunks. Input remains borrowed throughout.
+  Status startUpdate(uint32_t address, const uint8_t* data, size_t length,
+                     bool verify = false, uint32_t timeoutMs = 0);
   /// Sibling-compatible cooperative names. start* and unqualified request*
   /// allocate upper-half IDs, retained in progress/result through end().
   Status requestRead(uint32_t address, uint8_t* data, size_t length) {
@@ -128,6 +165,10 @@ public:
   }
   Status requestVerify(uint32_t address, const uint8_t* data, size_t length) {
     return startVerify(address, data, length);
+  }
+  Status requestCurrentRead(uint8_t* data, size_t length) { return startCurrentRead(data, length); }
+  Status requestUpdate(uint32_t address, const uint8_t* data, size_t length, bool verify = false) {
+    return startUpdate(address, data, length, verify);
   }
   /// Caller IDs in 1..0x7FFFFFFF correlate delayed owner actions. These have
   /// the same bus-silent admission/buffer/deadline rules as start* above.
@@ -143,6 +184,9 @@ public:
                               size_t length, uint32_t timeoutMs = 0);
   Status requestVerifiedFill(uint32_t requestId, uint32_t address, uint8_t value,
                              size_t length, uint32_t timeoutMs = 0);
+  Status requestCurrentRead(uint32_t requestId, uint8_t* data, size_t length, uint32_t timeoutMs = 0);
+  Status requestUpdate(uint32_t requestId, uint32_t address, const uint8_t* data,
+                       size_t length, bool verify = false, uint32_t timeoutMs = 0);
   /// At most maxTransactions physical callbacks; no waiting/delays/retries.
   /// No clock hook: tWR wait includes callback timeout plus 1ms rounding margin.
   /// Optional address-only ACK polling may end that conservative wait sooner;
@@ -190,6 +234,7 @@ private:
   const uint8_t* _sourceBuffer = nullptr;
   uint8_t _fillValue = 0;
   bool _verifyPhase = false;
+  bool _updateCompared = false;
   bool _started = false;
   uint32_t _startedAt = 0;
   uint32_t _timeoutMs = 0;
@@ -198,6 +243,10 @@ private:
   uint32_t _writeReadyAt = 0;
   uint8_t _writeAddress = 0;
   size_t _pendingLength = 0;
+  bool _currentAddressKnown = false;
+  uint32_t _currentAddress = 0;
+  bool _pendingPointerKnown = false;
+  uint32_t _pendingPointer = 0;
   uint8_t _tx[MAX_TRANSPORT_TX_BYTES] = {};
   uint8_t _rx[MAX_TRANSPORT_RX_BYTES] = {};
 
@@ -209,6 +258,10 @@ private:
                  uint8_t* data, const uint8_t* source, uint8_t fillValue,
                  size_t length, uint32_t timeoutMs);
   uint32_t allocateRequestId();
+  Status validateRead(uint32_t address, uint8_t* data, size_t length) const;
+  Status validateCurrentRead(uint8_t* data, size_t length) const;
+  Status readChunk(uint32_t address, uint8_t* data, size_t length, bool current);
+  void observeRead(uint32_t address, size_t length);
   void finish(Status status, TransferState state);
   void settleWrite();
   void track(Status status, uint32_t nowMs);

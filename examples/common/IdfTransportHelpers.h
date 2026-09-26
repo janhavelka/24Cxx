@@ -32,4 +32,11 @@ struct IdfResultMapper {
         error, WriteCommit::NOT_APPLICABLE);
   }
 };
+
+template <class Device, class Receive, class WriteRead>
+int32_t idfReadTransaction(Device device, const uint8_t* tx, size_t txLength,
+    uint8_t* rx, size_t rxLength, int timeoutMs, Receive receive, WriteRead writeRead) {
+  if (txLength == 0) return receive(device, rx, rxLength, timeoutMs);
+  return writeRead(device, tx, txLength, rx, rxLength, timeoutMs);
+}
 } // namespace eeprom24cxx_cli

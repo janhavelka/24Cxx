@@ -13,10 +13,14 @@ Status busy(BusyDetail d) { return Status::Error(Err::BUSY, "Operation or write 
 Status progress() { return Status::Error(Err::IN_PROGRESS, "Transfer in progress"); }
 bool writing(TransferKind k) {
   return k == TransferKind::WRITE || k == TransferKind::FILL ||
-         k == TransferKind::VERIFIED_WRITE || k == TransferKind::VERIFIED_FILL;
+         k == TransferKind::VERIFIED_WRITE || k == TransferKind::VERIFIED_FILL ||
+         k == TransferKind::UPDATE || k == TransferKind::VERIFIED_UPDATE;
 }
 bool filling(TransferKind k) { return k == TransferKind::FILL || k == TransferKind::VERIFIED_FILL; }
-bool verifiedWrite(TransferKind k) { return k == TransferKind::VERIFIED_WRITE || k == TransferKind::VERIFIED_FILL; }
+bool updating(TransferKind k) { return k == TransferKind::UPDATE || k == TransferKind::VERIFIED_UPDATE; }
+bool verifiedWrite(TransferKind k) {
+  return k == TransferKind::VERIFIED_WRITE || k == TransferKind::VERIFIED_FILL || k == TransferKind::VERIFIED_UPDATE;
+}
 bool knownFailure(TransportCode code) {
   switch (code) {
     case TransportCode::NACK_ADDRESS: case TransportCode::NACK_DATA:
@@ -111,6 +115,7 @@ Status EEPROM24Cxx::bind(const Config& c) {
   _health.state = DriverState::READY;
   _result = {};
   _pendingLength = 0;
+  invalidateCurrentAddress();
   return Status::Ok();
 }
 Status EEPROM24Cxx::begin(const Config& c) {
@@ -124,10 +129,16 @@ void EEPROM24Cxx::end() {
   _geometry = {};
   _health = {};
   _pendingLength = 0;
+  invalidateCurrentAddress();
   // _writePending/_writeReadyAt intentionally survive end/rebind attempts.
 }
 void EEPROM24Cxx::settleWrite() {
   _writePending = false;
+  if (_pendingPointerKnown) {
+    _currentAddress = _pendingPointer;
+    _currentAddressKnown = true;
+    _pendingPointerKnown = false;
+  }
   if (active()) {
     _result.bytesCompleted += _pendingLength;
     _result.state = TransferState::ACTIVE;
@@ -150,6 +161,7 @@ void EEPROM24Cxx::track(Status s, uint32_t nowMs) {
     _health.lastOkMs = nowMs;
     _health.state = DriverState::READY;
   } else {
+    invalidateCurrentAddress();
     increment(_health.totalFailures);
     if (_health.consecutiveFailures < 255) ++_health.consecutiveFailures;
     _health.lastError = s;
@@ -206,8 +218,10 @@ Status EEPROM24Cxx::presence(bool tracked) {
     tx = encode(0, address);
     rx = 1;
     r = _config.i2cWriteRead(address, _tx, tx, _rx, rx, _config.i2cTimeoutMs, _config.i2cUser);
+    invalidateCurrentAddress(); // Diagnostic fallback deliberately does not seed pointer ownership.
   }
   const Status s = transportStatus(r, tx, rx);
+  if (!s.ok()) invalidateCurrentAddress();
   if (tracked) track(s, afterCallback(_nowMs));
   return s;
 }
@@ -235,11 +249,97 @@ SettingsSnapshot EEPROM24Cxx::settingsSnapshot() const {
   s.offlineThreshold = _config.offlineThreshold;
   s.hasNowMsHook = _config.nowMs != nullptr;
   s.hasAckPolling = _config.i2cProbe != nullptr;
+  s.supportsCurrentAddressRead = _config.supportsCurrentAddressRead;
+  s.currentAddressKnown = _currentAddressKnown;
+  s.currentAddress = _currentAddress;
   s.writeCyclePending = _writePending;
   s.writeReadyAtMs = _writeReadyAt;
   s.transferActive = active();
   s.resultPending = terminal();
   return s;
+}
+void EEPROM24Cxx::invalidateCurrentAddress() {
+  _currentAddressKnown = false;
+  _currentAddress = 0;
+  _pendingPointerKnown = false;
+}
+void EEPROM24Cxx::observeRead(uint32_t address, size_t length) {
+  const uint32_t next = address + static_cast<uint32_t>(length);
+  const uint32_t bankSize = 1UL << (8U * _geometry.wordAddressBytes);
+  if (_config.variant == DeviceVariant::ZETTA_ZD24C02B) {
+    _currentAddress = next % _geometry.capacityBytes;
+    _currentAddressKnown = true;
+  } else if (next < _geometry.capacityBytes && address / bankSize == next / bankSize) {
+    _currentAddress = next;
+    _currentAddressKnown = true;
+  } else {
+    invalidateCurrentAddress();
+  }
+}
+Status EEPROM24Cxx::validateRead(uint32_t address, uint8_t* data, size_t length) const {
+  const Status ready = gate();
+  if (!ready.ok()) return ready;
+  if (length && !data) return Status::Error(Err::INVALID_PARAM, "Null read buffer");
+  if (address > _geometry.capacityBytes || length > static_cast<size_t>(_geometry.capacityBytes - address))
+    return Status::Error(Err::ADDRESS_OUT_OF_RANGE, "Read range exceeds selected capacity");
+  return Status::Ok();
+}
+Status EEPROM24Cxx::validateCurrentRead(uint8_t* data, size_t length) const {
+  const Status ready = validateRead(_currentAddress, data, length);
+  if (!ready.ok()) return ready;
+  if (!_config.supportsCurrentAddressRead)
+    return Status::Error(Err::UNSUPPORTED, "Transport does not support pure reads");
+  if (!_currentAddressKnown)
+    return Status::Error(Err::INVALID_PARAM, "Current address unknown; perform an addressed read first");
+  const uint32_t bankSize = 1UL << (8U * _geometry.wordAddressBytes);
+  if (length > bankSize - _currentAddress % bankSize)
+    return Status::Error(Err::ADDRESS_OUT_OF_RANGE, "Current read cannot cross an address bank");
+  return Status::Ok();
+}
+Status EEPROM24Cxx::readChunk(uint32_t address, uint8_t* data, size_t length, bool current) {
+  uint8_t busAddress = 0;
+  const size_t prefix = encode(address, busAddress);
+  const TransportResult result = _config.i2cWriteRead(busAddress, current ? nullptr : _tx,
+      current ? 0 : prefix, _rx, length, _config.i2cTimeoutMs, _config.i2cUser);
+  const Status s = transportStatus(result, current ? 0 : prefix, length);
+  _nowMs = afterCallback(_nowMs);
+  track(s, _nowMs);
+  if (s.ok()) {
+    observeRead(address, length);
+    std::memcpy(data, _rx, length);
+  } else invalidateCurrentAddress();
+  return s;
+}
+Status EEPROM24Cxx::readByte(uint32_t address, uint8_t& value) { return readOnce(address, &value, 1); }
+Status EEPROM24Cxx::readOnce(uint32_t address, uint8_t* data, size_t length) {
+  const Status ready = validateRead(address, data, length);
+  if (!ready.ok()) return ready;
+  if (!length || chunkLength(address, length, false) != length)
+    return Status::Error(Err::INVALID_PARAM, "Read exceeds one bank/transport transaction");
+  return readChunk(address, data, length, false);
+}
+Status EEPROM24Cxx::read(uint32_t address, uint8_t* data, size_t length) {
+  const Status ready = validateRead(address, data, length);
+  if (!ready.ok()) return ready;
+  for (size_t offset = 0; offset < length;) {
+    const uint32_t at = address + static_cast<uint32_t>(offset);
+    const size_t chunk = chunkLength(at, length - offset, false);
+    const Status s = readChunk(at, data + offset, chunk, false);
+    if (!s.ok()) return s;
+    offset += chunk;
+  }
+  return Status::Ok();
+}
+Status EEPROM24Cxx::readCurrentAddress(uint8_t* data, size_t length) {
+  const Status ready = validateCurrentRead(data, length);
+  if (!ready.ok()) return ready;
+  for (size_t offset = 0; offset < length;) {
+    const size_t chunk = chunkLength(_currentAddress, length - offset, false);
+    const Status s = readChunk(_currentAddress, data + offset, chunk, true);
+    if (!s.ok()) return s;
+    offset += chunk;
+  }
+  return Status::Ok();
 }
 Status EEPROM24Cxx::admit(TransferKind kind, uint32_t address, size_t length, uint32_t timeoutMs) {
   Status s = gate();
@@ -257,6 +357,7 @@ Status EEPROM24Cxx::admit(TransferKind kind, uint32_t address, size_t length, ui
   _result.bytesRequested = length;
   if (length && writing(kind)) _result.writeStatus = Status::Error(Err::IN_PROGRESS, "Write not attempted");
   _verifyPhase = kind == TransferKind::VERIFY;
+  _updateCompared = false;
   _started = false;
   _timeoutMs = timeoutMs;
   _pendingLength = 0;
@@ -280,6 +381,13 @@ Status EEPROM24Cxx::startFill(uint32_t a, uint8_t value, size_t n, bool verify, 
 Status EEPROM24Cxx::startVerify(uint32_t a, const uint8_t* p, size_t n, uint32_t timeout) {
   return request(0, TransferKind::VERIFY, a, nullptr, p, 0, n, timeout);
 }
+Status EEPROM24Cxx::startCurrentRead(uint8_t* p, size_t n, uint32_t timeout) {
+  const Status ready = validateCurrentRead(p, n);
+  return ready.ok() ? request(0, TransferKind::CURRENT_READ, _currentAddress, p, nullptr, 0, n, timeout) : ready;
+}
+Status EEPROM24Cxx::startUpdate(uint32_t a, const uint8_t* p, size_t n, bool verify, uint32_t timeout) {
+  return request(0, verify ? TransferKind::VERIFIED_UPDATE : TransferKind::UPDATE, a, nullptr, p, 0, n, timeout);
+}
 uint32_t EEPROM24Cxx::allocateRequestId() {
   const uint32_t id = _nextRequestId;
   _nextRequestId = id == UINT32_MAX ? AUTOMATIC_REQUEST_ID_FIRST : id + 1U;
@@ -288,9 +396,9 @@ uint32_t EEPROM24Cxx::allocateRequestId() {
 Status EEPROM24Cxx::request(uint32_t id, TransferKind kind, uint32_t address,
                            uint8_t* data, const uint8_t* source, uint8_t value,
                            size_t length, uint32_t timeout) {
-  if (length && ((kind == TransferKind::READ && !data) ||
+  if (length && (((kind == TransferKind::READ || kind == TransferKind::CURRENT_READ) && !data) ||
       ((kind == TransferKind::WRITE || kind == TransferKind::VERIFIED_WRITE ||
-        kind == TransferKind::VERIFY) && !source)))
+        kind == TransferKind::VERIFY || updating(kind)) && !source)))
     return Status::Error(Err::INVALID_PARAM, "Null transfer buffer");
   const Status s = admit(kind, address, length, timeout);
   if (s.ok()) {
@@ -320,6 +428,15 @@ Status EEPROM24Cxx::requestVerifiedWrite(uint32_t id, uint32_t a, const uint8_t*
 }
 Status EEPROM24Cxx::requestVerifiedFill(uint32_t id, uint32_t a, uint8_t value, size_t n, uint32_t timeout) {
   return ownerRequestId(id) ? request(id, TransferKind::VERIFIED_FILL, a, nullptr, nullptr, value, n, timeout) : invalidRequestId();
+}
+Status EEPROM24Cxx::requestCurrentRead(uint32_t id, uint8_t* p, size_t n, uint32_t timeout) {
+  if (!ownerRequestId(id)) return invalidRequestId();
+  const Status ready = validateCurrentRead(p, n);
+  return ready.ok() ? request(id, TransferKind::CURRENT_READ, _currentAddress, p, nullptr, 0, n, timeout) : ready;
+}
+Status EEPROM24Cxx::requestUpdate(uint32_t id, uint32_t a, const uint8_t* p, size_t n, bool verify, uint32_t timeout) {
+  return ownerRequestId(id) ? request(id, verify ? TransferKind::VERIFIED_UPDATE : TransferKind::UPDATE,
+      a, nullptr, p, 0, n, timeout) : invalidRequestId();
 }
 void EEPROM24Cxx::finish(Status s, TransferState stateValue) {
   _result.status = s;
@@ -405,6 +522,8 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
     }
     size_t offset = _verifyPhase ? _result.bytesVerified : _result.bytesCompleted;
     if (offset == _result.bytesRequested) {
+      if (updating(_result.kind) && _result.bytesAccepted == 0 && _result.writeStatus.inProgress())
+        _result.writeStatus = Status::Ok(); // Every chunk matched without a write attempt.
       if (verifiedWrite(_result.kind) && !_verifyPhase) {
         _verifyPhase = true;
         continue;
@@ -419,18 +538,45 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
     if (calls == maxTransactions) break;
     const uint32_t address = _result.address + static_cast<uint32_t>(offset);
     const bool isWrite = writing(_result.kind) && !_verifyPhase;
-    const size_t n = chunkLength(address, _result.bytesRequested - offset, isWrite);
+    size_t n = chunkLength(address, _result.bytesRequested - offset, isWrite);
+    if (isWrite && updating(_result.kind)) n = std::min(n, chunkLength(address, n, false));
     uint8_t busAddress = 0;
     const size_t prefix = encode(address, busAddress);
+    if (isWrite && updating(_result.kind) && !_updateCompared) {
+      const TransportResult r = _config.i2cWriteRead(busAddress, _tx, prefix, _rx, n,
+                                                   _config.i2cTimeoutMs, _config.i2cUser);
+      ++calls;
+      if (!_config.nowMs) callbackAllowance += _config.i2cTimeoutMs;
+      nowMs = afterCallback(nowMs);
+      const Status s = transportStatus(r, prefix, n);
+      track(s, nowMs);
+      _result.comparisonAttempted = true;
+      _result.compareStatus = s;
+      if (!s.ok()) {
+        _result.failedChunkOffset = offset;
+        _result.failedChunkLength = n;
+        finish(s, TransferState::FAILED);
+        break;
+      }
+      observeRead(address, n);
+      _result.bytesCompared += n;
+      if (std::memcmp(_rx, _sourceBuffer + offset, n) == 0) {
+        _result.bytesSkipped += n;
+        _result.bytesCompleted += n;
+      } else _updateCompared = true;
+      continue;
+    }
     if (isWrite) {
       if (filling(_result.kind)) std::memset(_tx + prefix, _fillValue, n);
       else std::memcpy(_tx + prefix, _sourceBuffer + offset, n);
+      invalidateCurrentAddress();
       const TransportResult r = _config.i2cWrite(busAddress, _tx, prefix + n, _config.i2cTimeoutMs, _config.i2cUser);
       ++calls;
       if (!_config.nowMs) callbackAllowance += _config.i2cTimeoutMs;
       nowMs = afterCallback(nowMs);
       const Status s = transportStatus(r, prefix + n, 0);
       track(s, nowMs);
+      _updateCompared = false;
       WriteCommit commit = WriteCommit::INDETERMINATE;
       const bool validCounts = r.completedTxBytes <= prefix + n && r.completedRxBytes == 0;
       if (s.ok()) commit = WriteCommit::ACCEPTED;
@@ -453,6 +599,11 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         // nowMs may precede the callback's STOP; timeout is its bounded duration.
         _writeReadyAt = nowMs + t + cmd::TIMER_QUANTIZATION_MARGIN_MS + callbackAllowance;
         _result.state = TransferState::WAITING_WRITE_CYCLE;
+        if (s.ok() && _config.variant == DeviceVariant::ZETTA_ZD24C02B) {
+          _pendingPointer = address - address % _geometry.pageSizeBytes +
+              (address + static_cast<uint32_t>(n)) % _geometry.pageSizeBytes;
+          _pendingPointerKnown = true;
+        }
       }
       if (!s.ok()) {
         _result.failedChunkOffset = offset;
@@ -461,12 +612,19 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         break;
       }
     } else {
-      const TransportResult r = _config.i2cWriteRead(busAddress, _tx, prefix, _rx, n,
+      const bool current = _result.kind == TransferKind::CURRENT_READ;
+      if (current && (!_currentAddressKnown || _currentAddress != address)) {
+        _result.failedChunkOffset = offset;
+        _result.failedChunkLength = n;
+        finish(Status::Error(Err::INVALID_PARAM, "Current pointer invalidated during transfer"), TransferState::FAILED);
+        break;
+      }
+      const TransportResult r = _config.i2cWriteRead(busAddress, current ? nullptr : _tx, current ? 0 : prefix, _rx, n,
                                                    _config.i2cTimeoutMs, _config.i2cUser);
       ++calls;
       if (!_config.nowMs) callbackAllowance += _config.i2cTimeoutMs;
       nowMs = afterCallback(nowMs);
-      const Status s = transportStatus(r, prefix, n);
+      const Status s = transportStatus(r, current ? 0 : prefix, n);
       track(s, nowMs);
       if (_verifyPhase) {
         _result.verificationAttempted = true;
@@ -478,6 +636,7 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         finish(s, TransferState::FAILED);
         break;
       }
+      observeRead(address, n);
       if (_verifyPhase) {
         for (size_t i = 0; i < n; ++i) {
           const uint8_t expected = filling(_result.kind) ? _fillValue : _sourceBuffer[offset + i];

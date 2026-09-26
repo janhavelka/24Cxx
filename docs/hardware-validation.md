@@ -26,6 +26,22 @@ WP behavior, endurance or recovery after power interruption.
 8. Use a second bus peripheral to verify that EEPROM programming waits release
    the shared bus. Test actual adapter locking and timeout behavior in the target
    application. Record firmware, board, chip, voltage, pull-ups and bus speed.
+9. Seed the pointer with an addressed read, then use `current` and inspect a pure
+   SLA+R transaction without a pointer write. Test the exact Zetta last-byte read
+   wrap and page-write pointer behavior separately from generic profiles.
+10. On a disposable scratch region, run `rw_suite`, `xfer_demo`, `stress_mix`,
+    `randbench` and `typed_demo` using their documented `confirm` forms. Compare
+    pre/post dumps and CRC independently, inspect separate primary/restoration
+    results, then interrupt programming/restoration and exercise `restore confirm`.
+    Keep an external backup: the CLI's RAM backup does not survive reset/power loss.
+11. Issue an equal `update` and confirm zero physical writes using `xfer_stats` or
+    a logic analyzer. Change one bounded chunk and verify only that chunk programs.
+    Repeat with WP high using `uverify` and observe separate comparison/readback
+    evidence rather than interpreting an ACK as successful storage.
+12. Where the optional WP GPIO is wired, confirm startup asserts it before output
+    enable and `wp 0`/`wp 1` control the physical pin. Exercise `iface_reset` on an
+    idle recoverable bus and a deliberately stuck bus, recording bounded recovery,
+    pointer invalidation and the post-STOP wait before subsequent I2C access.
 
 Any power-loss, long-term retention or endurance qualification requires its own
 controlled test and evidence; a successful readback is not that qualification.

@@ -11,6 +11,9 @@ struct TransferStats {
   uint32_t attempts = 0;
   uint32_t successes = 0;
   uint32_t failures = 0;
+  uint32_t writeAttempts = 0;
+  uint32_t readAttempts = 0;
+  uint32_t probeAttempts = 0;
   void record(bool ok) {
     if (attempts != UINT32_MAX) ++attempts;
     auto& count = ok ? successes : failures;
@@ -27,6 +30,10 @@ struct Platform {
   uint32_t (*nowMs)(void*) = nullptr;
   EEPROM24Cxx::Status (*probeAddress)(uint8_t, void*) = nullptr;
   TransferStats (*transferStats)(void*) = nullptr;
+  void (*resetTransferStats)(void*) = nullptr;
+  EEPROM24Cxx::Status (*readWriteProtect)(bool&, void*) = nullptr;
+  EEPROM24Cxx::Status (*setWriteProtect)(bool, void*) = nullptr;
+  EEPROM24Cxx::Status (*resetInterface)(void*) = nullptr;
   HeapStats (*heapStats)(void*) = nullptr;
   void* user = nullptr;
   const char* framework = "unknown";
@@ -50,6 +57,9 @@ class Cli {
   void printHeap();
   void printSettings();
   void printModels();
+  void printStats();
+  void printTransferStats();
+  void printScratch();
   void printProgress(const EEPROM24Cxx::TransferResult& result);
   void printBytes(uint32_t address, size_t length);
   enum class ReadView : uint8_t { NONE, HEX_DUMP, TEXT, STRINGS, CRC, SELFTEST };
@@ -58,6 +68,13 @@ class Cli {
   void completeReadView(const EEPROM24Cxx::TransferResult& result);
   void printReadView(uint32_t address, size_t length);
   void finishString();
+  enum class ScratchMode : uint8_t { RW_SUITE, MIX, RANDOM, TYPED, XFER };
+  enum class ScratchStage : uint8_t { NONE, BACKUP, PATTERN, RESTORE_WAIT, RESTORING };
+  EEPROM24Cxx::Status startScratch(ScratchMode mode, uint32_t address, uint32_t length, uint32_t rounds);
+  void scheduleScratch();
+  void completeScratch(const EEPROM24Cxx::TransferResult& result);
+  void abortScratch(EEPROM24Cxx::Status reason);
+  void finishScratchPrimary(EEPROM24Cxx::Status result);
   void stop();
   void complete();
   const char* color(unsigned code) const;
@@ -67,11 +84,35 @@ class Cli {
   EEPROM24Cxx::EEPROM24Cxx _device{};
   char _line[256]{};
   uint8_t _data[256]{}; // Borrowed by the driver until its terminal result.
+  uint8_t _backup[256]{}; // Retained until verified restoration, including end/cancel.
+  ScratchMode _scratchMode = ScratchMode::RW_SUITE;
+  ScratchStage _scratchStage = ScratchStage::NONE;
+  bool _backupValid = false;
+  bool _scratchDirty = false;
+  uint32_t _scratchAddress = 0;
+  uint32_t _scratchLength = 0;
+  uint32_t _scratchRounds = 0;
+  uint32_t _scratchRound = 0;
+  uint32_t _scratchRandom = 0x24C02B01U;
+  EEPROM24Cxx::Status _scratchPrimary{};
+  EEPROM24Cxx::Status _scratchRestore{};
+  uint32_t _scratchStartedMs = 0;
+  uint32_t _scratchPrimaryElapsedMs = 0;
+  uint32_t _scratchRestoreStartedMs = 0;
+  uint32_t _scratchRestoreElapsedMs = 0;
+  uint32_t _scratchVerifiedBytes = 0;
+  TransferStats _scratchBusBefore{};
+  TransferStats _scratchPrimaryBus{};
+  uint32_t _jobs = 0;
+  uint32_t _jobSuccesses = 0;
+  uint32_t _jobFailures = 0;
   size_t _length = 0;
   bool _overflow = false;
   bool _color = true;
   bool _verbose = false;
   bool _operation = false;
+  bool _interfaceWait = false;
+  uint32_t _interfaceReadyAt = 0;
   bool _hasResult = false;
   EEPROM24Cxx::TransferResult _lastResult{};
   ReadView _readView = ReadView::NONE;
@@ -91,6 +132,10 @@ class Cli {
   unsigned _scanFound = 0;
   unsigned _scanErrors = 0;
   bool _stress = false;
+  bool _watch = false;
+  uint32_t _repeatAddress = 0;
+  uint32_t _repeatLength = 16;
+  uint32_t _repeatInterval = 10;
   uint32_t _remaining = 0;
   uint32_t _nextMs = 0;
   uint32_t _stressSuccess = 0;
