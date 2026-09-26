@@ -26,6 +26,16 @@ and fixes. No board was flashed and no physical EEPROM/WP result is claimed.
   eight intentionally repository-only reference links. The freshly extracted
   package builds as a standalone CMake C++17 library with strict warnings.
 
+The subsequent GitHub native run on commit `864cd84` exposed test-model integer
+portability errors under Linux GCC 13.3.0: shifting uint8_t values promoted them
+to signed int, while unsigned-long masks/minimums depended on Windows' narrower
+long type. Bank calculations now use explicit uint32_t operands throughout.
+After the fix, all four strict local CTest suites and all 27 PlatformIO native
+cases pass again, as do contract/reference checks. The two changed fixtures also
+pass local syntax checks with the workflow's warning and sanitizer flags. This
+does not establish a Linux sanitizer runtime result; a pushed revision must run
+the unchanged CI checks to establish that result.
+
 The core model emulates page wrapping, bank-local reads, write-cycle NACKs and
 write protection. Regressions cover every preset, page and bank boundaries,
 invalid geometry/ranges, fixed-buffer limits, exact completion counts, partial
@@ -93,9 +103,11 @@ Commands:
 
 These are full native ESP-IDF component/application builds, not an Arduino
 compatibility build or syntax-only check. The separate `idf.py` front end was
-not run locally. CI is configured for native IDF 5.3.2, 5.5.1 and 6.0.1 on both
-targets; those CI jobs have not been executed in this session. Host sanitizer
-checks are also configured in CI but were not run on this Windows host.
+not run locally. The [GitHub run for commit 864cd84](https://github.com/janhavelka/24Cxx/actions/runs/36250750175)
+passed native IDF 5.3.2, 5.5.1 and 6.0.1 on both targets, both Arduino builds,
+and package validation. Its sole failure was native test compilation, addressed
+by the integer portability fix described above. Host sanitizer runtime checks
+were not run on this Windows host; the fixed native CI job still needs a rerun.
 
 The Arduino platform emits a host Windows long-path-support warning, and the
 tooling prints a console-codepage metrics notice; all four builds complete.

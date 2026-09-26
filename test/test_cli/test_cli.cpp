@@ -38,7 +38,8 @@ struct Fixture {
   uint32_t address(uint8_t bus, const uint8_t* prefix) const {
     uint32_t value = prefix[0];
     if (geometry.wordAddressBytes == 2) value = (value << 8U) | prefix[1];
-    const uint32_t bank = (bus >> geometry.bankAddressShift) & ((1U << geometry.bankAddressBits) - 1U);
+    const uint32_t bank = (static_cast<uint32_t>(bus) >> geometry.bankAddressShift) &
+        ((uint32_t{1} << geometry.bankAddressBits) - uint32_t{1});
     return value | (bank << (8U * geometry.wordAddressBytes));
   }
   static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t timeout, void* user) {

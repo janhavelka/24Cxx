@@ -27,7 +27,8 @@ struct Bus {
   bool ready() { if (busy && (ms - busyUntil) < 0x80000000UL) busy = false; return !busy; }
   bool failing() const { return failAll || (failAt && failAt == calls); }
   uint32_t address(uint8_t slave, const uint8_t* tx) const {
-    const uint32_t bank = (slave >> geometry.bankAddressShift) & ((1UL << geometry.bankAddressBits) - 1UL);
+    const uint32_t bank = (static_cast<uint32_t>(slave) >> geometry.bankAddressShift) &
+        ((uint32_t{1} << geometry.bankAddressBits) - uint32_t{1});
     const uint32_t word = geometry.wordAddressBytes == 1 ? tx[0] : (static_cast<uint32_t>(tx[0]) << 8U) | tx[1];
     return (bank << (8U * geometry.wordAddressBytes)) | word;
   }
@@ -54,8 +55,9 @@ struct Bus {
     if (!b.ready()) return e::TransportResult::Error(e::TransportCode::NACK_ADDRESS);
     if ((txLen != 0 && txLen != b.geometry.wordAddressBytes) || !n || !timeout || (txLen == 0 && tx))
       return e::TransportResult::Error(e::TransportCode::IO_ERROR);
-    const uint32_t bankSize = std::min(1UL << (8U * b.geometry.wordAddressBytes), static_cast<unsigned long>(b.geometry.capacityBytes));
-    const uint32_t bank = (slave >> b.geometry.bankAddressShift) & ((1UL << b.geometry.bankAddressBits) - 1UL);
+    const uint32_t bankSize = std::min(uint32_t{1} << (8U * b.geometry.wordAddressBytes), b.geometry.capacityBytes);
+    const uint32_t bank = (static_cast<uint32_t>(slave) >> b.geometry.bankAddressShift) &
+        ((uint32_t{1} << b.geometry.bankAddressBits) - uint32_t{1});
     const uint32_t a = txLen ? b.address(slave, tx) : bank * bankSize + b.pointer % bankSize;
     b.frames.push_back({slave, a, n, txLen ? 'r' : 'c'});
     if (b.failing()) { std::fill(rx, rx + n, 0xAB); return b.failure; }
@@ -149,7 +151,7 @@ static void bankBoundaries() {
     bool seen = false;
     for (const auto& f : b.frames) {
       if (f.address >= item.boundary && f.slave == item.upperSlave) seen = true;
-      const uint32_t bank = 1UL << (8U * b.geometry.wordAddressBytes);
+      const uint32_t bank = uint32_t{1} << (8U * b.geometry.wordAddressBytes);
       CHECK(f.address / bank == (f.address + f.length - 1) / bank);
     }
     CHECK(seen);

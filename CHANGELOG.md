@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Use explicit uint32_t bank arithmetic in native EEPROM test models, fixing
+  Linux GCC conversion errors without weakening CI warnings or sanitizers.
 - Preserve the physical write-cycle barrier for unknown transport outcomes;
   malformed results can no longer establish that a write had no effect.
 - Preserve distinct write/readback statuses, report mismatch offsets, and reset
