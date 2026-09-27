@@ -24,7 +24,8 @@ def main():
     target = "esp32s2" if "esp32s2" in args[0] else "esp32s3"
     command = [args[0], "-std=c++17", "-mlongcalls", "-fsyntax-only", "-Wall", "-Wextra", "-Werror",
                "-DESP_PLATFORM", "-Iinclude", "-Iexamples/common", *includes,
-               "examples/esp_idf/basic/main/main.cpp", "examples/common/Eeprom24CxxCli.cpp", "src/EEPROM24Cxx.cpp"]
+               "examples/esp_idf/basic/main/main.cpp", "examples/common/Eeprom24CxxCli.cpp",
+               *[str(path.relative_to(ROOT)) for path in sorted((ROOT / "src").glob("*.cpp"))]]
     response = ROOT / "build" / f"idf-sdk-{target}.rsp"
     response.parent.mkdir(exist_ok=True)
     response.write_text("\n".join('"' + arg.replace("\\", "/").replace('"', '\\"') + '"'

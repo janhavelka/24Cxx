@@ -103,3 +103,24 @@ physical health accounting. This repository matches the shared design and CLI
 conventions while retaining the memory device's actual protocol.
 The [chip coverage and field helper guide](field-helpers.md) maps every documented
 function of the default Zetta part to its applicable API/CLI entry point.
+
+## Structure recheck
+
+The second review compared MB85RC, OPT4001, SHT3x and PCA9555 implementation
+boundaries as well as their file names. Public API declarations remain under
+`include/EEPROM24Cxx/`; cooperative core and blocking execution policy now reside
+in separate `src/EEPROM24Cxx.cpp` and `src/BlockingMemory.cpp` units. Pure codecs
+and typed templates remain inline, following the useful aspect of MB85RC's
+typed-memory helper without importing its Arduino logging dependencies.
+
+Framework-neutral CLI, transport policies and testable GPIO policies live in
+`examples/common/`. ESP32 GPIO adapters are separate headers, and application
+entry points own SDK/controller lifecycle. Both frameworks share the same WP
+timing and Zetta recovery sequence. This avoids two subtly different recovery
+implementations while keeping platform calls outside the library.
+
+The existing `examples/esp_idf/basic` layout and native `test_*` suites already
+fit the sibling conventions. The shared CLI does not need to copy legacy
+per-framework command processors or introduce a fictitious EEPROM register map.
+Build lists, package requirements and SDK checks include the added source unit;
+package metadata points to the verified repository/homepage.

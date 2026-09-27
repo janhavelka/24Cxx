@@ -11,15 +11,27 @@ Page references are PDF pages, not the inconsistent printed labels.
 | ACK polling after STOP (p. 8) | Optional address-only probe; bounded write-cycle state and conservative timed fallback | All programming commands use the driver scheduler |
 | Random and sequential reads (pp. 9-10) | Cooperative and synchronous addressed reads | `read`, `dump`, `text`, `strings`, `crc`, `watch`, full-array `selftest` |
 | Current-address reads (p. 9) | `startCurrentRead`/`requestCurrentRead`, `readCurrentAddress`; explicit transport capability and known pointer required | `current`/`cur` after seeding a known pointer |
-| Hardware write protection (pp. 2-3) | Application GPIO policy; verified operations detect suppressed writes | Optional `wp`, `wp 0`, `wp 1`; configured example WP starts high |
+| Hardware write protection (pp. 2-3, 13) | Application GPIO policy and explicit setup/hold settling; verified operations detect suppressed writes | Optional `wp`, `wp 0`, `wp 1`; configured example WP starts high |
 | Standby (p. 4) | Automatic after STOP/programming; no software sleep instruction | No extra command is needed |
-| Protocol recovery (p. 4) | Application-owned bus recovery and pointer invalidation | Explicit `iface_reset`, followed by a conservative programming wait |
+| Protocol recovery (p. 4) | Up to nine clocks, SDA high with SCL high, then START; application adds STOP to return idle and invalidates the pointer | Explicit `iface_reset`, followed by a conservative programming wait |
 | Address pins and bus rate (pp. 2, 6, 13) | Validated base address and geometry; application configures bus clock | `init [address]`, model/settings diagnostics; board clock configuration |
 
 The chip has no identity register, register map, erase opcode or software lock.
 Filling with `0xFF` is ordinary programming and consumes endurance. Other vendors'
 extra security/identification features are outside this chip's protocol and
 never run implicitly. Device presence does not establish its identity or geometry.
+
+The shared ESP32 examples wait 5 us before and after WP changes, covering the
+datasheet's 1.2 us setup/hold requirement at up to 400 kHz and 0.6 us at 1 MHz.
+WP changes are admitted only while transfers and programming waits are idle.
+Failed WP initialization leaves that control unavailable. Both frameworks use
+the same electrical recovery helper; native IDF detaches/recreates its bus and
+device handles explicitly so a controller-only reset cannot substitute for the
+chip's required START sequence. Failed recovery disables I/O until a subsequent
+successful explicit recovery, and the CLI preserves its post-recovery tWR wait.
+
+The [detailed audit](audit-2026-09-26.md#datasheet-and-structure-recheck) records
+the remaining electrical limits and inconsistencies checked against the source.
 
 ## Synchronous access and typed storage
 
@@ -57,6 +69,11 @@ positive deadline below 2^31 ms suited to the range. Each admitted memory call
 finishes and consumes its own result before returning, releasing borrowed buffers on failure
 as well as success. `lastResult()` retains accepted/completed/verified bytes and
 phase statuses. Preflight failures do not replace that evidence.
+
+Non-template execution and deadline logic live in `src/BlockingMemory.cpp`;
+the public header retains declarations and typed template wrappers. Normal
+CMake, PlatformIO and ESP-IDF library builds include it automatically. Custom
+builds that list source files explicitly must compile both library `.cpp` files.
 
 An application wait must return and must not re-enter the driver. The facade
 terminates after 1024 consecutive returned waits without clock advancement;

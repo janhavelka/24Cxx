@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlsplit
 
 REQUIRED = {
     "library.json", "idf_component.yml", "CMakeLists.txt", "LICENSE", "README.md",
-    "CHANGELOG.md", "src/EEPROM24Cxx.cpp", "include/EEPROM24Cxx/EEPROM24Cxx.h",
+    "CHANGELOG.md", "src/EEPROM24Cxx.cpp", "src/BlockingMemory.cpp", "include/EEPROM24Cxx/EEPROM24Cxx.h",
     "include/EEPROM24Cxx/Config.h", "include/EEPROM24Cxx/Types.h",
     "include/EEPROM24Cxx/Status.h", "include/EEPROM24Cxx/Version.h",
     "include/EEPROM24Cxx/CommandTable.h", "examples/README.md",
@@ -23,6 +23,7 @@ REQUIRED = {
     "examples/common/Eeprom24CxxCli.h", "examples/common/Eeprom24CxxCli.cpp",
     "examples/common/WireTransportHelpers.h", "examples/common/IdfTransportHelpers.h",
     "examples/common/BusRecovery.h", "examples/common/Esp32WriteProtect.h",
+    "examples/common/Esp32BusRecovery.h", "examples/common/WriteProtect.h",
     "examples/esp_idf/basic/CMakeLists.txt", "examples/esp_idf/basic/main/CMakeLists.txt",
     "examples/esp_idf/basic/main/main.cpp", "examples/esp_idf/basic/sdkconfig.defaults",
     "docs/integration.md", "docs/field-helpers.md", "docs/validation.md", "docs/reference/README.md",

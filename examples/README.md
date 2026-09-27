@@ -11,6 +11,11 @@ help and the prompt without programming memory. A failed presence check retains
 the binding and reports degraded health. An ACK cannot identify the manufacturer,
 capacity or geometry, and several addresses may be banks of one EEPROM.
 
+Applications reusing a CLI instance cannot replace its setup while work,
+programming/reset settling or a scratch backup still owns the old context.
+Invalid replacement configuration preserves the current target and callbacks.
+A successful idle replacement clears partial console input and stale results.
+
 ## Build
 
 From the repository root, with the existing managed PlatformIO installation:
@@ -168,12 +173,21 @@ Counter resets are rejected during a scratch test to preserve its metrics.
 `wp` reads the application WP pin; `wp 1` protects and `wp 0` makes it writable.
 These commands require a configured adapter and never infer storage permissions
 from an ACK. Setting WP is rejected while work or a physical write cycle is
-pending. `iface_reset` explicitly invokes application bus recovery while idle
+pending. Both ESP32 adapters wait 5 us before and after WP changes to satisfy
+the Zetta setup/hold limits. Failed initialization does not enable WP control.
+`iface_reset` explicitly invokes application bus recovery while idle
 and settled, invalidates pointer knowledge and waits the selected maximum write
 time plus one millisecond before allowing more bus work. This extra wait applies
 even after a failed recovery callback because an emitted STOP can start a write
 cycle. `end`/`stop` cannot bypass that wait. Unsupported adapters report
 `UNSUPPORTED`; recovery is never an automatic response to an ordinary failure.
+
+Arduino and native IDF use the same open-drain recovery: up to nine clock
+pulses, check SDA high while SCL high, the datasheet-required START, then STOP
+to leave the bus idle. The application detaches its controller first and
+reinitializes it only after recovery succeeds. Native IDF recreates its address
+handles; partial teardown preserves unreleased handles for a later retry.
+Failed recovery keeps ordinary I2C disabled until explicit recovery succeeds.
 
 ## Explicit programming
 
@@ -235,6 +249,12 @@ status, primary elapsed milliseconds (including backup), restoration elapsed
 milliseconds, verified pattern bytes and physical read/write/probe counts.
 `randbench` measures this bounded diagnostic flow, including EEPROM cycle waits;
 its primary time excludes restoration.
+
+`scratch` and `result` also retain the last terminal primary and restoration
+core stages separately, including commit uncertainty, accepted/completed/verified
+bytes, mismatch details and failed offsets. Later reads do not overwrite these
+snapshots. They describe the last stage of each phase, not aggregate progress
+across all pattern rounds; overall phase statuses and metrics remain separate.
 
 A failed or cancelled programming stage **does not automatically restore or
 retry**. The backup remains in RAM, the primary and restoration failures remain

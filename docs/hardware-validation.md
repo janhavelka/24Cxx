@@ -39,9 +39,12 @@ WP behavior, endurance or recovery after power interruption.
     Repeat with WP high using `uverify` and observe separate comparison/readback
     evidence rather than interpreting an ACK as successful storage.
 12. Where the optional WP GPIO is wired, confirm startup asserts it before output
-    enable and `wp 0`/`wp 1` control the physical pin. Exercise `iface_reset` on an
-    idle recoverable bus and a deliberately stuck bus, recording bounded recovery,
-    pointer invalidation and the post-STOP wait before subsequent I2C access.
+    enable and `wp 0`/`wp 1` control the physical pin. Measure at least 1.2 us WP
+    setup/hold at <=400 kHz (0.6 us at 1 MHz); the examples request 5 us settling
+    on both sides of each GPIO change. Exercise `iface_reset` on idle, recoverable
+    and stuck buses. Capture up to nine recovery clocks, SDA high with SCL high,
+    START and the final STOP. Verify bounded failure, pointer invalidation and
+    the post-STOP wait before subsequent I2C access on both frameworks.
 
 Any power-loss, long-term retention or endurance qualification requires its own
 controlled test and evidence; a successful readback is not that qualification.

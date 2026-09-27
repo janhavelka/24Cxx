@@ -5,6 +5,8 @@
   "keywords": ["24cxx", "eeprom", "zd24c02b", "zetta", "24c02", "memory", "i2c", "arduino", "esp-idf"],
   "authors": [{"name": "Thymos Solution s.r.o", "email": "info@thymos.cz", "url": "https://www.thymos.cz"}, {"name": "Jan Havelka", "maintainer": true}],
   "license": "MIT",
+  "repository": {"type": "git", "url": "https://github.com/janhavelka/24Cxx.git"},
+  "homepage": "https://github.com/janhavelka/24Cxx",
   "headers": ["EEPROM24Cxx/EEPROM24Cxx.h"],
   "build": {"includeDir": "include", "srcDir": "src"},
   "export": {

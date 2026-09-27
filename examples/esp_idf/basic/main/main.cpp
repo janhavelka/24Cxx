@@ -15,6 +15,7 @@
 #include "Eeprom24CxxCli.h"
 #include "IdfTransportHelpers.h"
 #include "Esp32WriteProtect.h"
+#include "Esp32BusRecovery.h"
 
 namespace {
 using namespace EEPROM24Cxx;
@@ -67,18 +68,55 @@ uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000
 void output(void*, const char* format, va_list args) { std::vprintf(format, args); }
 eeprom24cxx_cli::TransferStats stats(void*) { return app.stats; }
 void resetTransferStats(void*) { app.stats = {}; }
-Status resetInterface(void*) {
-  if (!app.bus) return Status::Error(Err::NOT_INITIALIZED, "I2C bus is not initialized");
+Status releaseInterface() {
   app.ready = false;
-  // IDF resets the controller FSM in place; the registered device handles stay
-  // attached to the same bus. No asynchronous callbacks/queued traffic exist.
-  const esp_err_t error = i2c_master_bus_reset(app.bus);
-  if (error != ESP_OK) return Status::Error(Err::I2C_ERROR, "IDF interface reset failed", error);
-  if (!gpio_get_level(static_cast<gpio_num_t>(board::I2C_SDA)) ||
-      !gpio_get_level(static_cast<gpio_num_t>(board::I2C_SCL)))
-    return Status::Error(Err::I2C_BUS, "I2C line remains low after interface reset");
+  for (auto& device : app.devices) {
+    if (!device) continue;
+    const esp_err_t error = i2c_master_bus_rm_device(device);
+    if (error != ESP_OK) return Status::Error(Err::I2C_ERROR, "IDF device release failed", error);
+    device = nullptr;
+  }
+  if (app.bus) {
+    const esp_err_t error = i2c_del_master_bus(app.bus);
+    if (error != ESP_OK) return Status::Error(Err::I2C_ERROR, "IDF bus release failed", error);
+    app.bus = nullptr;
+  }
+  return Status::Ok();
+}
+Status initializeInterface() {
+  app.ready = false;
+  i2c_master_bus_config_t bus{};
+  bus.i2c_port = I2C_NUM_0;
+  bus.sda_io_num = static_cast<gpio_num_t>(board::I2C_SDA);
+  bus.scl_io_num = static_cast<gpio_num_t>(board::I2C_SCL);
+  bus.clk_source = I2C_CLK_SRC_DEFAULT;
+  bus.glitch_ignore_cnt = 7;
+  bus.flags.enable_internal_pullup = true;
+  esp_err_t error = i2c_new_master_bus(&bus, &app.bus);
+  if (error != ESP_OK) return Status::Error(Err::I2C_ERROR, "IDF bus creation failed", error);
+  // Handles cover bank aliases; registration is SDK setup without memory I/O.
+  for (unsigned index = 0; index < 8; ++index) {
+    i2c_device_config_t device{};
+    device.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    device.device_address = static_cast<uint16_t>(0x50U + index);
+    device.scl_speed_hz = board::I2C_FREQUENCY_HZ;
+    error = i2c_master_bus_add_device(app.bus, &device, &app.devices[index]);
+    if (error != ESP_OK) {
+      (void)releaseInterface(); // Retain any unreleased handle for explicit recovery.
+      return Status::Error(Err::I2C_ERROR, "IDF device registration failed", error);
+    }
+  }
   app.ready = true;
   return Status::Ok();
+}
+Status resetInterface(void*) {
+  // A controller FSM reset alone does not establish Zetta's documented START
+  // sequence. Detach the controller, use the same electrical recovery as Wire,
+  // then rebuild the application's handles. No pending I/O exists here.
+  const Status released = releaseInterface();
+  if (!released.ok()) return released;
+  const Status recovered = eeprom24cxx_cli::recoverEsp32Bus(board::I2C_TIMEOUT_MS * 1000U);
+  return recovered.ok() ? initializeInterface() : recovered;
 }
 eeprom24cxx_cli::HeapStats heapStats(void*) {
   return {static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
@@ -99,36 +137,13 @@ void inputTask(void*) {
 extern "C" void app_main() {
   const auto protectedState = eeprom24cxx_cli::initializeWriteProtect();
   if (!protectedState.ok()) { std::printf("[E] %s\n", protectedState.msg); return; }
-  i2c_master_bus_config_t bus{};
-  bus.i2c_port = I2C_NUM_0;
-  bus.sda_io_num = static_cast<gpio_num_t>(board::I2C_SDA);
-  bus.scl_io_num = static_cast<gpio_num_t>(board::I2C_SCL);
-  bus.clk_source = I2C_CLK_SRC_DEFAULT;
-  bus.glitch_ignore_cnt = 7;
-  bus.flags.enable_internal_pullup = true;
-  esp_err_t error = i2c_new_master_bus(&bus, &app.bus);
-  if (error != ESP_OK) { std::printf("[E] Bus creation failed: %s\n", esp_err_to_name(error)); return; }
-  // Every 0x50..0x57 address has a handle, including bank aliases. Device handle
-  // registration is local SDK setup and performs no EEPROM access.
-  for (unsigned index = 0; index < 8; ++index) {
-    i2c_device_config_t device{};
-    device.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    device.device_address = static_cast<uint16_t>(0x50U + index);
-    device.scl_speed_hz = board::I2C_FREQUENCY_HZ;
-    error = i2c_master_bus_add_device(app.bus, &device, &app.devices[index]);
-    if (error != ESP_OK) {
-      std::printf("[E] Device handle creation failed: %s\n", esp_err_to_name(error));
-      for (unsigned previous = 0; previous < index; ++previous) (void)i2c_master_bus_rm_device(app.devices[previous]);
-      (void)i2c_del_master_bus(app.bus); return;
-    }
-  }
-  app.ready = true;
+  const Status initialized = initializeInterface();
+  if (!initialized.ok()) { std::printf("[E] %s detail=%ld\n", initialized.msg, static_cast<long>(initialized.detail)); return; }
   app.input = xQueueCreate(384, sizeof(char));
   if (!app.input || xTaskCreate(inputTask, "eeprom_input", 3072, nullptr, 4, nullptr) != pdPASS) {
     std::puts("[E] Input queue/task creation failed");
     if (app.input) vQueueDelete(app.input);
-    for (auto device : app.devices) (void)i2c_master_bus_rm_device(device);
-    (void)i2c_del_master_bus(app.bus); return;
+    (void)releaseInterface(); return;
   }
   EEPROM24Cxx::Config config{};
   config.i2cWrite = writeI2c;

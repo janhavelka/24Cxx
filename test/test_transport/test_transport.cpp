@@ -1,6 +1,7 @@
 #include "WireTransportHelpers.h"
 #include "IdfTransportHelpers.h"
 #include "BusRecovery.h"
+#include "WriteProtect.h"
 #include <cstdio>
 #include <initializer_list>
 #include <limits>
@@ -69,8 +70,15 @@ struct RecoveryPins {
   bool sdaReleased = true;
   bool clockStuck = false;
   unsigned rises = 0;
+  unsigned starts = 0;
+  unsigned stops = 0;
   unsigned dataReleaseAfter = 0;
-  void sda(bool release) { sdaReleased = release; }
+  void sda(bool release) {
+    const bool before = sdaHigh();
+    sdaReleased = release;
+    if (sclHigh() && before && !sdaHigh()) ++starts;
+    if (sclHigh() && !before && sdaHigh()) ++stops;
+  }
   void scl(bool release) {
     if (release && !sclReleased) ++rises;
     sclReleased = release;
@@ -78,6 +86,25 @@ struct RecoveryPins {
   bool sclHigh() const { return sclReleased && !clockStuck; }
   bool sdaHigh() const { return sdaReleased && rises >= dataReleaseAfter; }
   uint32_t nowUs() const { return us; }
+  void delayUs(uint32_t delay) { us += delay; }
+};
+
+struct WriteProtectPin {
+  uint32_t us = 0, changedAt = 0, enabledAt = 0;
+  bool level = false, enabled = false, protectedAtEnable = false;
+  bool stuckLow = false, failWrite = false, failEnable = false;
+  Status write(bool value) {
+    changedAt = us;
+    if (failWrite) return Status::Error(Err::INVALID_CONFIG, "Injected WP write failure");
+    level = value;
+    return Status::Ok();
+  }
+  Status enable() {
+    if (failEnable) return Status::Error(Err::INVALID_CONFIG, "Injected WP enable failure");
+    enabledAt = us; protectedAtEnable = level; enabled = true;
+    return Status::Ok();
+  }
+  bool high() const { return enabled && level && !stuckLow; }
   void delayUs(uint32_t delay) { us += delay; }
 };
 
@@ -194,19 +221,52 @@ int main() {
 
   RecoveryPins pins;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).ok());
-  CHECK(pins.sclReleased && pins.sdaReleased && pins.rises == 1); // STOP only on idle bus.
+  CHECK(pins.sclReleased && pins.sdaReleased && pins.rises == 1);
+  CHECK(pins.starts == 1 && pins.stops == 1); // Datasheet START, then idle STOP.
   pins = {}; pins.dataReleaseAfter = 3; pins.us = UINT32_MAX - 10U;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).ok());
   CHECK(pins.rises == 4 && pins.sclReleased && pins.sdaReleased); // Three clocks then STOP.
+  CHECK(pins.starts == 1 && pins.stops == 1);
   pins = {}; pins.clockStuck = true;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).is(Err::I2C_TIMEOUT));
   CHECK(pins.us == 100 && pins.sclReleased && pins.sdaReleased);
   pins = {}; pins.dataReleaseAfter = 100;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 1000).is(Err::I2C_BUS));
-  CHECK(pins.rises == 10 && pins.sclReleased && pins.sdaReleased); // Nine clocks and STOP.
+  CHECK(pins.rises == 9 && pins.sclReleased && pins.sdaReleased);
+  CHECK(pins.starts == 0 && pins.stops == 0); // Cannot create START with SDA stuck.
   pins = {}; pins.dataReleaseAfter = 4;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 10).is(Err::I2C_TIMEOUT));
   CHECK(pins.sclReleased && pins.sdaReleased);
-  std::puts("[PASS] Wire/IDF random/current reads, transport effects, counters and bounded GPIO recovery");
+  pins = {}; pins.dataReleaseAfter = 9;
+  CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 200).ok());
+  CHECK(pins.rises == 10 && pins.starts == 1 && pins.stops == 1);
+
+  WriteProtectPin wp;
+  eeprom24cxx_cli::WriteProtectControl<WriteProtectPin> protection(wp);
+  bool observed = true;
+  CHECK(protection.read(observed).is(Err::NOT_INITIALIZED) && observed);
+  CHECK(protection.set(false).is(Err::NOT_INITIALIZED) && wp.us == 0);
+  CHECK(protection.initialize().ok());
+  CHECK(wp.protectedAtEnable && wp.enabledAt == wp.changedAt && wp.us - wp.changedAt >= 2);
+  CHECK(protection.read(observed).ok() && observed);
+  const uint32_t previousStop = wp.us;
+  CHECK(protection.set(false).ok());
+  CHECK(wp.changedAt - previousStop >= 2 && wp.us - wp.changedAt >= 2);
+  CHECK(protection.read(observed).ok() && !observed);
+  wp.stuckLow = true;
+  CHECK(protection.set(true).is(Err::INVALID_CONFIG));
+  CHECK(protection.initialize().is(Err::INVALID_CONFIG));
+  CHECK(protection.read(observed).is(Err::NOT_INITIALIZED));
+  wp.stuckLow = false; wp.failEnable = true;
+  CHECK(protection.initialize().is(Err::INVALID_CONFIG));
+  CHECK(protection.set(false).is(Err::NOT_INITIALIZED));
+  wp.failEnable = false; wp.failWrite = true;
+  CHECK(protection.initialize().is(Err::INVALID_CONFIG));
+  wp.failWrite = false;
+  CHECK(protection.initialize().ok());
+  wp.failWrite = true;
+  CHECK(protection.set(false).is(Err::INVALID_CONFIG));
+  CHECK(wp.us - wp.changedAt >= 2);
+  std::puts("[PASS] Wire/IDF reads, transport effects, bounded START recovery and WP setup/hold");
   return 0;
 }

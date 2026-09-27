@@ -584,6 +584,79 @@ int main() {
   CHECK(restoreCancel.run(restoreCancelCli, 1)); CHECK(restoreCancel.transfers == before);
   CHECK(restoreCancel.run(restoreCancelCli, 100));
   for (const auto value : restoreCancel.memory) CHECK(value == 0x37);
+  // Terminal stage evidence survives unrelated diagnostics and a later restore.
+  // Keeping only the primary Status would lose ambiguous commit/count/mismatch
+  // information as soon as _lastResult became a read or restoration result.
+  Fixture evidence, replacement; eeprom24cxx_cli::Cli evidenceCli;
+  evidenceCli.setup(evidence.platform(), evidence.config()); evidenceCli.processCommand("color off");
+  evidence.failWrite = true;
+  evidenceCli.processCommand("xfer_demo 32 8 confirm"); CHECK(evidence.run(evidenceCli));
+  evidenceCli.processCommand("readbyte 32"); CHECK(evidence.run(evidenceCli));
+  evidence.output.clear(); evidenceCli.processCommand("scratch");
+  CHECK(evidence.output.find("Last primary stage (retained independently of restoration)") != std::string::npos);
+  CHECK(evidence.output.find("kind=VERIFIED_WRITE state=FAILED") != std::string::npos);
+  CHECK(evidence.output.find("commit=INDETERMINATE") != std::string::npos);
+  // setup cannot retarget a retained backup, replace its time source, or issue
+  // startup traffic to a new context. Restoration still belongs to the original.
+  auto alternate = replacement.config(); alternate.i2cAddress = 0x51;
+  before = evidence.transfers; evidence.output.clear();
+  evidenceCli.setup(replacement.platform(), alternate);
+  CHECK(evidence.output.find("BUSY") != std::string::npos && replacement.output.empty());
+  CHECK(evidence.transfers == before && replacement.transfers == 0);
+  evidenceCli.processCommand("restore confirm"); CHECK(evidence.run(evidenceCli));
+  CHECK(replacement.transfers == 0 && evidence.addresses.back() == 0x50);
+  evidence.output.clear(); evidenceCli.processCommand("scratch");
+  CHECK(evidence.output.find("primary=I2C_TIMEOUT detail=0 restore=OK") != std::string::npos);
+  CHECK(evidence.output.find("Last restoration stage") != std::string::npos);
+  CHECK(evidence.output.find("commit=INDETERMINATE") != std::string::npos);
+  CHECK(evidence.output.find("commit=VERIFIED") != std::string::npos);
+  // Failure of restoration retains its own detailed effect independently of a
+  // successful primary stage and of subsequent ordinary reads.
+  evidence.failWriteAttempt = evidence.writes + 2;
+  evidenceCli.processCommand("xfer_demo 32 8 confirm"); CHECK(evidence.run(evidenceCli));
+  evidenceCli.processCommand("readbyte 32"); CHECK(evidence.run(evidenceCli));
+  evidence.output.clear(); evidenceCli.processCommand("scratch");
+  CHECK(evidence.output.find("primary=OK detail=0 restore=I2C_TIMEOUT") != std::string::npos);
+  CHECK(evidence.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") != std::string::npos);
+  CHECK(evidence.output.find("kind=VERIFIED_WRITE state=FAILED") != std::string::npos);
+  CHECK(evidence.output.find("commit=INDETERMINATE") != std::string::npos);
+  evidenceCli.processCommand("restore confirm"); CHECK(evidence.run(evidenceCli));
+  // An in-flight ordinary write also owns the existing callbacks, staging
+  // buffer and clock. A rejected setup must leave that transfer usable.
+  evidenceCli.processCommand("writebyte 0 42"); before = evidence.transfers;
+  evidence.output.clear(); evidenceCli.setup(replacement.platform(), alternate);
+  CHECK(evidence.output.find("BUSY") != std::string::npos);
+  CHECK(evidence.transfers == before && replacement.transfers == 0);
+  CHECK(evidence.run(evidenceCli)); CHECK(evidence.memory[0] == 42 && replacement.memory[0] == 0);
+  // A valid idle replacement is allowed; an invalid replacement does not alter
+  // staged settings, output context, or the existing binding.
+  auto invalidReplacement = alternate; invalidReplacement.maxTxBytes = 0;
+  before = evidence.transfers; evidence.output.clear();
+  evidenceCli.setup(replacement.platform(), invalidReplacement);
+  CHECK(evidence.output.find("INVALID_CONFIG") != std::string::npos && replacement.output.empty());
+  evidenceCli.processCommand("settings");
+  CHECK(evidence.output.find("address=0x50") != std::string::npos && evidence.transfers == before);
+  for (const char value : std::string("writebyte 0 99")) evidenceCli.feed(value);
+  evidenceCli.setup(replacement.platform(), alternate);
+  CHECK(replacement.probes == 1 && replacement.addresses.back() == 0x51);
+  evidenceCli.feed('\n'); CHECK(replacement.run(evidenceCli));
+  CHECK(replacement.writes == 0 && replacement.memory[0] == 0); // No old partial command on new target.
+  replacement.output.clear(); evidenceCli.processCommand("result");
+  CHECK(replacement.output.find("kind=NONE state=IDLE") != std::string::npos);
+  // Cancelling or ending scheduling does not make the old context replaceable
+  // until its physical write/reset settling barrier expires.
+  evidenceCli.processCommand("writebyte 0 55"); evidenceCli.tick(); evidenceCli.processCommand("end");
+  before = evidence.transfers; replacement.output.clear();
+  evidenceCli.setup(evidence.platform(), evidence.config());
+  CHECK(replacement.output.find("BUSY") != std::string::npos && evidence.transfers == before);
+  CHECK(replacement.run(evidenceCli, 7));
+  evidenceCli.setup(evidence.platform(), evidence.config()); CHECK(evidence.transfers == before + 1);
+  evidenceCli.processCommand("iface_reset"); evidenceCli.processCommand("end");
+  before = replacement.transfers; evidence.output.clear();
+  evidenceCli.setup(replacement.platform(), alternate);
+  CHECK(evidence.output.find("BUSY") != std::string::npos && replacement.transfers == before);
+  CHECK(evidence.run(evidenceCli, 7));
+  evidenceCli.setup(replacement.platform(), alternate); CHECK(replacement.transfers == before + 1);
   std::puts("[PASS] CLI parsing, memory views, current/update, watch, counters, scratch programming, fault/restore and cancellation");
   return 0;
 }

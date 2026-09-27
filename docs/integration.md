@@ -190,6 +190,15 @@ power-failure recovery belong to the application.
 Optional endian/CRC codecs and WP/recovery example hooks assist that policy
 without placing pins, allocation or platform delays in the core.
 
+For the default Zetta chip, WP setup/hold is at least 1.2 us at up to 400 kHz
+or 0.6 us at 1 MHz. Applications changing WP must enforce these times around
+bus activity and keep WP stable during programming. Example GPIO policy waits
+5 us before/after each change. The chip's documented protocol reset requires
+up to nine clocks until SDA is high with SCL high, followed by START. Example
+recovery adds a final STOP, invalidates pointer knowledge and retains a full
+post-recovery write-cycle wait even on failure. Ordinary `recover()` is still
+only a presence check; GPIO recovery is an explicit application operation.
+
 The Arduino and native ESP-IDF examples own their bus and adapt errors to the
 same typed transport. One loop/task alone runs the CLI and driver. The IDF input
 task queues characters only. Neither adapter creates a second owner of the chip.

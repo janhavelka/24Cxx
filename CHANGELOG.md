@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Complete the Zetta protocol-recovery sequence with START before the final
+  idle STOP; use the same electrical recovery in Arduino and native ESP-IDF.
+- Enforce WP setup/hold settling and keep failed WP initialization unavailable.
+- Preserve CLI target/context during active work, settling and retained scratch
+  backups; retain detailed primary/restore evidence across later diagnostics.
 - Use explicit uint32_t bank arithmetic in native EEPROM test models, fixing
   Linux GCC conversion errors without weakening CI warnings or sanitizers.
 - Preserve the physical write-cycle barrier for unknown transport outcomes;
@@ -32,6 +37,14 @@
   size, heap, verbose and read-only selftest diagnostics.
 - Transport regression suite, reproducible exported-package checks, and the
   documented sixteen-library audit and validation results.
+
+### Changed
+
+- Move non-template blocking helper execution into `src/BlockingMemory.cpp`;
+  retain public declarations and typed codec templates in the header.
+- Share tested WP and electrical recovery policies between ESP32 frameworks,
+  and include the new source/helpers in all build and package checks.
+- Add repository/homepage metadata for package consumers.
 
 ## EEPROM24Cxx 1.0.0 - 2026-09-22
 

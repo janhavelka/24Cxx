@@ -31,6 +31,8 @@ struct Platform {
   EEPROM24Cxx::Status (*probeAddress)(uint8_t, void*) = nullptr;
   TransferStats (*transferStats)(void*) = nullptr;
   void (*resetTransferStats)(void*) = nullptr;
+  // Board-owned observation/control only. A WP setter must satisfy the fitted
+  // EEPROM's GPIO setup/hold times before returning. No implicit bus transfer.
   EEPROM24Cxx::Status (*readWriteProtect)(bool&, void*) = nullptr;
   EEPROM24Cxx::Status (*setWriteProtect)(bool, void*) = nullptr;
   EEPROM24Cxx::Status (*resetInterface)(void*) = nullptr;
@@ -43,6 +45,8 @@ struct Platform {
 
 class Cli {
  public:
+  // Reconfiguration is rejected while work, physical settling, or a retained
+  // scratch backup owns the old context. Invalid reconfiguration preserves it.
   void setup(const Platform& platform, const EEPROM24Cxx::Config& config);
   void feed(char value);
   void processCommand(const char* text);
@@ -59,7 +63,7 @@ class Cli {
   void printModels();
   void printStats();
   void printTransferStats();
-  void printScratch();
+  void printScratch(bool includeResults = true);
   void printProgress(const EEPROM24Cxx::TransferResult& result);
   void printBytes(uint32_t address, size_t length);
   enum class ReadView : uint8_t { NONE, HEX_DUMP, TEXT, STRINGS, CRC, SELFTEST };
@@ -80,6 +84,7 @@ class Cli {
   const char* color(unsigned code) const;
   uint32_t now() const;
   Platform _platform{};
+  bool _configured = false;
   EEPROM24Cxx::Config _config{};
   EEPROM24Cxx::EEPROM24Cxx _device{};
   char _line[256]{};
@@ -96,6 +101,10 @@ class Cli {
   uint32_t _scratchRandom = 0x24C02B01U;
   EEPROM24Cxx::Status _scratchPrimary{};
   EEPROM24Cxx::Status _scratchRestore{};
+  EEPROM24Cxx::TransferResult _scratchPrimaryResult{};
+  EEPROM24Cxx::TransferResult _scratchRestoreResult{};
+  bool _hasScratchPrimaryResult = false;
+  bool _hasScratchRestoreResult = false;
   uint32_t _scratchStartedMs = 0;
   uint32_t _scratchPrimaryElapsedMs = 0;
   uint32_t _scratchRestoreStartedMs = 0;

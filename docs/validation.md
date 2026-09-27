@@ -20,11 +20,12 @@ and fixes. No board was flashed and no physical EEPROM/WP result is claimed.
 - `python tools/check_contracts.py`: release metadata and framework boundaries pass.
 - `python tools/check_reference_archive.py`: 15 document artifacts (14 PDFs and
   the catalogue), 28 source/license artifacts and 66 archive checksums pass.
-- PlatformIO package export: 38 files, expected public/core/example files
+- PlatformIO package export: 41 files, expected public/core/example files
   present, vendor source/PDFs and generated build artifacts excluded.
   `tools/check_package_contents.py` validates the actual archive and documents
   eight intentionally repository-only reference links. The freshly extracted
-  package builds as a standalone CMake C++17 library with strict warnings.
+  package builds as a standalone CMake C++17 library with strict warnings;
+  a separate consumer links and executes the public blocking helper API.
 
 The subsequent GitHub native run on commit `864cd84` exposed test-model integer
 portability errors under Linux GCC 13.3.0: shifting uint8_t values promoted them
@@ -32,9 +33,11 @@ to signed int, while unsigned-long masks/minimums depended on Windows' narrower
 long type. Bank calculations now use explicit uint32_t operands throughout.
 After the fix, all four strict local CTest suites and all 27 PlatformIO native
 cases pass again, as do contract/reference checks. The two changed fixtures also
-pass local syntax checks with the workflow's warning and sanitizer flags. This
-does not establish a Linux sanitizer runtime result; a pushed revision must run
-the unchanged CI checks to establish that result.
+pass local syntax checks with the workflow's warning and sanitizer flags.
+The [subsequent GitHub run](https://github.com/janhavelka/24Cxx/actions/runs/36258748517)
+passed all jobs, including Linux ASan/UBSan tests. The second datasheet/structure
+review changes are validated locally as listed here; that older CI run does not
+validate the new unpushed GPIO, CLI or source-layout changes.
 
 The core model emulates page wrapping, bank-local reads, write-cycle NACKs and
 write protection. Regressions cover every preset, page and bank boundaries,
@@ -67,6 +70,9 @@ Scratch suites test distinct patterns and typed layouts, backup and restoration
 failures, WP suppression, cancellation before backup/during programming/during
 restoration, end/rebind retention, mutation gates, and scan blocking during a
 cancelled write's remaining programming cycle.
+The second review added setup/reconfiguration regressions for active operations,
+retained backups, physical/reset barriers, invalid replacement and stale input,
+plus preservation of independent primary/restore terminal evidence after reads.
 
 Field-helper tests cover explicit endian/IEEE encodings, signed extrema, CRC
 reference and split-update vectors, failed-output preservation, page-crossing
@@ -80,8 +86,11 @@ used by firmware: readiness/argument validation, timeout restoration, deferred
 repeated START, short/absent buffers, unsent-data cleanup, missing received bytes,
 ambiguous NACK mapping and write-effect evidence. Pure reads check zero pointer
 traffic and exact received counts. GPIO recovery tests cover bounded clock
-pulses, SDA release/stuck low, SCL timeout and timer rollover. It does not emulate electrical
-bus timing or prove SDK/controller behavior on hardware.
+pulses, the required START then STOP, SDA release on the ninth pulse/stuck low,
+SCL timeout and timer rollover. WP tests check protected preload before output
+enable, explicit setup/hold settling, level mismatch, failed GPIO setup and
+unavailable control after failed initialization. These tests do not emulate
+electrical bus timing or prove SDK/controller behavior on hardware.
 
 ## Firmware builds
 
@@ -103,11 +112,11 @@ Commands:
 
 These are full native ESP-IDF component/application builds, not an Arduino
 compatibility build or syntax-only check. The separate `idf.py` front end was
-not run locally. The [GitHub run for commit 864cd84](https://github.com/janhavelka/24Cxx/actions/runs/36250750175)
-passed native IDF 5.3.2, 5.5.1 and 6.0.1 on both targets, both Arduino builds,
-and package validation. Its sole failure was native test compilation, addressed
-by the integer portability fix described above. Host sanitizer runtime checks
-were not run on this Windows host; the fixed native CI job still needs a rerun.
+not run locally. The successful GitHub run linked above passed native IDF 5.3.2,
+5.5.1 and 6.0.1 on both targets, both Arduino builds, native sanitizer tests and
+package validation. After the second review's edits, local S2/S3 Arduino 3.3.11
+and native IDF 5.5.5 builds pass again. The new revision's complete Linux/SDK
+matrix still requires CI after pushing; sanitizers were not run on Windows.
 
 The Arduino platform emits a host Windows long-path-support warning, and the
 tooling prints a console-codepage metrics notice; all four builds complete.

@@ -15,7 +15,7 @@
 #include "../common/Eeprom24CxxCli.h"
 #include "../common/WireTransportHelpers.h"
 #include "../common/Esp32WriteProtect.h"
-#include "../common/BusRecovery.h"
+#include "../common/Esp32BusRecovery.h"
 
 namespace {
 using namespace EEPROM24Cxx;
@@ -56,26 +56,12 @@ void output(void*, const char* format, va_list args) {
 }
 eeprom24cxx_cli::TransferStats stats(void*) { return transfers; }
 void resetTransferStats(void*) { transfers = {}; }
-struct RecoveryPins {
-  void sda(bool release) { (void)gpio_set_level(static_cast<gpio_num_t>(board::I2C_SDA), release ? 1 : 0); }
-  void scl(bool release) { (void)gpio_set_level(static_cast<gpio_num_t>(board::I2C_SCL), release ? 1 : 0); }
-  bool sdaHigh() { return gpio_get_level(static_cast<gpio_num_t>(board::I2C_SDA)) != 0; }
-  bool sclHigh() { return gpio_get_level(static_cast<gpio_num_t>(board::I2C_SCL)) != 0; }
-  uint32_t nowUs() { return micros(); }
-  void delayUs(uint32_t value) { delayMicroseconds(value); }
-};
 Status resetInterface(void*) {
   // The CLI admits this only when the previous operation and tWR have settled.
   // Reinitialization is owned by this application and never replays a transfer.
   transport.setReady(false);
   if (!Wire.end()) return Status::Error(Err::I2C_ERROR, "Wire teardown failed");
-  RecoveryPins pins;
-  pins.sda(true); pins.scl(true);
-  esp_err_t error = gpio_set_direction(static_cast<gpio_num_t>(board::I2C_SDA), GPIO_MODE_INPUT_OUTPUT_OD);
-  if (error == ESP_OK)
-    error = gpio_set_direction(static_cast<gpio_num_t>(board::I2C_SCL), GPIO_MODE_INPUT_OUTPUT_OD);
-  if (error != ESP_OK) return Status::Error(Err::INVALID_CONFIG, "Recovery GPIO setup failed", error);
-  const Status recovered = eeprom24cxx_cli::recoverOpenDrainBus(pins, board::I2C_TIMEOUT_MS * 1000U);
+  const Status recovered = eeprom24cxx_cli::recoverEsp32Bus(board::I2C_TIMEOUT_MS * 1000U);
   if (!recovered.ok()) return recovered;
   if (Wire.setBufferSize(transport.MAX_BYTES) < transport.MAX_BYTES ||
       !Wire.begin(board::I2C_SDA, board::I2C_SCL, board::I2C_FREQUENCY_HZ))

@@ -65,12 +65,33 @@ void Cli::status(EEPROM24Cxx::Status value) {
         value.msg && *value.msg ? ": " : "", value.msg ? value.msg : "");
 }
 void Cli::setup(const Platform& platform, const EEPROM24Cxx::Config& config) {
+  using namespace EEPROM24Cxx;
+  const auto previous = _device.settingsSnapshot();
+  if (_configured && (_operation || _scan || _stress || _readView != ReadView::NONE ||
+      _scratchStage != ScratchStage::NONE || _backupValid || _interfaceWait ||
+      previous.transferActive || previous.resultPending || previous.writeCyclePending)) {
+    status(Status::Error(Err::BUSY, "CLI setup cannot replace active work, settling, or retained scratch backup"));
+    return;
+  }
+  // bind validates the replacement before mutating the old driver's context.
+  // A failed replacement must not redirect restore buffers or owner clocks.
+  const auto bound = _device.bind(config);
+  if (_configured && !bound.ok()) { status(bound); return; }
   _platform = platform;
   _config = config;
+  _configured = true;
+  _length = 0; _overflow = false;
+  _hasResult = false; _lastResult = {};
+  _hasScratchPrimaryResult = false; _hasScratchRestoreResult = false;
+  _scratchPrimary = {}; _scratchRestore = {};
+  _scratchAddress = _scratchLength = _scratchRounds = _scratchRound = 0;
+  _scratchPrimaryElapsedMs = _scratchRestoreElapsedMs = _scratchVerifiedBytes = 0;
+  _scratchPrimaryBus = {};
+  _jobs = _jobSuccesses = _jobFailures = 0;
   printVersion();
   print("Diagnostic CLI; application owns the bus. Type 'help' for commands.\n");
   print("EEPROM has no standard identity register: select the exact geometry before writing.\n");
-  status(_device.begin(_config));
+  status(bound.ok() ? _device.recover() : bound);
   print("Startup is read-only. ACK and write completion do not prove stored contents.\n");
   printHealth();
   printHelp();
@@ -208,7 +229,7 @@ void Cli::printStats() {
         static_cast<unsigned long>(_jobs), static_cast<unsigned long>(_jobSuccesses), static_cast<unsigned long>(_jobFailures));
   printHealth();
 }
-void Cli::printScratch() {
+void Cli::printScratch(bool includeResults) {
   const char* stage = "IDLE";
   switch (_scratchStage) {
     case ScratchStage::NONE: break;
@@ -232,6 +253,17 @@ void Cli::printScratch() {
     print(" primary-read=%lu primary-write=%lu primary-probe=%lu", static_cast<unsigned long>(_scratchPrimaryBus.readAttempts),
           static_cast<unsigned long>(_scratchPrimaryBus.writeAttempts), static_cast<unsigned long>(_scratchPrimaryBus.probeAttempts));
   print(" (primary timing includes backup)\n");
+  // These are the last terminal core stages, not aggregate progress across
+  // pattern rounds. Keep their effects independent of later diagnostics and
+  // of the separately authorized restoration attempt.
+  if (includeResults && _hasScratchPrimaryResult) {
+    print("Last primary stage (retained independently of restoration):\n");
+    printProgress(_scratchPrimaryResult);
+  }
+  if (includeResults && _hasScratchRestoreResult) {
+    print("Last restoration stage:\n");
+    printProgress(_scratchRestoreResult);
+  }
 }
 EEPROM24Cxx::Status Cli::startScratch(ScratchMode mode, uint32_t address, uint32_t length, uint32_t rounds) {
   using namespace EEPROM24Cxx;
@@ -249,6 +281,7 @@ EEPROM24Cxx::Status Cli::startScratch(ScratchMode mode, uint32_t address, uint32
   _scratchBusBefore = _platform.transferStats ? _platform.transferStats(_platform.user) : TransferStats{};
   _scratchPrimaryBus = {};
   _scratchPrimary = Status::Error(Err::IN_PROGRESS, "scratch test queued");
+  _hasScratchPrimaryResult = false; _hasScratchRestoreResult = false;
   _scratchRestore = Status::Error(Err::NO_RESULT, "restoration not attempted");
   _operation = true; _hasResult = false;
   print("Scratch test queued: backup, %lu verified pattern rounds, verified restore; EEPROM endurance is consumed.\n",
@@ -272,9 +305,14 @@ void Cli::abortScratch(EEPROM24Cxx::Status reason) {
   } else finishScratchPrimary(reason);
   if (!_scratchDirty) _backupValid = false;
   _scratchStage = ScratchStage::NONE;
-  printScratch();
+  printScratch(false);
 }
 void Cli::completeScratch(const EEPROM24Cxx::TransferResult& result) {
+  if (_scratchStage == ScratchStage::RESTORING) {
+    _scratchRestoreResult = result; _hasScratchRestoreResult = true;
+  } else {
+    _scratchPrimaryResult = result; _hasScratchPrimaryResult = true;
+  }
   status(result.status); printProgress(result);
   if (_scratchStage == ScratchStage::PATTERN) _scratchVerifiedBytes += static_cast<uint32_t>(result.bytesVerified);
   if (!result.status.ok()) { abortScratch(result.status); return; }
@@ -293,7 +331,7 @@ void Cli::completeScratch(const EEPROM24Cxx::TransferResult& result) {
     _scratchRestore = EEPROM24Cxx::Status::Ok();
     _scratchRestoreElapsedMs = now() - _scratchRestoreStartedMs;
     _backupValid = false; _scratchDirty = false; _scratchStage = ScratchStage::NONE;
-    printScratch();
+    printScratch(false);
     print("Original scratch bytes observed by readback after restoration.\n");
   }
 }

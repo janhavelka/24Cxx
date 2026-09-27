@@ -5,7 +5,9 @@
 namespace eeprom24cxx_cli {
 // Application-owned electrical recovery, only after the driver has settled.
 // Pins must already be configured as input/output open drain; true releases a
-// line and never drives it high. Nine clocks and STOP are not an EEPROM command.
+// line and never drives it high. ZD24C02B rev. 1.1 p. 4 requires up to nine
+// clocks, SDA observed high while SCL is high, then START to reset the protocol.
+// Finish with STOP so the next application transaction starts on an idle bus.
 template <class Pins>
 EEPROM24Cxx::Status recoverOpenDrainBus(Pins& pins, uint32_t timeoutUs) {
   using namespace EEPROM24Cxx;
@@ -30,8 +32,15 @@ EEPROM24Cxx::Status recoverOpenDrainBus(Pins& pins, uint32_t timeoutUs) {
     if (!releaseClock()) return timeout();
     pins.delayUs(5);
   }
-  // A STOP releases any addressed slave. It may finish an interrupted external
-  // write, which is why this operation is explicit and never automatic retry.
+  if (!pins.sdaHigh())
+    return Status::Error(Err::I2C_BUS, "SDA held low after nine recovery clocks");
+  // START is part of the chip's documented reset sequence. Check SDA only
+  // while SCL is released high, then meet START setup/hold before taking SCL low.
+  pins.delayUs(5);
+  if (expired()) return timeout();
+  pins.sda(false); pins.delayUs(5);
+  // A final STOP returns the bus to idle. Recovery remains an explicit action:
+  // line transitions can complete an interrupted write, so the CLI retains tWR.
   pins.scl(false); pins.sda(false); pins.delayUs(5);
   if (!releaseClock()) return timeout();
   pins.delayUs(5); pins.sda(true); pins.delayUs(5);
