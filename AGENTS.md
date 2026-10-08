@@ -1,5 +1,7 @@
 # EEPROM24Cxx repository conventions
 
+Always synchronize Git with the intended upstream branch before starting work by fetching and fast-forwarding safely, preserving existing local changes and reporting any divergence, conflict, or synchronization failure.
+
 - This repository implements 24Cxx I2C EEPROMs, defaulting to the exact Zetta
   ZD24C02B-MAGMT geometry. The former TMP1x2 implementation is Git history only;
   its vendor references are preserved under `docs/archive/`.
