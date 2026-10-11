@@ -1,6 +1,21 @@
 # EEPROM24Cxx repository conventions
 
-Always synchronize Git with the intended upstream branch before starting work by fetching and fast-forwarding safely, preserving existing local changes and reporting any divergence, conflict, or synchronization failure.
+## Git workflow
+
+- Before editing, fetch and inspect the current branch and upstream; fast-forward
+  only when safe.
+- Keep the whole promptset on its existing branch. Do not create a branch or
+  worktree per prompt or agent unless the user asks.
+- Assume concurrent agents. Preserve unrelated changes; never stash, discard,
+  overwrite, or commit them. A dirty worktree alone is not a blocker.
+- After relevant checks pass, stage only your own files or hunks, then commit
+  and push each meaningful completed chunk, including multiple times within
+  one prompt and before finishing. No further permission is needed.
+- When using subagents, the lead owns Git mutations for their shared work.
+- Confirm upstream synchronization and check applicable CI for the pushed commit.
+  Report conflicts or sync failures; never force-push to resolve them.
+
+## Project guidance
 
 - This repository implements 24Cxx I2C EEPROMs, defaulting to the exact Zetta
   ZD24C02B-MAGMT geometry. The former TMP1x2 implementation is Git history only;
