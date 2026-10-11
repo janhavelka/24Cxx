@@ -7,9 +7,9 @@ WP behavior, endurance or recovery after power interruption.
 ## Serial qualification runner
 
 `tools/hil_runner.py` runs the shared Arduino/native-IDF CLI with bounded serial
-deadlines and records a transcript plus a machine-readable `report.json` in a
-new output directory. It requires an explicit model and strapped address and
-checks these against the active firmware configuration; it never identifies an
+deadlines and records a transcript, machine-readable `report.json` and readable
+`report.md` in a new output directory. It requires an explicit model and strapped
+address and checks these against the active firmware configuration; it never identifies an
 unknown chip by writing. Review the procedure without opening a port:
 
 ```powershell
@@ -34,10 +34,28 @@ It does not program EEPROM or change WP, reset the bus, upload firmware or
 deliberately pulse DTR/RTS for a reset. Control-line states are set before opening
 the port: DTR defaults to zero (`--dtr 1` for Arduino S2), RTS stays zero. Drivers
 or USB-UART hardware may still glitch these lines during open; check the board.
-Current reads are skipped only when the adapter
-explicitly reports that capability unavailable. Hardware and firmware metadata
-are operator records; the printed library version alone does not certify the
-flashed source revision or physical part marking.
+Current reads are skipped only when the adapter explicitly reports that capability
+unavailable. `--board`, `--chip` and `--firmware` are operator records. Separate
+optional requirements compare the actual `version` response before device tests:
+
+```powershell
+python tools/hil_runner.py --port COM5 --model zetta --address 0x50 --out build-hil --include-guards --expect-version 1.0.0 --expect-target esp32s3 --expect-framework Arduino-ESP32 --require-run
+```
+
+Use the version/framework/target emitted by the intended build. `--expect-commit`
+accepts 7..40 hex digits and compares their common prefix with the reported SHA;
+it cannot prove digits absent from an abbreviated firmware SHA. `--expect-clean`
+requires a reported clean source tree. Unknown identity never satisfies an
+explicit requirement. Builds without injected Git metadata, including the native
+IDF defaults, report unknown and cannot satisfy those Git requirements. These
+checks compare firmware declarations; they do not independently inspect flash
+contents or certify physical part markings.
+
+`--include-guards` adds 30 invalid read-only commands covering parser, argument
+count and range boundaries. Each must report the expected rejection; settings,
+health and physical transfer counters must remain exactly unchanged across the
+matrix. No programming or configuration command is included. Help and size/page
+diagnostics are also checked for their required content and selected geometry.
 
 Programming requires a separate explicit opt-in and a scratch window of
 1..256 bytes inside the configured array. Choose disposable contents, make WP
@@ -50,9 +68,12 @@ python tools/hil_runner.py --port COM5 --model zetta --address 0x50 --out build-
 
 Before the first write, the runner verifies the scratch preimage against the
 full-array capture and flushes `scratch-preimage.bin` and its metadata to disk.
+It rechecks that saved byte image before every programming procedure.
 It runs `rw_suite`, `xfer_demo`, `stress_mix`, `randbench` and `typed_demo`,
-requiring every named check, expected operation count, correlated completion
-and verified restoration. Typed testing requires at least 28 authorized bytes;
+requiring every named check, expected operation count, correlated completion,
+coherent accepted/completed/verified counts, write-commit and stage evidence,
+and verified restoration. Duplicate evidence fields are rejected.
+Typed testing requires at least 28 authorized bytes;
 smaller windows explicitly report it as skipped. Each suite is followed by an
 independent scratch comparison; a final full-array comparison detects changes
 outside the selected window. The default random/mixed repetition count is
@@ -66,7 +87,20 @@ truncated response, missing completion, reset or serial failure is
 means the recorded serial procedure met its checks. It does not establish
 electrical timing, retention, endurance or power-cut behavior. Dry runs are
 `NOT_RUN`, and reports retain skipped/not-run procedures. Exit codes are zero
-for PASS/NOT_RUN, one for FAIL and two for INCONCLUSIVE.
+for PASS/NOT_RUN, one for FAIL and two for INCONCLUSIVE. `--require-run` returns
+two for NOT_RUN as well, so automation cannot mistake a dry run for execution.
+
+Reports use schema version 2 and record effective options, exact argument vector,
+Python/OS/pyserial versions, host checkout commit/tree, runner/helper SHA-256
+hashes, observed firmware identity, and start/finish times. Host provenance is
+separate from firmware identity. Results are atomically checkpointed before and
+after each finite command; capture failure prevents the next command. JSON is
+authoritative if its Markdown summary is stale. Accept a completed qualification
+only when `outcome` is `PASS` **and** `finalized` is true, with the requested scope
+and any soak duration satisfied. An interrupted process can leave an earlier
+phase's PASS checkpoint with `finalized: false`. Skipped scratch tests and separate
+physical WP, electrical, power-cut/retention and USB/stuck-bus trials remain
+explicitly SKIPPED/NOT_RUN; a serial PASS does not turn them into hardware evidence.
 
 After an interrupted scratch procedure, inspect `job`, `scratch`, `health` and
 the affected bytes before explicitly choosing `restore confirm`. Retained RAM
@@ -87,12 +121,19 @@ python tools/hil_runner.py --port COM5 --model zetta --address 0x50 --out build-
 
 Each cycle compares a rotating up-to-256-byte read with `array-before.bin`,
 checks a whole-array CRC against that same preimage, and samples idle job state,
-health, heap and console. Newly tracked bus failures, content mismatch, console
-loss or counter regression stop the run. Optional heap/console data are skipped
+health, heap, physical transfer counters and console. Newly tracked bus failures,
+unexpected physical writes, content mismatch, console loss or counter regression
+stop the run. The saved baseline's SHA-256 must still match the finite campaign
+before the soak starts. Optional heap/console data are skipped
 only on an explicit `UNSUPPORTED` reply; disappearing supported telemetry fails.
 Heap samples record initial, lowest and last free space plus minimum-free and
 largest-block values; they do not automatically classify every allocation as a
-leak. A stall counter is recorded separately from actual dropped bytes.
+leak. Optional `--min-free-heap BYTES` and `--max-heap-drop BYTES` enforce a minimum
+current free heap and maximum drop from the first preflight sample, during both
+finite and soak phases. Choose limits for the application. Requesting either
+limit makes unavailable heap telemetry a
+failure. Minimum-ever-free remains separate evidence. A stall counter is recorded
+separately from actual dropped bytes.
 
 The soak phase never writes, even if the preceding finite campaign was authorized
 with `--allow-write`. There is one in-flight command, no automatic reconnect,
@@ -100,11 +141,14 @@ reset, replay or post-failure cleanup. A cycle admitted before the duration ends
 finishes under the per-command deadlines; actual elapsed time and overrun are
 reported. Choose `--long-timeout` for the fitted capacity and serial throughput.
 
-`report.json` contains fixed-size aggregates (cycles, bytes, command latency,
-heap, console and failure evidence) and is atomically checkpointed at startup,
-after a cycle when 30 seconds have elapsed since the last checkpoint, and on exit.
-A killed process may leave
-`RUNNING`; it is not a pass. `soak-events.jsonl` and `soak-transcript.txt` each
+`report.json` contains fixed-size aggregates (cycles, bytes, latency for each of
+the seven command families, the slowest command, heap, console and failure
+evidence). It records requested duration, elapsed time and `duration_met`, and is
+atomically checkpointed at startup, after a cycle when 30 seconds have elapsed
+since the last checkpoint, and on exit. A killed process may leave
+`RUNNING` or an unfinalized checkpoint; neither is a completed pass. Finite steps
+and soak checkpoints print progress unless `--quiet` is selected.
+`soak-events.jsonl` and `soak-transcript.txt` each
 retain current and previous 8 MiB segments, bounding soak logs to 32 MiB total.
 Rotation deliberately discards older detailed records; the finite campaign,
 preimages and aggregate report remain separate. Disk/capture/close errors make

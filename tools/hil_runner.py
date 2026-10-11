@@ -22,6 +22,10 @@ import sys
 import time
 import zlib
 
+from hil_artifacts import collect_provenance, render_markdown
+from hil_guards import guard_commands, validate_guard
+from hil_identity import parse_identity, check_identity
+
 
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -57,7 +61,20 @@ def plain(output: str) -> str:
 
 
 def fields(line: str) -> dict[str, str]:
-    return dict(re.findall(r"([\w-]+)=([^\s]+)", line))
+    result = {}
+    detail_owner = None
+    for key, value in re.findall(r"([\w-]+)=([^\s]+)", line):
+        # Scratch intentionally carries two Status details. Preserve both under
+        # their owning status instead of silently keeping only the last value.
+        if line.startswith("Scratch:"):
+            if key in {"primary", "restore"}:
+                detail_owner = key
+            elif key == "detail":
+                require(detail_owner is not None, "scratch detail has no owning status")
+                key = detail_owner + "-detail"
+        require(key not in result, f"duplicate evidence field: {key}")
+        result[key] = value
+    return result
 
 
 def number(value: str) -> int:
@@ -78,6 +95,13 @@ def one_line(output: str, prefix: str) -> str:
     return lines[0]
 
 
+def profile_page_size(model: str) -> int:
+    capacity = MODELS[model]
+    return (256 if model == "m24m01" else 8 if capacity <= 256 else
+            16 if capacity <= 2048 else 32 if capacity <= 8192 else
+            64 if capacity <= 32768 else 128)
+
+
 def terminal_evidence(command: str, output: str) -> dict:
     canonical = ALIASES.get(command.split()[0], command.split()[0])
     accepted = list(ACCEPTED.finditer(output))
@@ -85,9 +109,10 @@ def terminal_evidence(command: str, output: str) -> dict:
     require(len(accepted) == 1 and len(terminals) == 1, "missing or duplicate command admission/completion")
     begin, end = accepted[0], terminals[0]
     require(begin[1] == end[1] == canonical and begin[2] == end[2], "command/session identity mismatch")
+    require(int(end[2]) <= 0xFFFFFFFF, "command session exceeds uint32")
     require(begin.start() < end.start(), "completion preceded admission")
-    require(end[3] == "SUCCESS" and end[4] == "OK" and int(end[5]) == 0,
-            f"terminal command failed: {end[3]} {end[4]}")
+    require(end[3] == "SUCCESS" and end[4] == "OK" and int(end[5]) == 0 and int(end[6]) == 0,
+            f"invalid terminal result: {end[3]} {end[4]} code={end[5]} detail={end[6]}")
     return {"command": end[1], "session": int(end[2]), "outcome": end[3], "status": end[4]}
 
 
@@ -109,17 +134,85 @@ def parse_payload(output: str, address: int, length: int) -> bytes:
     return bytes(result)
 
 
+def validate_transfer_record(data: dict) -> None:
+    """Validate successful typed transfer counts and memory-write evidence.
+
+    Accepted data is distinct from completed work and verified contents. Updates
+    may skip every write; a verified update still observes the entire requested
+    range. Zero-length core operations retain no memory-write effect.
+    """
+    required = {"kind", "state", "address", "requested", "accepted", "completed", "verified",
+                "commit", "last-chunk-commit", "status", "detail", "request-id"}
+    require(set(data) == required and all(isinstance(value, str) for value in data.values()),
+            "incomplete or unexpected transfer fields")
+    writes = {"WRITE", "FILL", "UPDATE", "VERIFIED_WRITE", "VERIFIED_FILL", "VERIFIED_UPDATE"}
+    verified_writes = {"VERIFIED_WRITE", "VERIFIED_FILL", "VERIFIED_UPDATE"}
+    kind = data["kind"]
+    require(kind in writes | {"READ", "CURRENT_READ", "VERIFY"}, "unknown transfer kind")
+    require(data["state"] == "SUCCEEDED" and data["status"] == "OK" and data["detail"] == "0",
+            "transfer did not succeed with zero error detail")
+    counts = {}
+    for key in ("requested", "accepted", "completed", "verified", "request-id"):
+        require(re.fullmatch(r"[0-9]+", data[key]) is not None, f"invalid transfer {key}")
+        counts[key] = number(data[key])
+        require(counts[key] <= 0xFFFFFFFF, f"transfer {key} exceeds uint32")
+    require(counts["request-id"] > 0, "missing transfer request identity")
+    require(re.fullmatch(r"(?:0x[0-9A-Fa-f]+|[0-9]+)", data["address"]) is not None,
+            "invalid transfer address")
+    address = number(data["address"])
+    requested, accepted, verified = (counts[key] for key in ("requested", "accepted", "verified"))
+    require(address <= 0xFFFFFFFF and address + requested <= 0xFFFFFFFF, "transfer range exceeds uint32")
+    require(counts["completed"] == requested, "incomplete transfer")
+    require(accepted <= requested and verified <= requested, "transfer byte counts exceed requested range")
+
+    expected_verified = requested if kind == "VERIFY" or kind in verified_writes else 0
+    require(verified == expected_verified, "incorrect verified-byte evidence for transfer kind")
+    if kind not in writes:
+        require(accepted == 0, "read-only transfer reports accepted write bytes")
+    elif kind not in {"UPDATE", "VERIFIED_UPDATE"}:
+        require(accepted == requested, "successful write lacks complete acceptance evidence")
+
+    expected_commit = "NOT_APPLICABLE"
+    if requested and kind in verified_writes:
+        expected_commit = "VERIFIED"
+    elif accepted:
+        expected_commit = "ACCEPTED"
+    expected_last = "ACCEPTED" if accepted else "NOT_APPLICABLE"
+    require(data["commit"] == expected_commit, "aggregate write effect disagrees with successful transfer")
+    require(data["last-chunk-commit"] == expected_last, "last write effect disagrees with accepted bytes")
+
+
 def transfer_evidence(output: str, requested: int, kind: str = "READ", address: int | None = None) -> dict:
     line = one_line(output, "Transfer:")
     data = fields(line)
-    require(data.get("kind") == kind, "wrong transfer kind")
-    require(data.get("state") == "SUCCEEDED" and data.get("status") == "OK", "transfer did not succeed")
+    validate_transfer_record(data)
+    require(data["kind"] == kind, "wrong transfer kind")
     if address is not None:
-        require(number(data.get("address", "-1")) == address, "wrong transfer start address")
-    require(number(data.get("requested", "-1")) == requested, "wrong requested byte count")
-    require(number(data.get("completed", "-1")) == requested, "incomplete transfer")
-    require(number(data.get("request-id", "0")) > 0, "missing transfer request identity")
+        require(number(data["address"]) == address, "wrong transfer start address")
+    require(number(data["requested"]) == requested, "wrong requested byte count")
+    validate_stage_records(output, data)
     return data
+
+
+def validate_stage_records(output: str, transfer: dict) -> None:
+    kind = transfer["kind"]
+    requested = number(transfer["requested"])
+    requirements = {"Write:": kind in {"WRITE", "FILL", "UPDATE", "VERIFIED_WRITE", "VERIFIED_FILL", "VERIFIED_UPDATE"},
+                    "Verification:": requested > 0 and (kind == "VERIFY" or kind.startswith("VERIFIED_")),
+                    "Update comparison:": requested > 0 and kind in {"UPDATE", "VERIFIED_UPDATE"}}
+    for prefix, required in requirements.items():
+        lines = [line for line in output.splitlines() if line.startswith(prefix)]
+        require(len(lines) == int(required), f"missing or unexpected {prefix} evidence for {kind}")
+        if not required:
+            continue
+        data = fields(lines[0])
+        keys = {"status", "detail"} | ({"match"} if prefix == "Verification:" else {"compared", "skipped"} if prefix == "Update comparison:" else set())
+        require(set(data) == keys and data["status"] == "OK" and data["detail"] == "0", f"unsuccessful {prefix} evidence")
+        if prefix == "Verification:":
+            require(data["match"] == "yes", "readback did not match")
+        if prefix == "Update comparison:":
+            require(number(data["compared"]) == requested and 0 <= number(data["skipped"]) <= requested and
+                    number(data["skipped"]) + number(transfer["accepted"]) == requested, "inconsistent update comparison/skip evidence")
 
 
 def validate_output(command: str, output: str, *, context: dict | None = None) -> dict:
@@ -136,6 +229,8 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
     head = ALIASES.get(tokens[0], tokens[0])
     require(REBOOT.search(clean) is None, "firmware reset/exception during command")
     if head in {"heap", "console"} and re.fullmatch(r"\s*\[E\] UNSUPPORTED detail=-?[0-9]+(?::[^\n]*)?\n\s*", clean):
+        require(head != "heap" or not any(context.get(key) is not None for key in ("min_free_heap", "max_heap_drop")),
+                "requested heap qualification requires supported telemetry")
         return {"supported": False, "reason": "application explicitly reports UNSUPPORTED"}
     require(ERROR.search(clean) is None, "CLI reported an error")
     evidence: dict = {}
@@ -146,7 +241,11 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require("EEPROM24Cxx diagnostic CLI" in clean, "wrong firmware family")
         evidence["firmware"] = one_line(clean, "EEPROM24Cxx diagnostic CLI")
         evidence["library"] = one_line(clean, "Library:").split(":", 1)[1].strip()
-        require(bool(evidence["library"]), "missing library version")
+        try:
+            evidence["identity"] = parse_identity(evidence["firmware"], evidence["library"])
+            check_identity(evidence["identity"], context.get("expectations", {}))
+        except ValueError as error:
+            raise EvidenceError(str(error)) from error
     elif head in {"settings", "model", "geometry"}:
         staged = fields(one_line(clean, "Staged:"))
         active = fields(one_line(clean, "Active:"))
@@ -172,7 +271,7 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         capacity = evidence["capacity"]
         model = active["model"]
         require(model in MODELS and MODELS[model] == capacity, "unsupported model/capacity")
-        page = 256 if model == "m24m01" else 8 if capacity <= 256 else 16 if capacity <= 2048 else 32 if capacity <= 8192 else 64 if capacity <= 32768 else 128
+        page = profile_page_size(model)
         bank_mask = BANK_MASKS.get(model, 0)
         require(number(active["page"]) == page and number(active["word-address"]) == (1 if capacity <= 2048 else 2) and
                 number(active["bank-bits"]) == bin(bank_mask).count("1") and
@@ -277,6 +376,8 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require(suite.get("mode") == head and summary.get("stage") == "IDLE", "wrong/incomplete scratch procedure")
         require(summary.get("backup") == "none" and summary.get("restore-required") == "no", "scratch backup still requires restoration")
         require(summary.get("primary") == "OK" and summary.get("restore") == "OK", "primary test or restoration failed")
+        require(all(-0x80000000 <= number(summary.get(key, "invalid")) <= 0x7FFFFFFF
+                    for key in ("primary-detail", "restore-detail")), "missing scratch status details")
         require(number(summary.get("address", "-1")) == number(tokens[1]), "scratch address mismatch")
         length = 28 if head == "typed_demo" else number(tokens[2])
         require(number(summary.get("length", "-1")) == length, "scratch length mismatch")
@@ -327,19 +428,17 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require(summary.get("rounds") == f"{rounds}/{rounds}", "scratch procedure ended before requested rounds")
         require(Counter(name for name, _ in checks) == expected_checks, "missing/duplicate/incorrect named scratch checks")
         require({key: number(value) for key, value in operations.items()} == expected_ops, "scratch operation counts differ from procedure")
-        transfers = [fields(line) for line in clean.splitlines() if line.startswith("Transfer:")]
+        stages = re.split(r"(?=^Transfer:)", clean, flags=re.M)[1:]
+        transfers = [fields(one_line(stage, "Transfer:")) for stage in stages]
         require(len(transfers) == sum(expected_ops.values()) - expected_ops["probes"] - expected_ops["current-skipped"] + 1,
                 "scratch terminal stage count differs from executed operations")
-        for result in transfers:
-            require(result.get("state") == "SUCCEEDED" and result.get("status") == "OK" and
-                    number(result.get("requested", "-1")) == number(result.get("completed", "-2")),
-                    "scratch stage did not complete successfully")
+        for stage, result in zip(stages, transfers):
+            validate_transfer_record(result)
+            validate_stage_records(stage, result)
             address = number(result.get("address", "-1"))
             requested = number(result.get("requested", "-1"))
             require(number(tokens[1]) <= address and requested > 0 and address + requested <= number(tokens[1]) + length,
                     "scratch stage extends beyond authorized window")
-            if result.get("kind") in {"VERIFIED_WRITE", "VERIFIED_FILL", "VERIFIED_UPDATE", "VERIFY"}:
-                require(number(result.get("verified", "-1")) == requested, "scratch stage lacks complete verified-byte evidence")
         ids = [number(result.get("request-id", "0")) for result in transfers]
         require(min(ids) > 0 and len(set(ids)) == len(ids), "duplicate/missing scratch stage request identity")
         expected_kinds = Counter({kind: expected_ops[key] for key, kind in (
@@ -375,6 +474,11 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         heap = {key: number(value) for key, value in data.items()}
         require(0 <= heap["minimum-free"] <= heap["free"] <= 0xFFFFFFFF and
                 0 <= heap["largest-free-block"] <= heap["free"], "inconsistent heap telemetry")
+        if context.get("min_free_heap") is not None:
+            require(heap["free"] >= context["min_free_heap"], "free heap below requested minimum")
+        if context.get("max_heap_drop") is not None and "initial_free_heap" in context:
+            require(context["initial_free_heap"] - heap["free"] <= context["max_heap_drop"],
+                    "free heap drop exceeds requested maximum")
         evidence.update(supported=True, heap=heap)
     elif head == "console":
         data = fields(one_line(clean, "Console:"))
@@ -429,16 +533,56 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require(all(re.fullmatch(r"[0-9]+", counters.get(key, "")) for key in ("attempts", "read", "write", "probe", "ok", "fail")), "incomplete bus counters")
         require(number(counters["attempts"]) == min(0xFFFFFFFF, sum(number(counters[key]) for key in ("read", "write", "probe"))), "inconsistent transfer-kind counts")
         require(number(counters["attempts"]) == min(0xFFFFFFFF, number(counters["ok"]) + number(counters["fail"])), "inconsistent transport outcomes")
+        previous = context.get("transfers_previous")
+        if previous:
+            require(all(number(counters[key]) >= number(previous[key]) for key in ("attempts", "read", "write", "probe", "ok", "fail")),
+                    "transfer counters regressed during campaign")
+            if context.get("read_only"):
+                require(number(counters["write"]) == number(previous["write"]), "physical write counter changed during read-only work")
+            if context.get("soaking"):
+                require(number(counters["fail"]) == number(previous["fail"]), "transport failures changed during soak")
         evidence["transfers"] = counters
     elif head == "stop":
         # Synchronization marker establishes completion; stopping idle work can be silent.
         pass
+    elif head == "size":
+        record = re.fullmatch(r"Active configured capacity: ([0-9]+) bytes \(not detected\)", one_line(clean, "Active configured capacity:"))
+        require(record is not None and number(record[1]) == context.get("capacity", MODELS.get(context.get("model", "zetta"))),
+                "configured size does not match expected geometry")
+    elif head == "page":
+        data = fields(one_line(clean, "Page:"))
+        address = number(tokens[1]) if len(tokens) > 1 else 0
+        capacity = context.get("capacity", MODELS[context.get("model", "zetta")])
+        model = context.get("model", "zetta")
+        page = profile_page_size(model)
+        pointer_bytes = 1 if capacity <= 2048 else 2
+        bank_size = 1 << (8 * pointer_bytes)
+        expected = {"address": address, "number": address // page, "offset": address % page,
+                    "remaining": min(page - address % page, capacity - address),
+                    "bank-remaining": min(bank_size - address % bank_size, capacity - address),
+                    "sla": context.get("address", 0x50) | ((address // bank_size) << (2 if model == "24lc1025" else 0)),
+                    "pointer": address % bank_size, "pointer-bytes": pointer_bytes}
+        require(0 <= address < capacity and set(data) == set(expected) and
+                all(number(data[key]) == value for key, value in expected.items()), "page/address encoding differs from selected geometry")
+        evidence["page"] = data
+    elif head == "help":
+        require(one_line(clean, "=== EEPROM24Cxx CLI Help ===") == "=== EEPROM24Cxx CLI Help ===", "missing help header")
+        groups = {"detection": ("Detection and binding", {"scan", "probe", "init", "bind", "recover", "model", "addr"}),
+                  "tests": ("Explicit scratch tests", {"rw_suite", "xfer_demo", "stress_mix", "randbench", "typed_demo", "scratch"})}
+        sections = re.findall(r"^\[([^\]]+)\]$", clean, re.M)
+        commands = {line.split()[0] for line in re.findall(r"^  (.+?) +- .+$", clean, re.M)}
+        topic = tokens[1] if len(tokens) == 2 else "all"
+        if topic == "all":
+            require(len(sections) == 8 and len(set(sections)) == 8 and
+                    {"help", "read", "write", "job", "console", "stress"} <= commands and
+                    all(required <= commands for _, required in groups.values()), "incomplete full help inventory")
+        else:
+            require(topic in groups, "unsupported help validation topic")
+            section, required = groups[topic]
+            require(sections == [section] and required <= commands, "help topic inventory mismatch")
+        evidence["help"] = dict(topic=topic, sections=sections, commands=sorted(commands))
     else:
-        prefixes = {"help": "=== EEPROM24Cxx CLI Help ===", "stats": "Core jobs consumed:",
-                    "xfer_stats": "Transfers:", "page": "Page:", "scratch": "Scratch:",
-                    "job": "CLI job:", "size": "Active configured capacity:"}
-        require(head in prefixes, f"validator has no contract for {head}")
-        require(any(line.startswith(prefixes[head]) for line in clean.splitlines()), f"missing {head} response")
+        raise EvidenceError(f"validator has no contract for {head}")
     return evidence
 
 
@@ -585,6 +729,14 @@ def build_plan(args) -> list[dict]:
         plan.append(dict(command=command, purpose=purpose, group=group, writes=writes))
     for command in ("version", "job", "deadline", "settings", "bus", "scratch", "color off", "verbose off", "help", "help detection", "help tests", "geometry", "page 0", "size", "stats", "xfer_stats", "health", "heap", "console"):
         add(command, "Firmware/target and cached diagnostics")
+    if args.include_guards:
+        for command in ("settings", "health", "xfer_stats"):
+            add(command, "Snapshot before read-only rejection checks", "guard-before")
+        for command, expected in guard_commands(capacity):
+            add(command, "Reject invalid read-only command without I2C or state changes", "guard")
+            plan[-1]["expected_error"] = expected
+        for command in ("settings", "health", "xfer_stats"):
+            add(command, "Assert rejected commands left state and transfers unchanged", "guard-after")
     add("discover", "EEPROM-range address acknowledgements")
     add("probe", "Untracked presence check")
     add(f"read 0 {capacity}", "Complete byte capture")
@@ -608,6 +760,8 @@ def build_plan(args) -> list[dict]:
     add(f"read 0 {capacity}", "Check complete array against original capture after all procedures", "full-check")
     add("scratch", "Confirm retained backup/restoration state")
     add("health", "Confirm no outstanding work and final tracked health")
+    add("heap", "Check final heap and any requested qualification limits")
+    add("xfer_stats", "Check final counters and read-only write invariance")
     add("console", "Confirm no console output loss")
     return plan
 
@@ -636,32 +790,56 @@ def soak_duration(text: str) -> float:
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", help="Explicit serial port; required for a live run")
-    parser.add_argument("--address", required=True, type=integer, help="Expected strapped base address, 0x50..0x57")
-    parser.add_argument("--model", required=True, choices=MODELS, help="Expected configured profile; never autodetected")
-    parser.add_argument("--out", required=True, type=Path, help="Artifact parent directory; each run creates a unique child")
-    parser.add_argument("--baud", type=integer, default=115200)
-    parser.add_argument("--timeout", type=positive_float, default=10.0)
-    parser.add_argument("--long-timeout", type=positive_float, default=180.0)
-    parser.add_argument("--rounds", type=integer, default=10)
-    duration = parser.add_mutually_exclusive_group()
-    duration.add_argument("--soak-seconds", type=soak_duration, default=0.0)
-    duration.add_argument("--soak-hours", type=soak_duration, default=0.0)
-    parser.add_argument("--soak-interval", type=positive_float, default=1.0, help="Pause between read-only soak cycles in seconds")
-    parser.add_argument("--dtr", type=integer, choices=(0, 1), default=0, help="Explicit control line; use 1 for Arduino ESP32-S2 native CDC; RTS stays 0")
-    parser.add_argument("--allow-write", action="store_true", help="Explicitly allow only the selected scratch procedures")
-    parser.add_argument("--scratch-address", type=integer)
-    parser.add_argument("--scratch-length", type=integer)
-    parser.add_argument("--scratch-rounds", type=integer, default=3)
-    parser.add_argument("--dry-run", action="store_true", help="Write a NOT_RUN plan without importing/opening serial")
-    parser.add_argument("--board", default="unspecified")
-    parser.add_argument("--operator", default="unspecified")
-    parser.add_argument("--firmware", default="unspecified", help="Operator-recorded flashed build/commit; compared with printed version only by operator")
-    parser.add_argument("--chip", default="unspecified", help="Physical manufacturer/part/package marking")
-    parser.add_argument("--voltage", default="unspecified", help="Measured EEPROM supply voltage")
-    parser.add_argument("--bus-hz", type=integer, help="Recorded actual bus frequency")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    target = parser.add_argument_group("Target and serial session")
+    target.add_argument("--port", help="Explicit serial port; required for a live run")
+    target.add_argument("--address", required=True, type=integer, help="Expected strapped base address, 0x50..0x57")
+    target.add_argument("--model", required=True, choices=MODELS, help="Expected configured profile; never autodetected")
+    target.add_argument("--baud", type=integer, default=115200, help="Serial baud rate")
+    target.add_argument("--timeout", type=positive_float, default=10.0, help="Synchronous command deadline in seconds")
+    target.add_argument("--long-timeout", type=positive_float, default=180.0, help="Whole asynchronous command deadline in seconds")
+    target.add_argument("--dtr", type=integer, choices=(0, 1), default=0, help="Use 1 for Arduino ESP32-S2 native CDC; RTS stays 0")
+    campaign = parser.add_argument_group("Read-only campaign and soak")
+    campaign.add_argument("--rounds", type=integer, default=10, help="Finite paired-read stress rounds")
+    campaign.add_argument("--include-guards", action="store_true", help="Test rejected read-only inputs and assert bus/state invariance")
+    duration = campaign.add_mutually_exclusive_group()
+    duration.add_argument("--soak-seconds", type=soak_duration, default=0.0, help="Read-only soak duration, maximum seven days")
+    duration.add_argument("--soak-hours", type=soak_duration, default=0.0, help="Read-only soak duration, maximum 168 hours")
+    campaign.add_argument("--soak-interval", type=positive_float, default=1.0, help="Pause between read-only soak cycles in seconds")
+    qualification = parser.add_argument_group("Optional qualification requirements")
+    qualification.add_argument("--expect-version", help="Required reported library version X.Y.Z")
+    qualification.add_argument("--expect-commit", help="Required reported firmware Git SHA, 7..40 hex digits; unknown fails")
+    qualification.add_argument("--expect-target", help="Required reported target, e.g. esp32s3")
+    qualification.add_argument("--expect-framework", help="Required reported framework, e.g. native-esp-idf")
+    qualification.add_argument("--expect-clean", action="store_true", help="Require firmware to report a clean source tree")
+    qualification.add_argument("--min-free-heap", type=integer, help="Minimum observed current free heap in bytes; requires telemetry")
+    qualification.add_argument("--max-heap-drop", type=integer, help="Maximum free-heap drop from preflight in bytes; requires telemetry")
+    scratch = parser.add_argument_group("Explicit programming on disposable scratch memory")
+    scratch.add_argument("--allow-write", action="store_true", help="Allow only the selected scratch procedures")
+    scratch.add_argument("--scratch-address", type=integer)
+    scratch.add_argument("--scratch-length", type=integer)
+    scratch.add_argument("--scratch-rounds", type=integer, default=3)
+    artifacts = parser.add_argument_group("Reports and automation")
+    artifacts.add_argument("--out", required=True, type=Path, help="Artifact parent directory; each run creates a unique child")
+    artifacts.add_argument("--dry-run", action="store_true", help="Write a NOT_RUN plan without importing/opening serial")
+    artifacts.add_argument("--require-run", action="store_true", help="Exit 2 for NOT_RUN instead of permitting a successful dry run")
+    artifacts.add_argument("--quiet", action="store_true", help="Suppress finite-step and periodic soak progress; retain final outcome")
+    metadata = parser.add_argument_group("Operator-recorded hardware metadata")
+    metadata.add_argument("--board", default="unspecified")
+    metadata.add_argument("--operator", default="unspecified")
+    metadata.add_argument("--firmware", default="unspecified", help="Operator label only; use --expect-commit for a reported identity check")
+    metadata.add_argument("--chip", default="unspecified", help="Physical manufacturer/part/package marking")
+    metadata.add_argument("--voltage", default="unspecified", help="Measured EEPROM supply voltage")
+    metadata.add_argument("--bus-hz", type=integer, help="Expected configured bus frequency (not an electrical measurement)")
     args = parser.parse_args(argv)
+    for value, pattern, label in ((args.expect_version, r"[0-9]+\.[0-9]+\.[0-9]+", "--expect-version"),
+                                  (args.expect_commit, r"[0-9a-fA-F]{7,40}", "--expect-commit"),
+                                  (args.expect_target, r"[A-Za-z0-9_.+-]+", "--expect-target"),
+                                  (args.expect_framework, r"[A-Za-z0-9_.+-]+", "--expect-framework")):
+        if value is not None and (value == "unknown" or not re.fullmatch(pattern, value)):
+            parser.error(f"invalid {label}")
+    if any(value is not None and value > 0xFFFFFFFF for value in (args.min_free_heap, args.max_heap_drop)):
+        parser.error("heap limits must be unsigned 32-bit byte counts")
     args.soak_seconds = args.soak_seconds or args.soak_hours * 3600
     if args.soak_seconds > MAX_SOAK_SECONDS:
         parser.error("soak duration cannot exceed seven days")
@@ -686,8 +864,18 @@ def parse_args(argv=None):
     return args
 
 
-def run_plan(session: Session, args, directory: Path, report: dict) -> None:
-    context = dict(model=args.model, address=args.address, capacity=MODELS[args.model], bus_hz=args.bus_hz)
+def qualification_context(args) -> dict:
+    expectations = {key: getattr(args, "expect_" + key) for key in ("version", "commit", "target", "framework", "clean")
+                    if getattr(args, "expect_" + key) not in (None, False)}
+    return dict(model=args.model, address=args.address, capacity=MODELS[args.model], bus_hz=args.bus_hz,
+                expectations=expectations, min_free_heap=args.min_free_heap, max_heap_drop=args.max_heap_drop,
+                read_only=not args.allow_write)
+
+
+def run_plan(session: Session, args, directory: Path, report: dict, *, progress=None) -> None:
+    context = qualification_context(args)
+    report["outcome"] = "RUNNING"
+    guard_snapshots = {}
     original = None
     backup = None
     backup_path = directory / "scratch-preimage.bin"
@@ -695,13 +883,17 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
         command = step["command"]
         if command == "current 1" and not context.get("current_supported", False):
             report["results"].append(dict(**step, outcome="SKIPPED", reason="adapter explicitly reports current-read unsupported"))
+            checkpoint_report(directory, report)
             continue
-        row = dict(**step)
+        row = dict(**step, outcome="RUNNING")
         report["results"].append(row)
         started = time.monotonic()
         try:
+            checkpoint_report(directory, report)
+            if progress: progress(report)
             if step["writes"]:
-                require(backup is not None and backup_path.is_file(), "durable backup required before programming")
+                require(backup is not None and backup_path.is_file() and backup_path.read_bytes() == backup,
+                        "intact durable backup required before programming")
             validation = dict(context)
             if command == "current 1" and original is not None:
                 validation.update(current_address=1, payload=original[1:2])
@@ -711,7 +903,21 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                 validation["payload"] = original
             timeout = args.long_timeout if async_command(command) else args.timeout
             output = session.command(command, timeout=timeout)
-            evidence = validate_output(command, output, context=validation)
+            if "expected_error" in step:
+                try:
+                    evidence = validate_guard(command, step["expected_error"], plain(output))
+                except ValueError as error:
+                    raise EvidenceError(str(error)) from error
+            else:
+                evidence = validate_output(command, output, context=validation)
+            if step["group"] == "guard-before":
+                guard_snapshots[command] = plain(output).strip()
+            elif step["group"] == "guard-after":
+                require(command in guard_snapshots and plain(output).strip() == guard_snapshots[command],
+                        "rejected command changed settings, health or physical transfer counters")
+            if command == "version":
+                report["firmware_identity"] = dict(observed=evidence["identity"], expectations=context["expectations"],
+                                                  outcome="MATCHED" if context["expectations"] else "NOT_REQUESTED")
             if command in {"heap", "console"}:
                 require(evidence.get("supported") or not context.get(command, False),
                         "previously available telemetry disappeared")
@@ -720,6 +926,10 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                 context["health_fail"] = number(evidence["health"]["fail"])
             if command == "console" and evidence.get("supported"):
                 context["console_previous"] = evidence["console"]
+            if command == "heap" and evidence.get("supported"):
+                context.setdefault("initial_free_heap", evidence["heap"]["free"])
+            if command == "xfer_stats":
+                context["transfers_previous"] = evidence["transfers"]
             if command == "settings":
                 context["current_supported"] = evidence["current_supported"]
             if command == f"read 0 {context['capacity']}" and original is None:
@@ -727,6 +937,7 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                 context["crc"] = zlib.crc32(original)
                 context["array_payload"] = original
                 durable_write(directory / "array-before.bin", original)
+                report["baseline"] = dict(filename="array-before.bin", length=len(original), sha256=hashlib.sha256(original).hexdigest())
             if step["group"] == "backup":
                 backup = evidence["payload"]
                 require(original is not None and backup == original[args.scratch_address:args.scratch_address + args.scratch_length],
@@ -740,19 +951,25 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
         except EvidenceError as error:
             row.update(outcome="FAIL", reason=str(error))
             report["outcome"] = "FAIL"
-            break
         except (CaptureError, OSError, KeyboardInterrupt) as error:
             row.update(outcome="INCONCLUSIVE", reason=str(error) or "operator interrupted")
             report["outcome"] = "INCONCLUSIVE"
-            break
         except Exception as error:
             row.update(outcome="INCONCLUSIVE", reason=f"unexpected runner error: {type(error).__name__}: {error}")
             report["outcome"] = "INCONCLUSIVE"
-            break
         finally:
             row["elapsed_s"] = round(time.monotonic() - started, 3)
+            try:
+                checkpoint_report(directory, report)
+            except OSError as error:
+                capture_failure(report, f"finite-step checkpoint failed: {error}")
+                if row["outcome"] != "FAIL":
+                    row.update(outcome="INCONCLUSIVE", reason=report["capture_error"])
+        if row["outcome"] in {"FAIL", "INCONCLUSIVE"}:
+            break
     else:
         report["outcome"] = "PASS"
+        checkpoint_report(directory, report)
         return
     for step in report["plan"][len(report["results"]):]:
         report["results"].append(dict(**step, outcome="NOT_RUN", reason="campaign stopped after earlier failure"))
@@ -764,9 +981,13 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                          "serial framing is uncertain; no bytes sent that could complete a partial command" if
                          getattr(session, "framing_lost", False) else
                          "completed response or preflight rejection; no cancellation of preexisting work or automatic restoration"}
+    try:
+        checkpoint_report(directory, report)
+    except OSError as error:
+        capture_failure(report, f"finite campaign checkpoint failed: {error}")
 
 
-def checkpoint_report(directory: Path, report: dict) -> None:
+def write_json_report(directory: Path, report: dict) -> None:
     """Replace a complete checkpoint; a host interruption cannot leave half JSON."""
     temporary = directory / "report.json.tmp"
     with temporary.open("w", encoding="utf-8", newline="\n") as stream:
@@ -775,6 +996,23 @@ def checkpoint_report(directory: Path, report: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     temporary.replace(directory / "report.json")
+
+
+def checkpoint_report(directory: Path, report: dict) -> None:
+    # JSON is authoritative. A missing sidecar must never leave a newly published
+    # JSON PASS while only the in-memory result was downgraded.
+    summary = directory / "report.md.tmp"
+    try:
+        with summary.open("w", encoding="utf-8", newline="\n") as stream:
+            stream.write(render_markdown(report))
+            stream.flush()
+            os.fsync(stream.fileno())
+        summary.replace(directory / "report.md")
+    except OSError as error:
+        capture_failure(report, f"Markdown checkpoint failed: {error}")
+        write_json_report(directory, report)
+        raise
+    write_json_report(directory, report)
 
 
 def capture_failure(report: dict, reason: str) -> None:
@@ -811,7 +1049,7 @@ class RotatingLog:
         self.stream.close()
 
 
-def run_soak(session: Session, args, directory: Path, report: dict, *, clock=time.monotonic, sleep=time.sleep) -> None:
+def run_soak(session: Session, args, directory: Path, report: dict, *, clock=time.monotonic, sleep=time.sleep, progress=None) -> None:
     """Read-only, integrity-checked soak following a successful finite campaign.
 
     A cycle admitted before the duration ends completes under per-command
@@ -821,7 +1059,9 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
         return
     baseline = (directory / "array-before.bin").read_bytes()
     require(len(baseline) == MODELS[args.model], "soak needs a complete saved baseline")
-    context = dict(model=args.model, address=args.address, capacity=len(baseline), crc=zlib.crc32(baseline))
+    require(report.get("baseline", {}).get("sha256") == hashlib.sha256(baseline).hexdigest(), "saved baseline no longer matches finite campaign evidence")
+    context = qualification_context(args)
+    context.update(crc=zlib.crc32(baseline), read_only=True, soaking=True)
     for row in report["results"]:
         evidence = row.get("evidence", {})
         if row["command"] in {"heap", "console"}:
@@ -830,13 +1070,19 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
             context["health_fail"] = number(evidence["health"]["fail"])
         if "console" in evidence:
             context["console_previous"] = evidence["console"]
+        if "heap" in evidence:
+            context.setdefault("initial_free_heap", evidence["heap"]["free"])
+        if "transfers" in evidence:
+            context["transfers_previous"] = evidence["transfers"]
     started = clock()
     summary = dict(outcome="RUNNING", requested_s=args.soak_seconds, elapsed_s=0.0,
                    cycles=0, commands=0, read_bytes=0, crc_bytes=0,
                    latency_min_s=None, latency_max_s=0.0, latency_total_s=0.0,
-                   skipped=[], heap=None, console=context.get("console_previous"))
+                   skipped=[], heap=None, console=context.get("console_previous"),
+                   per_command={}, worst_command=None, duration_met=False)
     report.update(outcome="RUNNING", soak=summary)
     checkpoint_report(directory, report)
+    if progress: progress(report)
     transcript = events = None
     previous_transcript = getattr(session, "transcript", None)
     checkpoint_at = started
@@ -847,7 +1093,7 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
         session.transcript = transcript
         while clock() - started < args.soak_seconds:
             length = min(256, len(baseline) - offset)
-            cycle = [f"read {offset} {length}", f"crc 0 {len(baseline)}", "job", "health", "heap", "console"]
+            cycle = [f"read {offset} {length}", f"crc 0 {len(baseline)}", "job", "health", "heap", "xfer_stats", "console"]
             for command in cycle:
                 row = dict(cycle=summary["cycles"] + 1, command=command)
                 before = clock()
@@ -868,8 +1114,9 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
                         context["health_fail"] = number(evidence["health"]["fail"])
                     if command == "heap" and evidence.get("supported"):
                         heap = evidence["heap"]
+                        context.setdefault("initial_free_heap", heap["free"])
                         if summary["heap"] is None:
-                            summary["heap"] = dict(initial_free=heap["free"], lowest_free=heap["free"])
+                            summary["heap"] = dict(initial_free=context["initial_free_heap"], lowest_free=heap["free"])
                         summary["heap"].update(last_free=heap["free"], minimum_free=heap["minimum-free"],
                                                largest_free_block=heap["largest-free-block"],
                                                lowest_free=min(summary["heap"]["lowest_free"], heap["free"]))
@@ -877,6 +1124,8 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
                     if command == "console" and evidence.get("supported"):
                         summary["console"] = context["console_previous"] = evidence["console"]
                         context["console"] = True
+                    if command == "xfer_stats":
+                        context["transfers_previous"] = evidence["transfers"]
                     if command.startswith("read "): summary["read_bytes"] += length
                     if command.startswith("crc "): summary["crc_bytes"] += len(baseline)
                     row["evidence"] = json_value(evidence)
@@ -890,6 +1139,13 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
                 summary["latency_min_s"] = elapsed if summary["latency_min_s"] is None else min(summary["latency_min_s"], elapsed)
                 summary["latency_max_s"] = max(summary["latency_max_s"], elapsed)
                 summary["latency_total_s"] += elapsed
+                # Group by command family, not rotating addresses or cycle IDs.
+                timing = summary["per_command"].setdefault(command.split()[0], dict(count=0, min_s=elapsed, max_s=0.0, total_s=0.0))
+                timing.update(count=timing["count"] + 1, min_s=min(timing["min_s"], elapsed),
+                              max_s=max(timing["max_s"], elapsed), total_s=timing["total_s"] + elapsed)
+                timing["mean_s"] = timing["total_s"] / timing["count"]
+                if summary["worst_command"] is None or elapsed > summary["worst_command"]["elapsed_s"]:
+                    summary["worst_command"] = dict(command=command, cycle=summary["cycles"] + 1, elapsed_s=elapsed)
                 if row["outcome"] in {"FAIL", "INCONCLUSIVE"}:
                     summary.update(outcome=row["outcome"], failure=row)
                     report["outcome"] = row["outcome"]
@@ -902,6 +1158,7 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
             summary["elapsed_s"] = max(0.0, clock() - started)
             if clock() - checkpoint_at >= 30:
                 checkpoint_report(directory, report)
+                if progress: progress(report)
                 checkpoint_at = clock()
             remaining = args.soak_seconds - (clock() - started)
             if remaining > 0:
@@ -918,6 +1175,7 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
     finally:
         summary["elapsed_s"] = max(0.0, clock() - started)
         summary["overrun_s"] = max(0.0, summary["elapsed_s"] - args.soak_seconds)
+        summary["duration_met"] = summary["elapsed_s"] >= args.soak_seconds
         summary["transcript_rotations"] = transcript.rotations if transcript else 0
         summary["event_rotations"] = events.rotations if events else 0
         summary["latency_mean_s"] = summary["latency_total_s"] / max(1, summary["commands"])
@@ -936,8 +1194,20 @@ def run_soak(session: Session, args, directory: Path, report: dict, *, clock=tim
             summary["outcome"] = report["outcome"]
 
 
+def print_progress(report: dict) -> None:
+    soak = report.get("soak", {})
+    if soak.get("outcome") == "RUNNING":
+        print(f"Soak: {soak['elapsed_s']:.1f}/{soak['requested_s']:g}s cycles={soak['cycles']} "
+              f"commands={soak['commands']} read-bytes={soak['read_bytes']} outcome={report['outcome']}", flush=True)
+    elif report.get("results"):
+        row = report["results"][-1]
+        print(f"Step {len(report['results'])}/{len(report['plan'])}: {row['command']} ({row['outcome']})", flush=True)
+
+
 def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = parse_args(argv)
+    started = time.monotonic()
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     directory = args.out / ("eeprom-" + timestamp + "-" + secrets.token_hex(4))
     directory.mkdir(parents=True, exist_ok=False)
@@ -947,8 +1217,17 @@ def main(argv=None) -> int:
                   allow_write=args.allow_write, plan=build_plan(args), results=[], serial_executed=False,
                   electrical_evidence="NOT_RUN")
     report.update(dtr=args.dtr, soak=dict(outcome="NOT_RUN", requested_s=args.soak_seconds))
-    if args.allow_write and args.scratch_length < 28:
-        report["omitted"] = [{"command": "typed_demo", "outcome": "SKIPPED", "reason": "authorized scratch window is smaller than 28 bytes"}]
+    report.update(schema_version=2, finalized=False, provenance=collect_provenance(argv),
+                  configuration={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()})
+    progress = None if args.quiet else print_progress
+    report["omitted"] = [{"command": name, "outcome": "NOT_RUN", "reason": "requires a separate physical fixture/procedure"}
+                         for name in ("electrical timing and margins", "hardware WP", "power-cut and retention", "USB disconnect/stuck bus")]
+    if not args.include_guards:
+        report["omitted"].append(dict(command="read-only rejection matrix", outcome="SKIPPED", reason="--include-guards not requested"))
+    if not args.allow_write:
+        report["omitted"].extend(dict(command=name, outcome="SKIPPED", reason="scratch programming not authorized") for name in sorted(SCRATCH))
+    elif args.scratch_length < 28:
+        report["omitted"].append(dict(command="typed_demo", outcome="SKIPPED", reason="authorized scratch window is smaller than 28 bytes"))
     serial = None
     try:
         checkpoint_report(directory, report)
@@ -968,8 +1247,8 @@ def main(argv=None) -> int:
                 report["outcome"] = "RUNNING"
                 checkpoint_report(directory, report)
                 session.command("hilmark " + secrets.token_hex(12), asynchronous=False, allow_startup=True)
-                run_plan(session, args, directory, report)
-                run_soak(session, args, directory, report)
+                run_plan(session, args, directory, report, progress=progress)
+                run_soak(session, args, directory, report, progress=progress)
     except (ImportError, OSError, CaptureError, EvidenceError, KeyboardInterrupt) as error:
         capture_failure(report, str(error) or "operator interrupted")
     except Exception as error:
@@ -980,6 +1259,7 @@ def main(argv=None) -> int:
                 serial.close()
             except OSError as error:
                 capture_failure(report, f"serial close failed: {error}")
+        report.update(finalized=True, finished_utc=dt.datetime.now(dt.timezone.utc).isoformat(), duration_s=max(0.0, time.monotonic() - started))
         try:
             checkpoint_report(directory, report)
         except OSError as error:
@@ -987,7 +1267,7 @@ def main(argv=None) -> int:
     print(f"{report['outcome']}: {directory}")
     if "capture_error" in report:
         print(report["capture_error"], file=sys.stderr)
-    return 0 if report["outcome"] in {"PASS", "NOT_RUN"} else 1 if report["outcome"] == "FAIL" else 2
+    return 0 if report["outcome"] == "PASS" or (report["outcome"] == "NOT_RUN" and not args.require_run) else 1 if report["outcome"] == "FAIL" else 2
 
 
 if __name__ == "__main__":

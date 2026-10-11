@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -19,8 +20,11 @@ def frame(command, body="", session=7, status="OK", outcome="SUCCESS"):
 
 
 def transfer(length, *, kind="READ", address=0):
+    programs = kind in {"VERIFIED_WRITE", "VERIFIED_FILL", "VERIFIED_UPDATE"}
+    verified = programs or kind == "VERIFY"
     return (f"Transfer: kind={kind} state=SUCCEEDED address=0x{address:05X} requested={length} "
-            f"accepted=0 completed={length} verified=0 commit=NO_WRITE last-chunk-commit=NO_WRITE "
+            f"accepted={length if programs else 0} completed={length} verified={length if verified else 0} "
+            f"commit={'VERIFIED' if programs else 'NOT_APPLICABLE'} last-chunk-commit={'ACCEPTED' if programs else 'NOT_APPLICABLE'} "
             "status=OK detail=0 request-id=2147483648\n")
 
 
@@ -41,6 +45,12 @@ def rw_evidence():
         row = transfer(8, kind=kind, address=4).replace("request-id=2147483648", f"request-id={index + 1}")
         if kind != "READ":
             row = row.replace("verified=0", "verified=8")
+        if kind.startswith("VERIFIED_"):
+            row += "Write: status=OK detail=0\n"
+        if kind == "VERIFIED_UPDATE":
+            row += "Update comparison: status=OK detail=0 compared=8 skipped=0\n"
+        if kind.startswith("VERIFIED_") or kind == "VERIFY":
+            row += "Verification: status=OK detail=0 match=yes\n"
         body += row
     return body + (
         "Scratch: stage=IDLE address=0x00004 length=8 rounds=8/8 backup=none restore-required=no primary=OK detail=0 restore=OK detail=0\n"
@@ -94,6 +104,39 @@ class FakeSerial:
 
 
 class PayloadAndEvidenceTests(unittest.TestCase):
+    def test_duplicate_fields_cannot_hide_error_evidence(self):
+        for command, response in (
+            ("read 0 1", frame("read", dump(b"a") + transfer(1).replace("status=OK", "status=TIMEOUT status=OK"))),
+            ("console", console_record().replace("tx-dropped=0", "tx-dropped=99 tx-dropped=0")),
+            ("health", HEALTH.replace("fail=0", "fail=9 fail=0")),
+        ):
+            with self.subTest(command=command), self.assertRaises(hil.EvidenceError):
+                hil.validate_output(command, response)
+        record = hil.fields("Scratch: primary=OK detail=3 restore=OK detail=4")
+        self.assertEqual(record["primary-detail"], "3")
+        self.assertEqual(record["restore-detail"], "4")
+
+    def test_diagnostic_headers_alone_do_not_prove_geometry_or_help(self):
+        for command, response in (("size", "Active configured capacity: 1 bytes (not detected)\n"),
+                                  ("page 0", "Page: nonsense\n"),
+                                  ("help tests", "=== EEPROM24Cxx CLI Help ===\n")):
+            with self.subTest(command=command), self.assertRaises(hil.EvidenceError):
+                hil.validate_output(command, response)
+        page = "Page: address=0x10000 number=512 offset=0 remaining=128 bank-remaining=65536 sla=0x54 pointer=0x0000 pointer-bytes=2\n"
+        context = {"model": "24lc1025", "capacity": 131072, "address": 0x50}
+        hil.validate_output("page 65536", page, context=context)
+        with self.assertRaises(hil.EvidenceError):
+            hil.validate_output("page 65536", page.replace("sla=0x54", "sla=0x51"), context=context)
+
+    def test_scratch_requires_consistent_commit_and_stage_status(self):
+        body = rw_evidence()
+        for changed in (body.replace("commit=VERIFIED", "commit=INDETERMINATE"),
+                        body.replace("Write: status=OK", "Write: status=I2C_TIMEOUT"),
+                        body.replace("match=yes", "match=no"), body.replace("compared=8 skipped=0", "compared=8 skipped=1"),
+                        body.replace("Verification: status=OK detail=0 match=yes\n", "", 1)):
+            with self.subTest(body=changed), self.assertRaises(hil.EvidenceError):
+                hil.validate_output("rw_suite 4 8 confirm", frame("rw_suite", changed))
+
     def test_read_requires_every_byte_and_terminal_identity(self):
         data = bytes(range(32))
         output = frame("read", dump(data, 3) + transfer(32, address=3))
@@ -107,6 +150,8 @@ class PayloadAndEvidenceTests(unittest.TestCase):
             output + dump(b"\x00", 35),
             output.replace("state=SUCCEEDED", "state=FAILED"),
             output.replace("status=OK code=0", "status=I2C_TIMEOUT code=0"),
+            output.replace("status=OK code=0 detail=0", "status=OK code=0 detail=99"),
+            output.replace("session=7", "session=4294967296"),
         ):
             with self.subTest(output=bad), self.assertRaises(hil.EvidenceError):
                 hil.validate_output("read 3 32", bad)
@@ -348,6 +393,85 @@ class PlanAndDurabilityTests(unittest.TestCase):
                 hil.durable_write(path, b"replacement")
             self.assertEqual(path.read_bytes(), b"original")
 
+    def test_checkpoint_precedes_command_and_preserves_completed_steps(self):
+        report = {"plan": [{"command": "health", "group": "safe", "writes": False}] * 2, "results": []}
+        case = self
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            class Fixture:
+                count = 0
+                def command(self, command, **_kwargs):
+                    saved = json.loads((directory / "report.json").read_text())
+                    case.assertEqual(saved["results"][-1]["outcome"], "RUNNING")
+                    if self.count:
+                        case.assertEqual(saved["results"][0]["outcome"], "PASS")
+                    self.count += 1
+                    return HEALTH
+            hil.run_plan(Fixture(), self.args(), directory, report)
+            self.assertEqual(json.loads((directory / "report.json").read_text())["outcome"], "PASS")
+
+    def test_checkpoint_failure_prevents_next_command(self):
+        report = {"plan": [{"command": "health", "group": "safe", "writes": False}], "results": []}
+        class Fixture:
+            def command(self, *args, **kwargs): raise AssertionError("must not send before checkpoint")
+        with tempfile.TemporaryDirectory() as temporary, patch.object(hil, "checkpoint_report", side_effect=OSError("disk full")):
+            hil.run_plan(Fixture(), self.args(), Path(temporary), report)
+        self.assertEqual(report["outcome"], "INCONCLUSIVE")
+        self.assertIn("disk full", report["capture_error"])
+
+    def test_markdown_failure_cannot_leave_json_pass(self):
+        for initial in ("PASS", "FAIL"):
+            report = {"outcome": initial}
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                hil.checkpoint_report(directory, report)
+                original = Path.replace
+                def replace(path, destination):
+                    if path.name == "report.md.tmp": raise OSError("summary unavailable")
+                    return original(path, destination)
+                with patch.object(Path, "replace", replace), self.assertRaises(OSError):
+                    hil.checkpoint_report(directory, report)
+                stored = json.loads((directory / "report.json").read_text())
+                self.assertEqual(stored["outcome"], "FAIL" if initial == "FAIL" else "INCONCLUSIVE")
+
+    def test_guards_detect_bus_activity_even_when_error_line_is_correct(self):
+        class Fixture:
+            count = 0
+            def command(self, command, **_kwargs):
+                self.count += 1
+                if command == "read 0 0": return "[E] INVALID_PARAM detail=0\n"
+                count = 1 if self.count == 1 else 2
+                return f"Transfers: attempts={count} read={count} write=0 probe=0 ok={count} fail=0\n"
+        report = {"results": [], "plan": [
+            dict(command="xfer_stats", group="guard-before", writes=False),
+            dict(command="read 0 0", group="guard", writes=False, expected_error="INVALID_PARAM"),
+            dict(command="xfer_stats", group="guard-after", writes=False)]}
+        with tempfile.TemporaryDirectory() as temporary:
+            hil.run_plan(Fixture(), self.args("--include-guards"), Path(temporary), report)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertIn("rejected command changed", report["results"][-1]["reason"])
+
+    def test_identity_mismatch_stops_before_device_procedures(self):
+        class Fixture:
+            def command(self, command, **_kwargs):
+                return "EEPROM24Cxx diagnostic CLI | native-esp-idf 5.5.5 | esp32s3 | built Oct 11 2026 12:00:00\nLibrary: 1.0.0 (abcdef0, unknown, clean)\n"
+        report = {"results": [], "plan": [dict(command="version", group="safe", writes=False), dict(command="discover", group="safe", writes=False)]}
+        with tempfile.TemporaryDirectory() as temporary:
+            hil.run_plan(Fixture(), self.args("--expect-target", "esp32s2"), Path(temporary), report)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertEqual(report["results"][1]["outcome"], "NOT_RUN")
+
+    def test_require_run_keeps_dry_run_not_run_and_returns_nonzero(self):
+        with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()):
+            result = hil.main(["--dry-run", "--require-run", "--out", temporary, "--model", "zetta", "--address", "0x50"])
+            report_path = next(Path(temporary).glob("*/report.json"))
+            report = json.loads(report_path.read_text())
+        self.assertEqual(result, 2)
+        self.assertEqual(report["outcome"], "NOT_RUN")
+        self.assertTrue(report["finalized"])
+        self.assertIn("sources", report["provenance"])
+        self.assertEqual(report["configuration"]["long_timeout"], 180)
+
     def test_backup_io_failure_prevents_programming_and_never_restores(self):
         args = self.args("--allow-write", "--scratch-address", "0", "--scratch-length", "8")
         report = {"plan": [
@@ -367,6 +491,29 @@ class PlanAndDurabilityTests(unittest.TestCase):
             hil.run_plan(fixture, args, Path(temporary), report)
         self.assertEqual(report["outcome"], "INCONCLUSIVE")
         self.assertEqual(fixture.commands, ["read 0 256", "read 0 8"])
+
+    def test_changed_durable_backup_prevents_programming(self):
+        args = self.args("--allow-write", "--scratch-address", "0", "--scratch-length", "8")
+        report = {"plan": [
+            dict(command="read 0 256", group="safe", writes=False),
+            dict(command="read 0 8", group="backup", writes=False),
+            dict(command="rw_suite 0 8 confirm", group="scratch", writes=True)], "results": []}
+        commands = []
+        class Fixture:
+            def command(self, command, **_kwargs):
+                commands.append(command)
+                length = int(command.split()[2])
+                return frame("read", transfer(length) + dump(bytes(length)))
+        checkpoint = hil.checkpoint_report
+        def tamper(directory, current):
+            checkpoint(directory, current)
+            if current["results"][-1]["writes"]:
+                (directory / "scratch-preimage.bin").write_bytes(b"changed!")
+        with tempfile.TemporaryDirectory() as temporary, patch.object(hil, "checkpoint_report", side_effect=tamper):
+            hil.run_plan(Fixture(), args, Path(temporary), report)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertEqual(commands, ["read 0 256", "read 0 8"])
+        self.assertIn("intact durable backup", report["results"][-1]["reason"])
 
     def test_preflight_failure_never_cancels_foreign_work(self):
         class Fixture:
@@ -401,7 +548,7 @@ class PlanAndDurabilityTests(unittest.TestCase):
             def close(self): raise OSError("close failed")
         class SerialModule:
             Serial = BrokenSerial
-        def failed_plan(_session, _args, _directory, report):
+        def failed_plan(_session, _args, _directory, report, **_kwargs):
             report["outcome"] = "FAIL"
         with tempfile.TemporaryDirectory() as temporary, patch.dict("sys.modules", {"serial": SerialModule}), \
                 patch.object(hil.Session, "command", return_value=""), patch.object(hil, "run_plan", side_effect=failed_plan), \
@@ -454,7 +601,7 @@ class SoakTests(unittest.TestCase):
     def args(self, *extras):
         return hil.parse_args(["--dry-run", "--out", "unused", "--model", "zetta", "--address", "0x50", *extras])
 
-    def run_fixture(self, seconds=4, fault=None):
+    def run_fixture(self, seconds=4, fault=None, extras=(), progress=None):
         timer = Clock()
         original = bytes(range(256))
         class Fixture:
@@ -478,14 +625,15 @@ class SoakTests(unittest.TestCase):
                 if command == "job": return "CLI job: active=0 command=crc session=1 auto=1\n"
                 if command == "heap": return "Heap: free=10000 minimum-free=9000 largest-free-block=8000 bytes\n"
                 if command == "console": return console_record(100 + len(self.commands))
+                if command == "xfer_stats": return "Transfers: attempts=10 read=10 write=0 probe=0 ok=10 fail=0\n"
                 raise AssertionError(command)
         fixture = Fixture()
-        report = {"outcome": "PASS", "results": []}
+        report = {"outcome": "PASS", "results": [], "baseline": {"sha256": hashlib.sha256(original).hexdigest()}}
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             (directory / "array-before.bin").write_bytes(original)
-            hil.run_soak(fixture, self.args("--soak-seconds", str(seconds)), directory, report,
-                         clock=timer, sleep=lambda duration: setattr(timer, "time", timer.time + duration))
+            hil.run_soak(fixture, self.args("--soak-seconds", str(seconds), *extras), directory, report,
+                         clock=timer, sleep=lambda duration: setattr(timer, "time", timer.time + duration), progress=progress)
             stored = json.loads((directory / "report.json").read_text())
             events = [json.loads(line) for line in (directory / "soak-events.jsonl").read_text().splitlines()]
             self.assertEqual(stored["outcome"], report["outcome"])
@@ -498,7 +646,9 @@ class SoakTests(unittest.TestCase):
         self.assertEqual(report["soak"]["commands"], len(commands))
         self.assertEqual(len(events), len(commands))
         self.assertEqual(report["results"], [])
-        self.assertLess(len(json.dumps(report)), 2000)
+        self.assertLess(len(json.dumps(report)), 4500)
+        self.assertEqual(len(report["soak"]["per_command"]), 7)
+        self.assertTrue(report["soak"]["duration_met"])
         self.assertFalse(set(c.split()[0] for c in commands) & (hil.SCRATCH | {"write", "recover", "restore", "stop"}))
 
     def test_corruption_stops_without_retry_recovery_or_more_commands(self):
@@ -538,6 +688,45 @@ class SoakTests(unittest.TestCase):
         self.assertEqual(report["outcome"], "PASS")
         self.assertEqual(report["soak"]["skipped"], ["heap", "console"])
 
+    def test_requested_heap_requirements_fail_low_missing_or_falling_heap(self):
+        report, _, _ = self.run_fixture(extras=("--min-free-heap", "10001"))
+        self.assertEqual(report["outcome"], "FAIL")
+        report, _, _ = self.run_fixture(extras=("--min-free-heap", "1"),
+            fault=lambda command, n: "[E] UNSUPPORTED detail=0\n" if command == "heap" else None)
+        self.assertEqual(report["outcome"], "FAIL")
+        report, _, _ = self.run_fixture(extras=("--max-heap-drop", "5"),
+            fault=lambda command, n: "Heap: free=9990 minimum-free=9000 largest-free-block=8000 bytes\n" if command == "heap" and n > 7 else None)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertIn("heap drop", report["soak"]["failure"]["reason"])
+
+    def test_soak_rejects_new_physical_writes(self):
+        report, commands, _ = self.run_fixture(fault=lambda command, n:
+            "Transfers: attempts=11 read=10 write=1 probe=0 ok=11 fail=0\n" if command == "xfer_stats" and n > 7 else None)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertEqual(commands[-1], "xfer_stats")
+        self.assertIn("write counter changed", report["soak"]["failure"]["reason"])
+
+    def test_soak_progress_is_periodic_and_timings_are_grouped(self):
+        updates = []
+        report, _, _ = self.run_fixture(100, progress=lambda report: updates.append(report["soak"]["cycles"]))
+        self.assertTrue(3 <= len(updates) <= 5)
+        self.assertEqual(updates, sorted(updates))
+        timings = report["soak"]["per_command"]
+        self.assertEqual(timings["read"]["count"], report["soak"]["cycles"])
+        self.assertGreater(timings["crc"]["mean_s"], 0)
+        self.assertIn("command", report["soak"]["worst_command"])
+
+    def test_soak_refuses_changed_baseline_before_sending_commands(self):
+        original = bytes(range(256))
+        class Fixture:
+            def command(self, *args, **kwargs): raise AssertionError("no command before valid baseline")
+        report = {"outcome": "PASS", "results": [], "baseline": {"sha256": hashlib.sha256(original).hexdigest()}}
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "array-before.bin").write_bytes(bytes(256))
+            with self.assertRaises(hil.EvidenceError):
+                hil.run_soak(Fixture(), self.args("--soak-seconds", "1"), directory, report)
+
     def test_rotation_bounds_disk_and_retains_newest_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "events"
@@ -553,7 +742,9 @@ class SoakTests(unittest.TestCase):
         self.assertEqual(self.args("--soak-hours", "2").soak_seconds, 7200)
         self.assertEqual(self.args("--dtr", "1").dtr, 1)
         for extras in (("--soak-hours", "169"), ("--soak-seconds", "nan"), ("--soak-interval", "0"),
-                       ("--soak-hours", "1", "--soak-seconds", "1"), ("--dtr", "2")):
+                       ("--soak-hours", "1", "--soak-seconds", "1"), ("--dtr", "2"),
+                       ("--expect-target", "unknown"), ("--expect-framework", "unknown"),
+                       ("--min-free-heap", "4294967296"), ("--max-heap-drop", "-1"), ("--expect-commit", "abcd")):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit): self.args(*extras)
 
     def test_console_partial_or_unmeasurable_fields_are_not_invented(self):

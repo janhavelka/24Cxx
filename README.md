@@ -78,6 +78,9 @@ runner, timed soak (`--soak-hours 24`), explicit scratch campaign and S2/S3 USB
 settings. Start with `help quickstart`, `help detection` or `help tests`; `console`
 reports transport and loss telemetry. Arduino S2 serial sessions require DTR=1
 (`--dtr 1` in the runner).
+The Python runner also offers a read-only rejection matrix (`--include-guards`),
+firmware expectations and heap limits, with checkpointed JSON/Markdown reports
+and host provenance. Use `--require-run` when automation requires execution.
 
 Read the [ownership and completion contract](docs/integration.md) before writing
 an adapter. WP-high may acknowledge a write while preserving old contents;

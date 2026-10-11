@@ -8,6 +8,41 @@ The [earlier audit findings and parity matrix](audit-2026-09-26.md) record the
 initial API comparison. The deeper CLI/procedure audit below compares actual
 implementations and test collectors, not just command names.
 
+## Python HIL re-audit, 2026-10-11
+
+A separate pass inspected the sibling Python collectors and their tests again,
+covering all sixteen libraries below. The useful patterns were applied to the
+existing runner without adding runtime dependencies on sibling repositories.
+TMP1x2 had advanced to `aff6c67` and TCA9548A to `d715970` since the preceding
+CLI review; the other inspected revisions are recorded in its table.
+
+| Reference and inspected implementation | Applied to this runner |
+| --- | --- |
+| TMP1x2 `parse_firmware` / preflight; INA228 `version_contract_errors` | Parse firmware identity and compare optional version, commit, target, framework and clean-tree requirements before device procedures |
+| BME280 `write_manifest` / `write_transcript_header`; TCA9548A `write_report`; SCD41 `environment_metadata` / `write_markdown` | Effective options, exact arguments, host commit/tree and source hashes, separate firmware declarations, readable Markdown plus authoritative JSON |
+| LDC1614 and LSM6DS3TR argument guards; MB85RC memory evidence | Read-only parser/range rejection matrix with unchanged state/counters; strict memory transfer and restoration evidence |
+| SHT3x-main `append_progress`; RV3032-C7 `run_soak` | Finite-step progress/checkpoints and bounded periodic soak progress with slowest-command attribution |
+| MCP45HVX1 benchmark/soak timing; SSD1315 `build_metadata` / `verdicts_for` | Fixed per-command timing aggregates, explicit requested-duration completion and qualification requirements |
+| OPT4001, ADS1115, PCA9555 and INA3221 collectors | Retain structured results and unsupported telemetry handling; add optional heap thresholds and explicit skipped/manual scope |
+
+The re-audit reproduced two false-pass risks in the old EEPROM collector:
+duplicate keys could hide errors, and contradictory transfer commit/accepted-byte
+evidence could be accepted. Both now fail validation, including within scratch
+suites. The runner also verifies stage statuses, diagnostic content, durable
+scratch bytes before each write and the saved baseline hash before soaking.
+Read-only campaigns enforce unchanged physical write counts; soak checks also
+reject new physical transfer failures. Every finite step is checkpointed, and a
+report is complete only after cleanup sets `finalized: true`.
+
+The comparison retains EEPROM-specific limits: programming needs an explicit
+scratch window, a durable backup and readback restoration; timed soak remains
+read-only. No automatic reconnect, reset, replay or recovery is introduced.
+AT21CS11 `cfc0eaa` supplied additional EEPROM mutation semantics but has no Python
+HIL runner and uses single-wire signaling. Offline validation here uses actual
+modeled C++ CLI transcripts and injected failures; it is not a sibling replay
+feature or evidence from physical hardware. See the [runner guide](hardware-validation.md)
+and [recorded checks](validation.md) for usage and actual validation results.
+
 ## CLI and procedure audit, 2026-10-11
 
 The follow-up pass also inspected detection, help indexing, timed stress, Python

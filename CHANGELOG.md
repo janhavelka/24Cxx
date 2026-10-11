@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Reject duplicate HIL evidence fields and inconsistent write-commit, byte-count
+  or stage records; recheck saved preimages before programming and soaking.
+- Checkpoint each finite HIL step before sending commands, and prevent report
+  summary failures from leaving a newly published JSON PASS.
 - Replace blocking/competing example consoles with an explicit console owner,
   bounded partial output and input polling; prevent detected RX loss from
   executing a damaged command. Configure S2/S3 control lines and native IDF
@@ -48,6 +52,11 @@
 
 ### Added
 
+- Python HIL firmware expectations, read-only rejection matrix, optional heap
+  limits and physical-write counter checks; grouped host help and progress.
+- JSON/Markdown qualification reports with host provenance, explicit omitted
+  procedures, cleanup finalization and per-command soak timing; `--require-run`
+  prevents a dry run from returning a successful automation exit code.
 - Topic/per-command help, read-only quickstart, `detect`, targeted address probes,
   bank coverage and per-address error summaries, legal bases and pointer mapping.
 - Rotating paired read stress with finite intervals, progress/latency/byte metrics,

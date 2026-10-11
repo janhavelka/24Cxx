@@ -1,5 +1,35 @@
 # Validation results
 
+## Python HIL re-audit: 2026-10-11
+
+The [Python sibling review](library-comparison.md#python-hil-re-audit-2026-10-11)
+added firmware requirements, host provenance, readable reports, rejection checks,
+heap limits and stronger transfer evidence. This pass changes host tooling and
+its test discovery; embedded source and public APIs are unchanged.
+
+- All 91 offline Python tests pass. New cases cover identity mismatches, unknown
+  metadata, duplicate fields hiding failures, inconsistent write effects/stages,
+  guard state changes, per-step checkpoints, report I/O failure, tampered backup
+  and baseline files, heap limits, unexpected writes, bounded progress/timing,
+  Markdown escaping and `--require-run` exit behavior.
+- The actual modeled C++ CLI passes 18 targeted transcript checks, a complete
+  70-command read-only campaign, an 81-command scratch campaign, and two soak
+  cycles. Both full campaigns include all 30 read-only rejection cases and
+  before/after state/counter comparisons. Scratch coverage exercises all nine
+  transfer kinds and independent array restoration checks.
+- Strict GCC 15.1.0 C++17 CMake/Ninja: all nine CTest entries pass, including all
+  Python helper tests and modeled CLI campaigns. Release/framework contracts
+  and vendor reference integrity checks pass.
+- Read-only and scratch-enabled 24-hour soak dry runs produce schema-v2
+  NOT_RUN reports with JSON/Markdown, effective settings and host provenance.
+  They open no serial port; `--require-run` makes NOT_RUN nonzero.
+- An independent final code review checked failure preservation, backup ordering,
+  identity/heap requirements, counter continuity and report finalization.
+
+Artifacts are ignored under `build-cli-audit/`. No board was flashed, no port was
+opened and no physical soak, retention, WP or FieldCore-node test was performed.
+The [hardware guide](hardware-validation.md) records the remaining procedures.
+
 ## Detection, console and long-run re-audit: 2026-10-11
 
 The follow-up [sibling comparison](library-comparison.md) covered indexed help,

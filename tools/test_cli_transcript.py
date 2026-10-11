@@ -59,10 +59,25 @@ def main():
     # using actual firmware output. Serial framing itself has fault-injection tests.
     with tempfile.TemporaryDirectory() as temporary:
         args = parse_args(["--dry-run", "--model", "zetta", "--address", "0x50",
+                           "--out", temporary, "--include-guards"])
+        readonly_plan = build_plan(args)
+        outputs = iter(capture([step["command"] for step in readonly_plan]))
+
+        class ReadonlySession:
+            def command(self, _command, **_kwargs):
+                return next(outputs)
+
+        report = {"plan": readonly_plan, "results": []}
+        run_plan(ReadonlySession(), args, Path(temporary), report)
+        if report["outcome"] != "PASS":
+            raise AssertionError([row for row in report["results"] if row.get("outcome") in {"FAIL", "INCONCLUSIVE"}])
+
+    with tempfile.TemporaryDirectory() as temporary:
+        args = parse_args(["--dry-run", "--model", "zetta", "--address", "0x50",
                            "--out", temporary, "--allow-write", "--scratch-address", "32",
-                           "--scratch-length", "40", "--scratch-rounds", "3", "--soak-seconds", "2"])
+                           "--scratch-length", "40", "--scratch-rounds", "3", "--soak-seconds", "2", "--include-guards"])
         plan = build_plan(args)
-        scripted = [step["command"] for step in plan] + ["read 0 256", "crc 0 256", "job", "health", "heap", "console"] * 2
+        scripted = [step["command"] for step in plan] + ["read 0 256", "crc 0 256", "job", "health", "heap", "xfer_stats", "console"] * 2
         outputs = iter(zip(scripted, capture(scripted)))
 
         class RecordedSession:
@@ -75,7 +90,7 @@ def main():
         report = {"plan": plan, "results": []}
         run_plan(RecordedSession(), args, Path(temporary), report)
         if report["outcome"] != "PASS":
-            raise AssertionError(report)
+            raise AssertionError([row for row in report["results"] if row.get("outcome") in {"FAIL", "INCONCLUSIVE"}])
         if (Path(temporary) / "scratch-preimage.bin").read_bytes() != baseline[32:72]:
             raise AssertionError("durable scratch backup differs from known preimage")
         now = [0.0]
@@ -84,7 +99,7 @@ def main():
         if report["outcome"] != "PASS" or report["soak"]["cycles"] != 2:
             raise AssertionError(report)
     print(f"[PASS] {len(commands)} real CLI transcripts satisfy HIL evidence contracts")
-    print(f"[PASS] complete {len(plan)}-command runner campaign against modeled CLI")
+    print(f"[PASS] complete {len(readonly_plan)}-command read-only and {len(plan)}-command scratch campaigns against modeled CLI")
     print("[PASS] two soak cycles with actual CLI output, checkpoints and optional telemetry")
     return 0
 
