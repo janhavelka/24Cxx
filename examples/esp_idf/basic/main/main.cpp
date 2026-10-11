@@ -157,6 +157,10 @@ extern "C" void app_main() {
   platform.setWriteProtect = eeprom24cxx_cli::setWriteProtect;
   platform.resetInterface = resetInterface;
   platform.heapStats = heapStats;
+  platform.sdaPin = board::I2C_SDA;
+  platform.sclPin = board::I2C_SCL;
+  platform.writeProtectPin = board::WP_PIN;
+  platform.frequencyHz = board::I2C_FREQUENCY_HZ;
   platform.framework = "native-esp-idf";
   platform.frameworkVersion = esp_get_idf_version();
   platform.target = CONFIG_IDF_TARGET;

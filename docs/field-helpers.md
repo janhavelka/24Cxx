@@ -8,13 +8,13 @@ Page references are PDF pages, not the inconsistent printed labels.
 | Chip function | Library/API support | Shared example CLI |
 | --- | --- | --- |
 | Byte, partial-page and page writes (pp. 7-8) | `startWrite`/`requestWrite`, page/bank/transport splitting; blocking `writeByte`, `writeOnce`, `write` | `write`, `wverify`, `fill`, `fillverify`, explicit scratch tests |
-| ACK polling after STOP (p. 8) | Optional address-only probe; bounded write-cycle state and conservative timed fallback | All programming commands use the driver scheduler |
+| ACK polling after STOP (p. 8) | Optional address-only probe; bounded write-cycle state and conservative timed fallback | All programming commands use the driver scheduler; `ackpoll`, `writecycle`, `job step` expose both paths |
 | Random and sequential reads (pp. 9-10) | Cooperative and synchronous addressed reads | `read`, `dump`, `text`, `strings`, `crc`, `watch`, full-array `selftest` |
 | Current-address reads (p. 9) | `startCurrentRead`/`requestCurrentRead`, `readCurrentAddress`; explicit transport capability and known pointer required | `current`/`cur` after seeding a known pointer |
 | Hardware write protection (pp. 2-3, 13) | Application GPIO policy and explicit setup/hold settling; verified operations detect suppressed writes | Optional `wp`, `wp 0`, `wp 1`; configured example WP starts high |
 | Standby (p. 4) | Automatic after STOP/programming; no software sleep instruction | No extra command is needed |
 | Protocol recovery (p. 4) | Up to nine clocks, SDA high with SCL high, then START; application adds STOP to return idle and invalidates the pointer | Explicit `iface_reset`, followed by a conservative programming wait |
-| Address pins and bus rate (pp. 2, 6, 13) | Validated base address and geometry; application configures bus clock | `init [address]`, model/settings diagnostics; board clock configuration |
+| Address pins and bus rate (pp. 2, 6, 13) | Validated base address and geometry; application configures bus clock | `init [address]`, `bus`, model/settings diagnostics; board clock configuration |
 
 The chip has no identity register, register map, erase opcode or software lock.
 Filling with `0xFF` is ordinary programming and consumes endurance. Other vendors'
@@ -32,6 +32,11 @@ successful explicit recovery, and the CLI preserves its post-recovery tWR wait.
 
 The [detailed audit](audit-2026-09-26.md#datasheet-and-structure-recheck) records
 the remaining electrical limits and inconsistencies checked against the source.
+The [CLI comparison](library-comparison.md#cli-and-procedure-audit-2026-10-11)
+maps the sibling libraries' procedures to this EEPROM. The shared CLI exercises
+cooperative ownership and all typed codecs, while the
+[hardware runner](hardware-validation.md#serial-qualification-runner) captures
+command evidence and checks restored bytes independently.
 
 ## Synchronous access and typed storage
 

@@ -96,15 +96,23 @@ void Cli::setup(const Platform& platform, const EEPROM24Cxx::Config& config) {
   if (_configured && !bound.ok()) { status(bound); return; }
   _platform = platform;
   _config = config;
+  _adapterTxLimit = config.maxTxBytes; _adapterRxLimit = config.maxRxBytes;
+  _adapterProbe = config.i2cProbe;
   _configured = true;
   _length = 0; _overflow = false;
   _hasResult = false; _lastResult = {};
   _hasScratchPrimaryResult = false; _hasScratchRestoreResult = false;
   _scratchPrimary = {}; _scratchRestore = {};
   _scratchAddress = _scratchLength = _scratchRounds = _scratchRound = 0;
+  _scratchReadRound = 0; _scratchStep = 0;
+  _scratchChecks = _scratchCheckFailures = _scratchOperationCheckFailures = _scratchCurrentSkipped = 0;
+  std::memset(_scratchOperations, 0, sizeof(_scratchOperations));
   _scratchPrimaryElapsedMs = _scratchRestoreElapsedMs = _scratchVerifiedBytes = 0;
   _scratchPrimaryBus = {};
   _jobs = _jobSuccesses = _jobFailures = 0;
+  _sessionActive = false; _hasSessionResult = false; _autoPoll = true;
+  _sessionId = 0; std::strcpy(_sessionCommand, "none");
+  _deadlineMs = 0; _sessionBudgetMs = 0;
   printVersion();
   print("Diagnostic CLI; application owns the bus. Type 'help' for commands.\n");
   print("EEPROM has no standard identity register: select the exact geometry before writing.\n");
@@ -153,10 +161,17 @@ void Cli::printHelp() {
   item("fillverify <addr> <byte> <N>", "Explicit fill with readback verification");
   item("verify <addr> <byte...>", "Read-only comparison against 1..32 expected bytes");
   item("progress / status / job / result", "Cached operation progress and commit evidence");
+  item("job auto [0|1] / job step [0|1]", "Control owner polling; step uses at most one transfer");
+  item("job cancel / timeout / result", "End scheduling or inspect the last complete CLI job");
   item("stop / cancel", "Cancel future work; an issued EEPROM write continues");
   section("Configuration");
   item("cfg / settings / snapshot", "Cached staged settings and geometry; no I2C");
+  item("bus", "Cached application pins, rate and WP configuration");
   item("timeout [1..1000]", "Set transaction timeout while ended");
+  item("limits [tx rx]", "Set chunk limits while ended; cannot exceed adapter limits");
+  item("writecycle [0..1000]", "Set tWR while ended; 0=preset, never shorten preset");
+  item("ackpoll [0|1]", "Set ACK polling while ended; 0 uses timed waiting");
+  item("deadline [ms]", "Whole CLI job deadline; 0=disabled, maximum 2147483647");
   item("offline [0..255]", "Set passive offline threshold while ended; 0 disables");
   item("variants / size", "List profile geometry / show configured capacity");
   item("geometry / timing / page [addr]", "Cached geometry/timing or page and bank boundaries");
@@ -176,20 +191,75 @@ void Cli::printHelp() {
   item("iface_reset", "Explicit application bus recovery while idle and settled");
   section("Explicit scratch tests");
   item("rw_suite <addr> <len> confirm", "Backup <=256 bytes, pattern/fill/update tests, restore+verify");
-  item("xfer_demo <addr> <len> confirm", "One-pass cooperative write/readback/restore demonstration");
-  item("stress_mix <addr> <len> N confirm", "Finite alternating patterns; 1..100 rounds, then restore");
-  item("randbench <addr> <len> N confirm", "1..1000 seeded random verified byte writes, then restore");
-  item("typed_demo <addr> confirm", "Fixed little-endian integer layout in 14 bytes, then restore");
+  item("xfer_demo <addr> <len> confirm", "Admission/budget/owner/result checks, write/read/restore");
+  item("stress_mix <addr> <len> N confirm", "1..100 cycles of nine memory operations, then restore");
+  item("randbench <addr> <len> N confirm", "1..1000 random writes, independent reads, window check");
+  item("typed_demo <addr> confirm", "28-byte unsigned/signed/IEEE/bool round trip, then restore");
   item("scratch / restore confirm", "Show retained backup / explicitly authorize restoration");
   print("Scratch tests consume endurance; failures/cancel retain backup and require explicit restore confirm.\n");
   print("\nNumbers: decimal or 0x hex. Write acceptance is not persistence; WP may silently suppress writes.\n");
   print("Address aliases may belong to one banked chip. ACK cannot identify manufacturer or capacity.\n");
+  print("Automation: hilmark <token> echoes an alphanumeric/_/- token (1..32 chars); prompts do not mean job completion.\n");
+}
+bool Cli::workActive() const {
+  return _operation || _scan || _stress || _readView != ReadView::NONE ||
+      _scratchStage != ScratchStage::NONE;
+}
+void Cli::beginSession(const char* command) {
+  _sessionActive = true;
+  _sessionId = _nextSessionId++;
+  if (!_nextSessionId) _nextSessionId = 1;
+  std::strncpy(_sessionCommand, command, sizeof(_sessionCommand) - 1);
+  _sessionCommand[sizeof(_sessionCommand) - 1] = '\0';
+  _sessionStatus = EEPROM24Cxx::Status::Ok();
+  _sessionStartedAt = now(); _sessionBudgetMs = _deadlineMs;
+  print("CLI accepted: command=%s session=%lu\n", _sessionCommand, static_cast<unsigned long>(_sessionId));
+}
+void Cli::printJobResult() {
+  if (!_hasSessionResult) { status(EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::NO_RESULT, "no complete CLI job")); return; }
+  const auto result = _completedStatus;
+  const char* outcome = result.ok() ? "SUCCESS" : result.is(EEPROM24Cxx::Err::CANCELLED) ? "CANCELLED" :
+      result.is(EEPROM24Cxx::Err::TIMEOUT) ? "TIMED_OUT" : "FAILED";
+  print("CLI result: command=%s session=%lu outcome=%s status=%s code=%u detail=%ld\n",
+        _completedCommand, static_cast<unsigned long>(_completedSessionId), outcome,
+        EEPROM24Cxx::errorName(result.code), static_cast<unsigned>(result.code), static_cast<long>(result.detail));
+}
+void Cli::printJob() {
+  print("CLI job: active=%u command=%s session=%lu auto=%u\n", _sessionActive ? 1U : 0U,
+        _sessionCommand, static_cast<unsigned long>(_sessionId), _autoPoll ? 1U : 0U);
+  print("CLI timing: deadline-ms=%lu elapsed-ms=%lu\n", static_cast<unsigned long>(_sessionBudgetMs),
+        static_cast<unsigned long>(_sessionId ? now() - _sessionStartedAt : 0));
+}
+bool Cli::expireSession() {
+  if (!_sessionActive || !_sessionBudgetMs || now() - _sessionStartedAt < _sessionBudgetMs) return false;
+  stop(EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::TIMEOUT, "whole CLI job deadline expired"));
+  return true;
+}
+void Cli::finishSession() {
+  if (!_sessionActive || workActive()) return;
+  if (_sessionStatus.ok() && equals(_sessionCommand, "restore")) _sessionStatus = _scratchRestore;
+  else if (_sessionStatus.ok() && (equals(_sessionCommand, "rw_suite") || equals(_sessionCommand, "xfer_demo") ||
+           equals(_sessionCommand, "stress_mix") || equals(_sessionCommand, "randbench") ||
+           equals(_sessionCommand, "typed_demo"))) {
+    if (!_scratchPrimary.ok()) _sessionStatus = _scratchPrimary;
+    else if (!_scratchRestore.ok()) _sessionStatus = _scratchRestore;
+  }
+  _sessionActive = false;
+  _completedSessionId = _sessionId;
+  std::memcpy(_completedCommand, _sessionCommand, sizeof(_completedCommand));
+  _completedStatus = _sessionStatus;
+  _hasSessionResult = true;
+  printJobResult();
 }
 void Cli::printSettings() {
   print("Staged: model=%s address=0x%02X timeout=%lu ms tx=%lu rx=%lu offline-threshold=%u\n",
         modelName(_config.variant), _config.i2cAddress, static_cast<unsigned long>(_config.i2cTimeoutMs),
         static_cast<unsigned long>(_config.maxTxBytes), static_cast<unsigned long>(_config.maxRxBytes),
         static_cast<unsigned>(_config.offlineThreshold));
+  print("Staged protocol: ack-polling=%s write-cycle-override=%lu ms adapter-tx=%lu adapter-rx=%lu cli-deadline=%lu ms\n",
+        _config.i2cProbe ? "yes" : "no", static_cast<unsigned long>(_config.writeCycleMs),
+        static_cast<unsigned long>(_adapterTxLimit), static_cast<unsigned long>(_adapterRxLimit),
+        static_cast<unsigned long>(_deadlineMs));
   const auto staged = _config.variant == EEPROM24Cxx::DeviceVariant::CUSTOM ?
       _config.customGeometry : EEPROM24Cxx::geometryFor(_config.variant);
   print("Staged geometry: capacity=%lu page=%u word-address=%u bank-bits=%u bank-shift=%u write-cycle=%lu ms\n",
@@ -212,6 +282,10 @@ void Cli::printSettings() {
   print("Current pointer: supported=%s known=%s address=0x%05lX; reset-settling=%s\n",
         snapshot.supportsCurrentAddressRead ? "yes" : "no", snapshot.currentAddressKnown ? "yes" : "no",
         static_cast<unsigned long>(snapshot.currentAddress), _interfaceWait ? "yes" : "no");
+}
+void Cli::printBus() {
+  print("Bus config: sda=%d scl=%d frequency-hz=%lu wp-pin=%d\n", _platform.sdaPin,
+        _platform.sclPin, static_cast<unsigned long>(_platform.frequencyHz), _platform.writeProtectPin);
 }
 void Cli::printModels() {
   print("Profiles (configured geometry; never detected from ACK):\n");
@@ -246,12 +320,76 @@ void Cli::printStats() {
         static_cast<unsigned long>(_jobs), static_cast<unsigned long>(_jobSuccesses), static_cast<unsigned long>(_jobFailures));
   printHealth();
 }
+const char* Cli::scratchModeName() const {
+  switch (_scratchMode) {
+    case ScratchMode::RW_SUITE: return "rw_suite";
+    case ScratchMode::MIX: return "stress_mix";
+    case ScratchMode::RANDOM: return "randbench";
+    case ScratchMode::TYPED: return "typed_demo";
+    case ScratchMode::XFER: return "xfer_demo";
+  }
+  return "unknown";
+}
+bool Cli::scratchCheck(const char* name, bool passed) {
+  ++_scratchChecks;
+  if (!passed) ++_scratchCheckFailures;
+  print("Scratch check: name=%s result=%s\n", name, passed ? "PASS" : "FAIL");
+  return passed;
+}
+bool Cli::checkScratchBounds() {
+  using namespace EEPROM24Cxx;
+  const auto before = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  const auto read = _device.startRead(_device.capacityBytes(), _data, 1);
+  const auto write = _device.startWrite(_device.maxAddress(), _scratchExpected, 2);
+  const auto verify = _device.startVerify(_device.maxAddress(), _scratchExpected, 2);
+  const auto after = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  const bool rejected = scratchCheck(_platform.transferStats ? "out-of-range-no-transfer" : "out-of-range-rejected",
+      read.is(Err::ADDRESS_OUT_OF_RANGE) &&
+      write.is(Err::ADDRESS_OUT_OF_RANGE) && verify.is(Err::ADDRESS_OUT_OF_RANGE) && before == after);
+  if (!rejected && (_device.isTransferBusy() || _device.settingsSnapshot().resultPending)) {
+    // A broken admission guard must not leave a diagnostic write queued.
+    (void)_device.cancel();
+    TransferResult discarded{};
+    (void)_device.takeResult(discarded);
+  }
+  return rejected;
+}
+void Cli::checkScratchAdmission() {
+  using namespace EEPROM24Cxx;
+  const auto before = _scratchAdmissionAttempts;
+  const auto active = _device.transferSnapshot();
+  const uint32_t stale = active.requestId == 1 ? 2 : 1;
+  scratchCheck("zero-budget", _device.pollTransfer(active.requestId, now(), 0).inProgress() &&
+      _device.transferSnapshot().bytesCompleted == 0);
+  scratchCheck("busy-admission", _device.startRead(_scratchAddress, _data, 1).is(Err::BUSY));
+  scratchCheck("stale-owner", _device.pollTransfer(stale, now(), 1).is(Err::BUSY) &&
+      _device.cancelTransfer(stale).is(Err::BUSY));
+  const auto after = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  scratchCheck("admission-no-transfer", before == after && _device.transferSnapshot().requestId == active.requestId);
+  if (_scratchCheckFailures != _scratchOperationCheckFailures) (void)_device.cancel();
+}
+void Cli::checkScratchRetainedResult() {
+  using namespace EEPROM24Cxx;
+  const auto before = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  const auto retained = _device.transferSnapshot();
+  TransferResult untouched{};
+  untouched.requestId = 123;
+  const uint32_t stale = retained.requestId == 1 ? 2 : 1;
+  scratchCheck("retained-blocks-admission", _device.startRead(_scratchAddress, _data, 1).is(Err::BUSY));
+  scratchCheck("retained-owner", _device.takeTransferResult(stale, untouched).is(Err::BUSY) && untouched.requestId == 123);
+  TransferResult copy{};
+  const auto after = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  scratchCheck("retained-no-transfer", _device.getTransferProgress(copy).ok() && copy.requestId == retained.requestId &&
+      copy.status.code == retained.status.code && before == after);
+}
 void Cli::printScratch(bool includeResults) {
   const char* stage = "IDLE";
   switch (_scratchStage) {
     case ScratchStage::NONE: break;
     case ScratchStage::BACKUP: stage = "BACKUP"; break;
     case ScratchStage::PATTERN: stage = "PATTERN"; break;
+    case ScratchStage::RANDOM_READS: stage = "RANDOM_READS"; break;
+    case ScratchStage::INSPECT: stage = "INSPECT"; break;
     case ScratchStage::RESTORE_WAIT: stage = "RESTORE_WAIT"; break;
     case ScratchStage::RESTORING: stage = "RESTORING"; break;
   }
@@ -261,6 +399,13 @@ void Cli::printScratch(bool includeResults) {
         static_cast<unsigned long>(_scratchRounds), _backupValid ? "retained" : "none", _scratchDirty ? "yes" : "no",
         EEPROM24Cxx::errorName(_scratchPrimary.code), static_cast<long>(_scratchPrimary.detail),
         EEPROM24Cxx::errorName(_scratchRestore.code), static_cast<long>(_scratchRestore.detail));
+  print("Scratch suite: mode=%s checks=%lu failures=%lu\n", scratchModeName(),
+        static_cast<unsigned long>(_scratchChecks), static_cast<unsigned long>(_scratchCheckFailures));
+  print("Scratch operations: reads=%lu writes=%lu fills=%lu updates=%lu verifies=%lu probes=%lu current=%lu current-skipped=%lu\n",
+        static_cast<unsigned long>(_scratchOperations[0]), static_cast<unsigned long>(_scratchOperations[1]),
+        static_cast<unsigned long>(_scratchOperations[2]), static_cast<unsigned long>(_scratchOperations[3]),
+        static_cast<unsigned long>(_scratchOperations[4]), static_cast<unsigned long>(_scratchOperations[5]),
+        static_cast<unsigned long>(_scratchOperations[6]), static_cast<unsigned long>(_scratchCurrentSkipped));
   if (_backupValid && _scratchStage == ScratchStage::NONE)
     print("Backup retained in RAM; use restore confirm when ready. End/cancel never restore or discard changed data.\n");
   print("Scratch metrics: primary-ms=%lu restore-ms=%lu verified-pattern-bytes=%lu",
@@ -286,23 +431,44 @@ EEPROM24Cxx::Status Cli::startScratch(ScratchMode mode, uint32_t address, uint32
   using namespace EEPROM24Cxx;
   if (!_device.isBound()) return Status::Error(Err::NOT_INITIALIZED, "bind driver first");
   if (_backupValid) return Status::Error(Err::BUSY, "restore retained backup first");
+  if (mode == ScratchMode::XFER && !_platform.transferStats)
+    return Status::Error(Err::UNSUPPORTED, "transfer contract checks require application bus counters");
+  const auto idle = _device.settingsSnapshot();
+  if (idle.transferActive || idle.resultPending || idle.writeCyclePending)
+    return Status::Error(Err::BUSY, "scratch checks require an idle, settled driver");
   if (!_platform.nowMs && !_config.nowMs) return Status::Error(Err::INVALID_CONFIG, "scratch writes require a clock");
   if (!length || length > sizeof(_backup) || !memory::fitsRange(_device.capacityBytes(), address, length))
     return Status::Error(Err::ADDRESS_OUT_OF_RANGE, "scratch range must fit configured capacity and 256-byte backup");
-  const auto result = _device.startRead(address, _backup, length);
-  if (!result.ok()) return result;
   _scratchMode = mode; _scratchAddress = address; _scratchLength = length;
-  _scratchRounds = rounds; _scratchRound = 0; _scratchRandom = 0x24C02B01U;
-  _scratchDirty = false; _scratchStage = ScratchStage::BACKUP;
+  _scratchRounds = mode == ScratchMode::RW_SUITE ? 8U : mode == ScratchMode::XFER ? 4U :
+      mode == ScratchMode::TYPED ? 2U : rounds;
+  _scratchRound = 0; _scratchReadRound = 0; _scratchStep = 0; _scratchRandom = 0x24C02B01U;
+  _scratchChecks = _scratchCheckFailures = _scratchCurrentSkipped = 0;
+  std::memset(_scratchOperations, 0, sizeof(_scratchOperations));
+  _scratchDirty = false; _scratchStage = ScratchStage::NONE;
   _scratchStartedMs = now(); _scratchPrimaryElapsedMs = 0; _scratchRestoreElapsedMs = 0; _scratchVerifiedBytes = 0;
   _scratchBusBefore = _platform.transferStats ? _platform.transferStats(_platform.user) : TransferStats{};
   _scratchPrimaryBus = {};
   _scratchPrimary = Status::Error(Err::IN_PROGRESS, "scratch test queued");
   _hasScratchPrimaryResult = false; _hasScratchRestoreResult = false;
   _scratchRestore = Status::Error(Err::NO_RESULT, "restoration not attempted");
+  if (mode == ScratchMode::TYPED && length != 28)
+    return Status::Error(Err::INVALID_PARAM, "typed layout requires 28 bytes");
+  if (!checkScratchBounds()) {
+    finishScratchPrimary(Status::Error(Err::VERIFY_MISMATCH, "out-of-range operation was not rejected without I2C"));
+    return _scratchPrimary;
+  }
+  _scratchAdmissionAttempts = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
+  const auto result = _device.startRead(address, _backup, length);
+  if (!result.ok()) { finishScratchPrimary(result); return result; }
+  _scratchStage = ScratchStage::BACKUP;
+  _scratchAction = ScratchAction::READ; _scratchCheckName = "backup";
+  ++_scratchOperations[static_cast<unsigned>(ScratchAction::READ)];
   _operation = true; _hasResult = false;
-  print("Scratch test queued: backup, %lu verified pattern rounds, verified restore; EEPROM endurance is consumed.\n",
-        static_cast<unsigned long>(rounds));
+  _scratchOperationCheckFailures = _scratchCheckFailures;
+  if (mode == ScratchMode::XFER) checkScratchAdmission();
+  print("Scratch test queued: mode=%s backup, %lu rounds, independent readback, verified restore; EEPROM endurance is consumed.\n",
+        scratchModeName(), static_cast<unsigned long>(_scratchRounds));
   return result;
 }
 void Cli::finishScratchPrimary(EEPROM24Cxx::Status result) {
@@ -325,31 +491,101 @@ void Cli::abortScratch(EEPROM24Cxx::Status reason) {
   printScratch(false);
 }
 void Cli::completeScratch(const EEPROM24Cxx::TransferResult& result) {
+  using namespace EEPROM24Cxx;
   if (_scratchStage == ScratchStage::RESTORING) {
     _scratchRestoreResult = result; _hasScratchRestoreResult = true;
   } else {
     _scratchPrimaryResult = result; _hasScratchPrimaryResult = true;
   }
   status(result.status); printProgress(result);
-  if (_scratchStage == ScratchStage::PATTERN) _scratchVerifiedBytes += static_cast<uint32_t>(result.bytesVerified);
+  if (_scratchMode == ScratchMode::XFER) {
+    TransferResult consumed{};
+    scratchCheck("exactly-once-result", _device.takeResult(consumed).is(Err::NO_RESULT));
+  }
+  if (_scratchStage != ScratchStage::RESTORING) _scratchVerifiedBytes += static_cast<uint32_t>(result.bytesVerified);
   if (!result.status.ok()) { abortScratch(result.status); return; }
+  if (_scratchCheckFailures != _scratchOperationCheckFailures) { abortScratch(Status::Error(Err::VERIFY_MISMATCH, "scratch contract check failed")); return; }
   if (_scratchStage == ScratchStage::BACKUP) {
     _backupValid = true;
-    _scratchStage = ScratchStage::PATTERN;
-  } else if (_scratchStage == ScratchStage::PATTERN) {
-    ++_scratchRound;
-    if (_scratchRound == _scratchRounds) {
-      finishScratchPrimary(EEPROM24Cxx::Status::Ok());
-      _scratchRestoreStartedMs = now();
-      _scratchRestore = EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::IN_PROGRESS, "authorized restoration queued");
-      _scratchStage = ScratchStage::RESTORE_WAIT;
+    std::memcpy(_scratchExpected, _backup, _scratchLength);
+    if (!scratchCheck("backup", result.bytesCompleted == _scratchLength)) {
+      abortScratch(Status::Error(Err::VERIFY_MISMATCH, "scratch backup is incomplete")); return;
     }
-  } else if (_scratchStage == ScratchStage::RESTORING) {
-    _scratchRestore = EEPROM24Cxx::Status::Ok();
+    _scratchStage = ScratchStage::PATTERN;
+    return;
+  }
+  if (_scratchStage == ScratchStage::RESTORING) {
+    _scratchRestore = Status::Ok();
     _scratchRestoreElapsedMs = now() - _scratchRestoreStartedMs;
     _backupValid = false; _scratchDirty = false; _scratchStage = ScratchStage::NONE;
     printScratch(false);
     print("Original scratch bytes observed by readback after restoration.\n");
+    return;
+  }
+  bool correct = result.bytesCompleted == result.bytesRequested;
+  if (_scratchAction == ScratchAction::READ || _scratchAction == ScratchAction::CURRENT)
+    correct = correct && std::memcmp(_data, _scratchExpected + _scratchReadOffset, _scratchReadLength) == 0;
+  else if (_scratchAction == ScratchAction::WRITE || _scratchAction == ScratchAction::FILL || _scratchAction == ScratchAction::UPDATE)
+    correct = correct && result.bytesVerified == result.bytesRequested;
+  else if (_scratchAction == ScratchAction::VERIFY)
+    correct = correct && result.match && result.bytesVerified == result.bytesRequested;
+  if (_scratchAction == ScratchAction::UPDATE && std::strcmp(_scratchCheckName, "unchanged-update") == 0)
+    correct = correct && result.bytesAccepted == 0 && result.bytesSkipped == result.bytesRequested;
+  if (!scratchCheck(_scratchCheckName, correct)) {
+    // A later restoration must not hide a failed independent data comparison.
+    _scratchPrimaryResult.status = Status::Error(Err::VERIFY_MISMATCH, "scratch readback or operation evidence differs");
+    _scratchPrimaryResult.state = TransferState::FAILED;
+    abortScratch(_scratchPrimaryResult.status); return;
+  }
+  if (_scratchMode == ScratchMode::TYPED && _scratchStage == ScratchStage::PATTERN && _scratchAction == ScratchAction::READ) {
+    if (_scratchRound == 0) {
+      const bool decoded = _data[0] == 0x7E && memory::decodeUint16Le(_data + 1) == 0x1234U &&
+          memory::decodeInt32Le(_data + 3) == -1234567 &&
+          memory::decodeUint64Le(_data + 7) == UINT64_C(0x1122334455667788) &&
+          memory::decodeFloatLe(_data + 15) == 1.25F && memory::decodeDoubleLe(_data + 19) == -42.5 && _data[27] == 1;
+      print("Typed values: uint8=0x%02X uint16=0x%04X int32=%ld uint64=0x%08lX%08lX float32=%.2f float64=%.2f bool=%s\n",
+            static_cast<unsigned>(_data[0]), static_cast<unsigned>(memory::decodeUint16Le(_data + 1)),
+            static_cast<long>(memory::decodeInt32Le(_data + 3)),
+            static_cast<unsigned long>(memory::decodeUint64Le(_data + 7) >> 32U),
+            static_cast<unsigned long>(memory::decodeUint64Le(_data + 7) & UINT32_MAX),
+            static_cast<double>(memory::decodeFloatLe(_data + 15)), memory::decodeDoubleLe(_data + 19), _data[27] == 1 ? "true" : "false");
+      if (!scratchCheck("typed-le-values", decoded)) { abortScratch(Status::Error(Err::VERIFY_MISMATCH, "typed decode differs")); return; }
+    } else {
+      const bool decoded = memory::decodeUint16Be(_data) == 0xA55A && memory::decodeUint32Be(_data + 2) == 0x12345678U &&
+          memory::decodeUint64Be(_data + 6) == UINT64_C(0x0123456789ABCDEF) &&
+          memory::decodeInt64Le(_data + 14) == -INT64_C(0x0123456789ABCDEF) &&
+          memory::decodeUint32Le(_data + 22) == 0xCAFEBABEU && _data[26] == 0 && _data[27] == 0x81;
+      print("Typed values: uint16be=0x%04X uint32be=0x%08lX uint64be=0x%08lX%08lX int64le=%s uint32le=0x%08lX bool=%s uint8=0x%02X\n",
+            static_cast<unsigned>(memory::decodeUint16Be(_data)), static_cast<unsigned long>(memory::decodeUint32Be(_data + 2)),
+            static_cast<unsigned long>(memory::decodeUint64Be(_data + 6) >> 32U),
+            static_cast<unsigned long>(memory::decodeUint64Be(_data + 6) & UINT32_MAX),
+            memory::decodeInt64Le(_data + 14) == -INT64_C(0x0123456789ABCDEF) ? "match" : "mismatch",
+            static_cast<unsigned long>(memory::decodeUint32Le(_data + 22)), _data[26] == 0 ? "false" : "invalid",
+            static_cast<unsigned>(_data[27]));
+      if (!scratchCheck("typed-be-signed-values", decoded)) { abortScratch(Status::Error(Err::VERIFY_MISMATCH, "typed decode differs")); return; }
+    }
+  }
+  if (_scratchStage == ScratchStage::INSPECT) {
+    finishScratchPrimary(Status::Ok());
+    _scratchRestoreStartedMs = now();
+    _scratchRestore = Status::Error(Err::IN_PROGRESS, "authorized restoration queued");
+    _scratchStage = ScratchStage::RESTORE_WAIT;
+    return;
+  }
+  if (_scratchStage == ScratchStage::RANDOM_READS) {
+    if (++_scratchReadRound == _scratchRounds) _scratchStage = ScratchStage::INSPECT;
+    return;
+  }
+  if (_scratchMode == ScratchMode::MIX) {
+    if (++_scratchStep < 9) return;
+    _scratchStep = 0;
+  } else if (_scratchMode == ScratchMode::TYPED) {
+    if (++_scratchStep < 2) return;
+    _scratchStep = 0;
+  }
+  if (++_scratchRound == _scratchRounds) {
+    _scratchStage = _scratchMode == ScratchMode::RANDOM ? ScratchStage::RANDOM_READS : ScratchStage::INSPECT;
+    _scratchRandom = 0x13579BDFU; // Independent read addresses, not the write sequence.
   }
 }
 void Cli::scheduleScratch() {
@@ -357,36 +593,133 @@ void Cli::scheduleScratch() {
   if (_scratchStage == ScratchStage::NONE || _operation) return;
   if (_device.settingsSnapshot().writeCyclePending) return;
   Status result = Status::Error(Err::INVALID_PARAM, "invalid scratch stage");
+  _scratchAdmissionAttempts = _platform.transferStats ? _platform.transferStats(_platform.user).attempts : 0;
   if (_scratchStage == ScratchStage::RESTORE_WAIT) {
     result = _device.startWrite(_scratchAddress, _backup, _scratchLength, true);
     if (result.ok()) _scratchStage = ScratchStage::RESTORING;
-  } else if (_scratchStage == ScratchStage::PATTERN) {
-    uint32_t address = _scratchAddress;
-    uint32_t length = _scratchLength;
-    for (uint32_t index = 0; index < length; ++index)
-      _data[index] = static_cast<uint8_t>((address + index) ^ 0xA5U);
-    if (_scratchMode == ScratchMode::MIX)
-      std::memset(_data, (_scratchRound & 1U) ? 0x5A : 0xA5, length);
-    if (_scratchMode == ScratchMode::RANDOM) {
-      _scratchRandom ^= _scratchRandom << 13U; _scratchRandom ^= _scratchRandom >> 17U; _scratchRandom ^= _scratchRandom << 5U;
-      address += _scratchRandom % length;
-      _data[0] = static_cast<uint8_t>(_scratchRandom >> 16U); length = 1;
+  } else {
+    uint32_t offset = 0, length = _scratchLength;
+    _scratchAction = ScratchAction::READ;
+    _scratchCheckName = "final-window";
+    const auto random = [this]() {
+      _scratchRandom ^= _scratchRandom << 13U;
+      _scratchRandom ^= _scratchRandom >> 17U;
+      _scratchRandom ^= _scratchRandom << 5U;
+      return _scratchRandom;
+    };
+    if (_scratchStage == ScratchStage::RANDOM_READS) {
+      offset = random() % length; length = 1;
+      _scratchCheckName = "random-read";
+    } else if (_scratchStage == ScratchStage::PATTERN) {
+      if (_scratchMode == ScratchMode::RANDOM) {
+        offset = random() % length; length = 1;
+        // A changed value ensures the test does not pass solely on preexisting bytes.
+        _scratchExpected[offset] ^= static_cast<uint8_t>((random() & 0x7FU) + 1U);
+        _scratchAction = ScratchAction::WRITE; _scratchCheckName = "random-write";
+      } else if (_scratchMode == ScratchMode::TYPED && _scratchStep == 1) {
+        _scratchCheckName = "typed-read";
+      } else if (_scratchMode == ScratchMode::TYPED && _scratchRound == 0) {
+        _scratchExpected[0] = 0x7E;
+        memory::encodeUint16Le(0x1234U, _scratchExpected + 1);
+        memory::encodeInt32Le(-1234567, _scratchExpected + 3);
+        memory::encodeUint64Le(UINT64_C(0x1122334455667788), _scratchExpected + 7);
+        memory::encodeFloatLe(1.25F, _scratchExpected + 15);
+        memory::encodeDoubleLe(-42.5, _scratchExpected + 19);
+        _scratchExpected[27] = 1;
+        _scratchAction = ScratchAction::WRITE; _scratchCheckName = "typed-write";
+        print("Typed layout: uint8 @+0, uint16 LE @+1, int32 LE @+3, uint64 LE @+7, float32 LE @+15, float64 LE @+19, bool @+27; 28 bytes.\n");
+      } else if (_scratchMode == ScratchMode::TYPED) {
+        memory::encodeUint16Be(0xA55A, _scratchExpected);
+        memory::encodeUint32Be(0x12345678U, _scratchExpected + 2);
+        memory::encodeUint64Be(UINT64_C(0x0123456789ABCDEF), _scratchExpected + 6);
+        memory::encodeInt64Le(-INT64_C(0x0123456789ABCDEF), _scratchExpected + 14);
+        memory::encodeUint32Le(0xCAFEBABEU, _scratchExpected + 22);
+        _scratchExpected[26] = 0; _scratchExpected[27] = 0x81;
+        _scratchAction = ScratchAction::WRITE; _scratchCheckName = "typed-write";
+        print("Typed layout: uint16 BE @+0, uint32 BE @+2, uint64 BE @+6, int64 LE @+14, uint32 LE @+22, bool @+26, uint8 @+27; 28 bytes.\n");
+      } else if (_scratchMode == ScratchMode::MIX) {
+        switch (_scratchStep) {
+          case 0:
+            offset = _scratchRound % length; length = 1; _scratchExpected[offset] ^= 0xFF;
+            _scratchAction = ScratchAction::WRITE; _scratchCheckName = "mixed-byte-write"; break;
+          case 1: _scratchCheckName = "mixed-read"; break;
+          case 2:
+            std::memset(_scratchExpected, (_scratchRound & 1U) ? 0x5A : 0xA5, length);
+            _scratchAction = ScratchAction::FILL; _scratchCheckName = "mixed-fill"; break;
+          case 3: _scratchAction = ScratchAction::VERIFY; _scratchCheckName = "mixed-verify"; break;
+          case 4:
+            _scratchExpected[0] ^= 0xFF;
+            _scratchAction = ScratchAction::UPDATE; _scratchCheckName = "changed-update"; break;
+          case 5: _scratchAction = ScratchAction::UPDATE; _scratchCheckName = "unchanged-update"; break;
+          case 6: _scratchAction = ScratchAction::PROBE; _scratchCheckName = "presence-probe"; break;
+          case 7: length = 1; _scratchCheckName = "current-pointer-seed"; break;
+          default: {
+            const auto pointer = _device.settingsSnapshot();
+            length = 1;
+            if (pointer.supportsCurrentAddressRead && pointer.currentAddressKnown &&
+                pointer.currentAddress >= _scratchAddress && pointer.currentAddress - _scratchAddress < _scratchLength) {
+              offset = pointer.currentAddress - _scratchAddress;
+              _scratchAction = ScratchAction::CURRENT; _scratchCheckName = "current-read";
+            } else {
+              ++_scratchCurrentSkipped;
+              _scratchCheckName = "current-fallback-read";
+              print("Scratch current-read: SKIP (transport capability or pointer outside scratch); addressed read used.\n");
+            }
+            break;
+          }
+        }
+      } else {
+        // Both suites share real read/write/fill/verify operations. rw_suite
+        // additionally checks changed and wear-saving unchanged updates.
+        switch (_scratchRound) {
+          case 0:
+            for (uint32_t index = 0; index < length; ++index) _scratchExpected[index] = static_cast<uint8_t>(~_backup[index]);
+            _scratchAction = ScratchAction::WRITE; _scratchCheckName = "pattern-write"; break;
+          case 1: _scratchCheckName = "pattern-read"; break;
+          case 2:
+            std::memset(_scratchExpected, 0x5A, length);
+            _scratchAction = ScratchAction::FILL; _scratchCheckName = "fill-5a"; break;
+          case 3: _scratchAction = ScratchAction::VERIFY; _scratchCheckName = "pattern-verify"; break;
+          case 4:
+            std::memset(_scratchExpected, 0xA5, length);
+            _scratchAction = ScratchAction::FILL; _scratchCheckName = "fill-a5"; break;
+          case 5:
+            std::memset(_scratchExpected, 0x3C, length);
+            _scratchAction = ScratchAction::UPDATE; _scratchCheckName = "changed-update"; break;
+          case 6: _scratchAction = ScratchAction::UPDATE; _scratchCheckName = "unchanged-update"; break;
+          default: _scratchCheckName = "update-read"; break;
+        }
+      }
     }
-    if (_scratchMode == ScratchMode::TYPED) {
-      memory::encodeUint16Le(0xA55AU, _data);
-      memory::encodeUint32Le(0x12345678U, _data + 2);
-      memory::encodeUint64Le(UINT64_C(0x0123456789ABCDEF), _data + 6);
-      print("Typed layout: uint16 LE @+0, uint32 LE @+2, uint64 LE @+6; 14 bytes.\n");
+    _scratchReadOffset = offset; _scratchReadLength = length;
+    const uint32_t address = _scratchAddress + offset;
+    switch (_scratchAction) {
+      case ScratchAction::READ: result = _device.startRead(address, _data, length); break;
+      case ScratchAction::WRITE: result = _device.startWrite(address, _scratchExpected + offset, length, true); break;
+      case ScratchAction::FILL: result = _device.startFill(address, _scratchExpected[offset], length, true); break;
+      case ScratchAction::UPDATE: result = _device.startUpdate(address, _scratchExpected + offset, length, true); break;
+      case ScratchAction::VERIFY: result = _device.startVerify(address, _scratchExpected + offset, length); break;
+      case ScratchAction::CURRENT: result = _device.startCurrentRead(_data, length); break;
+      case ScratchAction::PROBE:
+        // This step alone owns this tick's transaction; do not queue another.
+        result = _device.probe();
+        ++_scratchOperations[static_cast<unsigned>(ScratchAction::PROBE)];
+        status(result);
+        scratchCheck(_scratchCheckName, result.ok());
+        if (!result.ok()) abortScratch(result); else ++_scratchStep;
+        return;
     }
-    if (_scratchMode == ScratchMode::RW_SUITE && (_scratchRound == 1 || _scratchRound == 2))
-      result = _device.startFill(address, _scratchRound == 1 ? 0x5A : 0xA5, length, true);
-    else if (_scratchMode == ScratchMode::RW_SUITE && _scratchRound == 3) {
-      std::memset(_data, 0xA5, length);
-      result = _device.startUpdate(address, _data, length, true);
-    } else result = _device.startWrite(address, _data, length, true);
-    if (result.ok()) _scratchDirty = true;
+    if (result.ok()) {
+      ++_scratchOperations[static_cast<unsigned>(_scratchAction)];
+      if (_scratchAction == ScratchAction::WRITE || _scratchAction == ScratchAction::FILL || _scratchAction == ScratchAction::UPDATE)
+        _scratchDirty = true;
+    }
   }
-  if (result.ok()) { _operation = true; _hasResult = false; }
+  if (result.ok()) {
+    _operation = true; _hasResult = false;
+    _scratchOperationCheckFailures = _scratchCheckFailures;
+    if (_scratchMode == ScratchMode::XFER) checkScratchAdmission();
+  }
   else { status(result); abortScratch(result); }
 }
 void Cli::printHealth() {
@@ -509,6 +842,7 @@ void Cli::printReadView(uint32_t address, size_t length) {
 }
 void Cli::completeReadView(const EEPROM24Cxx::TransferResult& chunk) {
   using namespace EEPROM24Cxx;
+  if (!chunk.status.ok() && _sessionStatus.ok()) _sessionStatus = chunk.status;
   if (chunk.bytesCompleted) printReadView(_readAddress + _readCompleted, chunk.bytesCompleted);
   _lastResult = chunk;
   _lastResult.requestId = _readRequestId;
@@ -543,7 +877,10 @@ void Cli::completeReadView(const EEPROM24Cxx::TransferResult& chunk) {
 }
 void Cli::complete() {
   EEPROM24Cxx::TransferResult result{};
+  if (_scratchMode == ScratchMode::XFER && _scratchStage != ScratchStage::NONE && !_device.isTransferBusy())
+    checkScratchRetainedResult();
   if (!_device.takeResult(result).ok()) return;
+  if (!result.status.ok() && _sessionStatus.ok()) _sessionStatus = result.status;
   _operation = false;
   if (_jobs != UINT32_MAX) ++_jobs;
   auto& counter = result.status.ok() ? _jobSuccesses : _jobFailures;
@@ -562,10 +899,15 @@ void Cli::complete() {
     if (result.status.ok()) ++_stressSuccess; else ++_stressFailures;
     if (_remaining) --_remaining;
     _nextMs = now() + _repeatInterval;
-    if (!_remaining) stop();
+    if (!_remaining) {
+      print("%s stopped: ok=%lu fail=%lu\n", _watch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
+            static_cast<unsigned long>(_stressFailures));
+      _stress = false; _watch = false;
+    }
   }
 }
-void Cli::stop() {
+void Cli::stop(EEPROM24Cxx::Status reason) {
+  if (_sessionActive) _sessionStatus = reason;
   const bool wasStress = _stress;
   const bool wasWatch = _watch;
   _stress = false;
@@ -573,23 +915,27 @@ void Cli::stop() {
   _scan = false;
   if (_operation) {
     const auto kind = _device.transferSnapshot().kind;
-    const auto cancelled = _device.cancel();
-    if (!cancelled.ok()) status(cancelled);
+    if (_device.isTransferBusy()) {
+      const auto cancelled = reason.is(EEPROM24Cxx::Err::TIMEOUT) ?
+          _device.timeoutTransfer(_device.transferSnapshot().requestId) : _device.cancel();
+      if (!cancelled.ok()) status(cancelled);
+    }
     complete();
     if (writesMemory(kind))
       print("Scheduling stopped; already-issued EEPROM programming cannot be undone.\n");
   } else if (_readView != ReadView::NONE) {
     EEPROM24Cxx::TransferResult cancelled{};
     cancelled.kind = EEPROM24Cxx::TransferKind::READ;
-    cancelled.state = EEPROM24Cxx::TransferState::CANCELLED;
-    cancelled.status = EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::CANCELLED, "read-only range cancelled");
+    cancelled.state = reason.is(EEPROM24Cxx::Err::TIMEOUT) ? EEPROM24Cxx::TransferState::TIMED_OUT : EEPROM24Cxx::TransferState::CANCELLED;
+    cancelled.status = reason;
     completeReadView(cancelled);
   }
   if (_scratchStage != ScratchStage::NONE)
-    abortScratch(EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::CANCELLED, "scratch scheduling stopped"));
+    abortScratch(reason);
   if (wasStress) print("%s stopped: ok=%lu fail=%lu\n", wasWatch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
                        static_cast<unsigned long>(_stressFailures));
   _watch = false;
+  finishSession();
 }
 void Cli::feed(char value) {
   if (value == '\r' || value == '\n') {
@@ -634,6 +980,36 @@ void Cli::processCommand(const char* text) {
   }
   if (!count) return;
   const char* command = canonicalCommand(args[0]);
+  if (equals(command, "hilmark")) {
+    if (count != 2 || std::strlen(args[1]) > 32) { invalid(); return; }
+    for (const char* value = args[1]; *value; ++value)
+      if (!((*value >= 'a' && *value <= 'z') || (*value >= 'A' && *value <= 'Z') ||
+            (*value >= '0' && *value <= '9') || *value == '_' || *value == '-')) { invalid(); return; }
+    print("CLI marker: token=%s\n", args[1]); return;
+  }
+  if (equals(args[0], "result") && count == 1) printJobResult();
+  if (equals(args[0], "job") && count > 1) {
+    const char* action = args[1];
+    if (equals(action, "result") && count <= 2) { printJobResult(); return; }
+    if (equals(action, "auto")) {
+      uint32_t enabled = _autoPoll ? 1U : 0U;
+      if (count > 3 || (count == 3 && !integer(args[2], 0, 1, enabled))) { invalid(); return; }
+      _autoPoll = enabled != 0; printJob(); return;
+    }
+    if (equals(action, "step")) {
+      uint32_t budget = 1;
+      if (count > 3 || (count == 3 && !integer(args[2], 0, 1, budget))) { invalid(); return; }
+      if (budget) advance(); else _device.tick(now());
+      if (!expireSession()) finishSession();
+      printJob(); return;
+    }
+    if ((equals(action, "cancel") || equals(action, "timeout")) && count == 2) {
+      if (!_sessionActive) { status(Status::Error(Err::NO_RESULT, "no active CLI job")); return; }
+      stop(Status::Error(equals(action, "timeout") ? Err::TIMEOUT : Err::CANCELLED,
+                        "owner ended CLI job")); return;
+    }
+    invalid(); return;
+  }
   if (equals(command, "help") && count == 1) { printHelp(); return; }
   if (equals(command, "version") && count == 1) { printVersion(); return; }
   if (equals(command, "color") || equals(command, "verbose")) {
@@ -649,6 +1025,17 @@ void Cli::processCommand(const char* text) {
   if (equals(command, "stop") && count == 1) { stop(); return; }
   if (equals(command, "health") && count == 1) { printHealth(); return; }
   if (equals(command, "settings") && count == 1) { printSettings(); return; }
+  if (equals(command, "bus") && count == 1) { printBus(); return; }
+  if (equals(command, "deadline")) {
+    uint32_t value = _deadlineMs;
+    if (count > 2 || (count == 2 && !integer(args[1], 0, 0x7FFFFFFFU, value))) { invalid(); return; }
+    if (count == 2) {
+      if (workActive()) { status(Status::Error(Err::BUSY, "finish CLI job before changing its deadline")); return; }
+      if (value && !_platform.nowMs && !_config.nowMs) { status(Status::Error(Err::INVALID_CONFIG, "CLI deadline requires a clock")); return; }
+      _deadlineMs = value;
+    }
+    print("Deadline: ms=%lu (whole CLI job; 0=disabled)\n", static_cast<unsigned long>(_deadlineMs)); return;
+  }
   if (equals(command, "geometry") && count == 1) { printSettings(); printHealth(); return; }
   if (equals(command, "scratch") && count == 1) { printScratch(); return; }
   if (equals(command, "page")) {
@@ -702,12 +1089,14 @@ void Cli::processCommand(const char* text) {
     print("%s configured capacity: %lu bytes (not detected)\n", _device.isBound() ? "Active" : "Staged",
           static_cast<unsigned long>(geometry.capacityBytes)); return;
   }
-  if ((equals(command, "addr") || equals(command, "timeout") || equals(command, "model") || equals(command, "offline")) && count == 1) {
+  if ((equals(command, "addr") || equals(command, "timeout") || equals(command, "model") || equals(command, "offline") ||
+       equals(command, "limits") || equals(command, "writecycle") || equals(command, "ackpoll")) && count == 1) {
     printSettings();
     if (equals(command, "model")) printModels();
     return;
   }
   if (equals(command, "progress") && count == 1) {
+    printJob();
     auto result = !_operation && (_hasResult || _readView != ReadView::NONE) ? _lastResult : _device.transferSnapshot();
     if (_readView != ReadView::NONE && _operation) {
       result.requestId = _readRequestId;
@@ -718,7 +1107,7 @@ void Cli::processCommand(const char* text) {
     }
     printProgress(result); if (_scratchStage != ScratchStage::NONE || _backupValid) printScratch(); return;
   }
-  if (equals(command, "diag") && count == 1) { printVersion(); printSettings(); printHealth(); return; }
+  if (equals(command, "diag") && count == 1) { printVersion(); printBus(); printSettings(); printHealth(); return; }
   if (equals(command, "end") && count == 1) {
     stop(); _device.end(); print("Driver released; bus unchanged.\n"); return;
   }
@@ -727,7 +1116,8 @@ void Cli::processCommand(const char* text) {
     if (_device.settingsSnapshot().writeCyclePending) { status(Status::Error(Err::BUSY, "wait for physical write cycle before scanning")); return; }
     if (!_platform.probeAddress) { status(Status::Error(Err::INVALID_CONFIG, "no scan adapter")); return; }
     _scan = true; _scanNext = equals(command, "scan") ? 0x08 : 0x50;
-    _scanLast = equals(command, "scan") ? 0x77 : 0x57; _scanFound = 0; _scanErrors = 0; return;
+    _scanLast = equals(command, "scan") ? 0x77 : 0x57; _scanFound = 0; _scanErrors = 0;
+    beginSession(command); return;
   }
   if (equals(command, "begin")) {
     uint32_t address = _config.i2cAddress;
@@ -786,6 +1176,27 @@ void Cli::processCommand(const char* text) {
     }
     printSettings(); return;
   }
+  if (equals(command, "limits") || equals(command, "writecycle") || equals(command, "ackpoll")) {
+    if (count != (equals(command, "limits") ? 3U : 2U)) { invalid(); return; }
+    if (_backupValid || _device.isBound() || _device.settingsSnapshot().writeCyclePending) {
+      status(Status::Error(Err::BUSY, "end and settle driver without a retained backup before changing protocol settings")); return;
+    }
+    const auto geometry = _config.variant == DeviceVariant::CUSTOM ? _config.customGeometry : geometryFor(_config.variant);
+    uint32_t first = 0, second = 0;
+    if (equals(command, "limits")) {
+      if (!integer(args[1], static_cast<uint32_t>(geometry.wordAddressBytes) + 1U, UINT32_MAX, first) ||
+          !integer(args[2], 1, UINT32_MAX, second) || first > _adapterTxLimit || second > _adapterRxLimit) { invalid(); return; }
+      _config.maxTxBytes = first; _config.maxRxBytes = second;
+    } else if (equals(command, "writecycle")) {
+      if (!integer(args[1], 0, 1000, first) || (first && first < geometry.writeCycleMs)) { invalid(); return; }
+      _config.writeCycleMs = first;
+    } else {
+      if (!integer(args[1], 0, 1, first)) { invalid(); return; }
+      if (first && !_adapterProbe) { status(Status::Error(Err::UNSUPPORTED, "application has no ACK-poll callback")); return; }
+      _config.i2cProbe = first ? _adapterProbe : nullptr;
+    }
+    printSettings(); return;
+  }
   if (equals(command, "restore")) {
     if (count != 2 || !equals(args[1], "confirm")) { invalid(); return; }
     if (!_backupValid) { status(Status::Error(Err::NO_RESULT, "no retained scratch backup")); return; }
@@ -793,6 +1204,7 @@ void Cli::processCommand(const char* text) {
     _scratchRestore = Status::Error(Err::IN_PROGRESS, "explicit restoration queued");
     _scratchRestoreStartedMs = now(); _scratchRestoreElapsedMs = 0;
     _scratchStage = ScratchStage::RESTORE_WAIT;
+    beginSession(command);
     print("Verified restoration queued; physical write barrier remains enforced.\n"); return;
   }
   if (equals(command, "rw_suite") || equals(command, "xfer_demo") || equals(command, "stress_mix") ||
@@ -800,13 +1212,14 @@ void Cli::processCommand(const char* text) {
     const bool typed = equals(command, "typed_demo");
     const bool repeated = equals(command, "stress_mix") || equals(command, "randbench");
     const size_t expected = typed ? 3U : repeated ? 5U : 4U;
-    uint32_t address = 0, n = typed ? 14 : 0, rounds = equals(command, "rw_suite") ? 4 : 1;
+    uint32_t address = 0, n = typed ? 28 : 0, rounds = equals(command, "rw_suite") ? 4 : 1;
     if (count != expected || !equals(args[count - 1], "confirm") || !integer(args[1], 0, UINT32_MAX, address) ||
         (!typed && !integer(args[2], 1, sizeof(_backup), n)) ||
         (repeated && !integer(args[3], 1, equals(command, "randbench") ? 1000U : 100U, rounds))) { invalid(); return; }
     const auto mode = typed ? ScratchMode::TYPED : equals(command, "stress_mix") ? ScratchMode::MIX :
         equals(command, "randbench") ? ScratchMode::RANDOM : equals(command, "xfer_demo") ? ScratchMode::XFER : ScratchMode::RW_SUITE;
-    status(startScratch(mode, address, n, rounds)); return;
+    const auto result = startScratch(mode, address, n, rounds);
+    status(result); if (result.ok()) beginSession(command); return;
   }
   if (equals(command, "stress") || equals(command, "watch")) {
     const bool watch = equals(command, "watch");
@@ -823,6 +1236,7 @@ void Cli::processCommand(const char* text) {
     if (!_platform.nowMs && !_config.nowMs) { status(Status::Error(Err::INVALID_CONFIG, "CLI stress requires a clock callback")); return; }
     _stress = true; _watch = watch; _remaining = rounds; _stressSuccess = 0; _stressFailures = 0; _nextMs = now();
     _repeatAddress = address; _repeatLength = n; _repeatInterval = interval;
+    beginSession(command);
     print("Read-only %s: %lu rounds, %lu ms interval; stop cancels.\n", watch ? "watch" : "stress",
           static_cast<unsigned long>(rounds), static_cast<unsigned long>(interval)); return;
   }
@@ -830,7 +1244,7 @@ void Cli::processCommand(const char* text) {
     const auto capacity = _device.settingsSnapshot().capacityBytes;
     const auto result = startReadView(ReadView::SELFTEST, 0, capacity);
     status(result);
-    if (result.ok()) { _operation = true; _hasResult = false; printSettings(); print("Queued whole-array read-only selftest; one transaction maximum per tick.\n"); }
+    if (result.ok()) { _operation = true; _hasResult = false; beginSession(command); printSettings(); print("Queued whole-array read-only selftest; one transaction maximum per tick.\n"); }
     return;
   }
   if (equals(command, "strings")) {
@@ -840,14 +1254,14 @@ void Cli::processCommand(const char* text) {
         (count == 4 && !integer(args[3], 1, sizeof(_stringPrefix), minimum))) { invalid(); return; }
     const auto result = startReadView(ReadView::STRINGS, address, n, minimum);
     status(result);
-    if (result.ok()) { _operation = true; _hasResult = false; print("Queued read-only strings scan; one transaction maximum per tick.\n"); }
+    if (result.ok()) { _operation = true; _hasResult = false; beginSession(command); print("Queued read-only strings scan; one transaction maximum per tick.\n"); }
     return;
   }
   if (equals(command, "current")) {
     uint32_t n = 1;
     if (count > 2 || (count == 2 && !integer(args[1], 1, sizeof(_data), n))) { invalid(); return; }
     const auto result = _device.startCurrentRead(_data, n);
-    status(result); if (result.ok()) { _operation = true; _hasResult = false; } return;
+    status(result); if (result.ok()) { _operation = true; _hasResult = false; beginSession(command); } return;
   }
   uint32_t address = 0;
   if (count < 2 || !integer(args[1], 0, UINT32_MAX, address)) { invalid(); return; }
@@ -883,10 +1297,17 @@ void Cli::processCommand(const char* text) {
         _device.startWrite(address, _data, count - 2, equals(command, "wverify"));
   }
   status(result);
-  if (result.ok()) { _operation = true; _hasResult = false; print("Queued; one physical transaction maximum per tick.\n"); }
+  if (result.ok()) { _operation = true; _hasResult = false; beginSession(command); print("Queued; one physical transaction maximum per tick.\n"); }
 }
 void Cli::tick() {
+  if (expireSession()) return;
+  if (_autoPoll) advance();
+  else _device.tick(now()); // Passive physical settling continues while owner polling is paused.
+  if (!expireSession()) finishSession();
+}
+void Cli::advance() {
   _device.tick(now());
+  if (expireSession()) return;
   if (_interfaceWait) {
     if (static_cast<int32_t>(now() - _interfaceReadyAt) < 0) return;
     _interfaceWait = false;
@@ -896,7 +1317,10 @@ void Cli::tick() {
     if (result.ok()) {
       ++_scanFound;
       print("  Found 0x%02X%s\n", _scanNext, _scanNext >= 0x50 && _scanNext <= 0x57 ? " (EEPROM/bank candidate; identity unverified)" : "");
-    } else if (!result.is(EEPROM24Cxx::Err::I2C_NACK_ADDR)) ++_scanErrors;
+    } else if (!result.is(EEPROM24Cxx::Err::I2C_NACK_ADDR)) {
+      ++_scanErrors;
+      if (_sessionStatus.ok()) _sessionStatus = result;
+    }
     if (_scanNext++ == _scanLast) {
       _scan = false; print("Scan complete: %u ACK, %u other transport errors.\n", _scanFound, _scanErrors);
     }
@@ -905,7 +1329,16 @@ void Cli::tick() {
   if (_stress && !_operation && static_cast<int32_t>(now() - _nextMs) >= 0) {
     const auto result = _device.startRead(_repeatAddress, _data, _repeatLength);
     if (result.ok()) { _operation = true; _hasResult = false; }
-    else { status(result); ++_stressFailures; if (_remaining) --_remaining; _nextMs = now() + _repeatInterval; if (!_remaining) stop(); }
+    else {
+      status(result);
+      if (_sessionStatus.ok()) _sessionStatus = result;
+      ++_stressFailures; if (_remaining) --_remaining; _nextMs = now() + _repeatInterval;
+      if (!_remaining) {
+        print("%s stopped: ok=%lu fail=%lu\n", _watch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
+              static_cast<unsigned long>(_stressFailures));
+        _stress = false; _watch = false;
+      }
+    }
   }
   scheduleScratch();
   if (_readView != ReadView::NONE && !_operation) {

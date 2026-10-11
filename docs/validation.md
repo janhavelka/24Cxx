@@ -1,5 +1,50 @@
 # Validation results
 
+## CLI procedure audit: 2026-10-11
+
+The [sixteen-library CLI comparison](library-comparison.md#cli-and-procedure-audit-2026-10-11)
+led to deeper scratch procedures, correlated whole-command results, manual
+owner controls, conservative runtime protocol settings and a serial runner.
+The framework-neutral core API and implementation are unchanged by this pass.
+
+Local checks after these changes:
+
+- Strict GCC 15.1.0 C++17 CMake/Ninja build with conversion warnings treated as
+  errors: all seven CTest entries pass (core, CLI, transport, helpers, scratch
+  diagnostics, Python runner and real CLI transcripts).
+- Managed PlatformIO native: all five suites discovered, all 28 cases pass.
+  The separate framework-free core compile/link target passes.
+- Runner: 36 offline tests cover complete byte evidence, CRC, all scratch
+  checks/counts, partial replies/writes, early prompts, missing/mismatched/reused
+  completion IDs, resets, foreign active work, strict arguments and durable
+  backup ordering. No failure cleanup sends bytes to a possibly partial command
+  or cancels another owner's job.
+- The actual shared C++ CLI, connected to a host EEPROM fixture, passes 18
+  targeted transcript checks plus a complete runner campaign. This exercises
+  the runner's real plan and preimage files, and independently compares the full
+  modeled array before/after all scratch procedures.
+- New scratch fault injection corrupts a neighboring byte while the addressed
+  write verifies successfully. Independent shadow comparison detects the
+  corruption before restoration, retains the backup, and explicit restoration
+  succeeds without erasing the original failure. Every owner tick is checked
+  for at most one physical callback.
+- Runtime-control regressions cover adapter capacity limits, unavailable probe
+  callbacks/counters, timed fallback, paused deadline expiry, uint32_t clock
+  rollover and physical callback success after the CLI deadline has elapsed.
+- ESP32-S2 and S3: full Arduino 3.3.11 and native ESP-IDF 5.5.5 compile/link and
+  binary generation pass. These are firmware builds, not physical trials.
+- Release/framework contracts and all reference checksums pass. Package export
+  validates 42 files, and the extracted standalone library builds with strict
+  warnings. Read-only and write-enabled runner dry runs produce `NOT_RUN`
+  artifacts without opening a serial port.
+
+Build logs, package checks and dry-run artifacts are ignored under
+`build-cli-audit/`. The runner is repository tooling, not part of the embedded
+package. Python 3.10+ is required for host tests; only live serial campaigns
+require `pyserial`. The [bench procedure](hardware-validation.md) distinguishes
+successful serial evidence from electrical, WP, retention and power-cut tests.
+No firmware was flashed and no real EEPROM or FieldCore hardware was exercised.
+
 ## Maintenance audit: 2026-10-11
 
 The audit simplified private driver state, shared staged read transactions and

@@ -29,6 +29,11 @@ struct Platform {
   const char* framework = "unknown";
   const char* frameworkVersion = "unknown";
   const char* target = "unknown";
+  // Cached application configuration; negative pins/zero rate mean unavailable.
+  int sdaPin = -1;
+  int sclPin = -1;
+  int writeProtectPin = -1;
+  uint32_t frequencyHz = 0;
 };
 
 class Cli {
@@ -48,6 +53,7 @@ class Cli {
   void printHealth();
   void printHeap();
   void printSettings();
+  void printBus();
   void printModels();
   void printStats();
   void printTransferStats();
@@ -61,23 +67,40 @@ class Cli {
   void printReadView(uint32_t address, size_t length);
   void finishString();
   enum class ScratchMode : uint8_t { RW_SUITE, MIX, RANDOM, TYPED, XFER };
-  enum class ScratchStage : uint8_t { NONE, BACKUP, PATTERN, RESTORE_WAIT, RESTORING };
+  enum class ScratchStage : uint8_t { NONE, BACKUP, PATTERN, RANDOM_READS, INSPECT, RESTORE_WAIT, RESTORING };
+  enum class ScratchAction : uint8_t { READ, WRITE, FILL, UPDATE, VERIFY, PROBE, CURRENT };
   EEPROM24Cxx::Status startScratch(ScratchMode mode, uint32_t address, uint32_t length, uint32_t rounds);
   void scheduleScratch();
   void completeScratch(const EEPROM24Cxx::TransferResult& result);
   void abortScratch(EEPROM24Cxx::Status reason);
   void finishScratchPrimary(EEPROM24Cxx::Status result);
-  void stop();
+  const char* scratchModeName() const;
+  bool scratchCheck(const char* name, bool passed);
+  void checkScratchAdmission();
+  void checkScratchRetainedResult();
+  bool checkScratchBounds();
+  void stop(EEPROM24Cxx::Status reason = EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::CANCELLED, "CLI job cancelled"));
   void complete();
+  void advance();
+  bool workActive() const;
+  void beginSession(const char* command);
+  void finishSession();
+  bool expireSession();
+  void printJob();
+  void printJobResult();
   const char* color(unsigned code) const;
   uint32_t now() const;
   Platform _platform{};
   bool _configured = false;
   EEPROM24Cxx::Config _config{};
+  size_t _adapterTxLimit = 0;
+  size_t _adapterRxLimit = 0;
+  EEPROM24Cxx::I2cProbeFn _adapterProbe = nullptr;
   EEPROM24Cxx::EEPROM24Cxx _device{};
   char _line[256]{};
   uint8_t _data[256]{}; // Borrowed by the driver until its terminal result.
   uint8_t _backup[256]{}; // Retained until verified restoration, including end/cancel.
+  uint8_t _scratchExpected[256]{}; // Independent expected contents; never used as a read destination.
   ScratchMode _scratchMode = ScratchMode::RW_SUITE;
   ScratchStage _scratchStage = ScratchStage::NONE;
   bool _backupValid = false;
@@ -86,6 +109,18 @@ class Cli {
   uint32_t _scratchLength = 0;
   uint32_t _scratchRounds = 0;
   uint32_t _scratchRound = 0;
+  uint32_t _scratchReadRound = 0;
+  uint8_t _scratchStep = 0;
+  ScratchAction _scratchAction = ScratchAction::READ;
+  const char* _scratchCheckName = "backup";
+  uint32_t _scratchReadOffset = 0;
+  uint32_t _scratchReadLength = 0;
+  uint32_t _scratchChecks = 0;
+  uint32_t _scratchCheckFailures = 0;
+  uint32_t _scratchOperationCheckFailures = 0;
+  uint32_t _scratchAdmissionAttempts = 0;
+  uint32_t _scratchOperations[7]{};
+  uint32_t _scratchCurrentSkipped = 0;
   uint32_t _scratchRandom = 0x24C02B01U;
   EEPROM24Cxx::Status _scratchPrimary{};
   EEPROM24Cxx::Status _scratchRestore{};
@@ -107,6 +142,19 @@ class Cli {
   bool _overflow = false;
   bool _color = true;
   bool _verbose = false;
+  bool _autoPoll = true;
+  bool _sessionActive = false;
+  uint32_t _nextSessionId = 1;
+  uint32_t _sessionId = 0;
+  uint32_t _deadlineMs = 0;
+  uint32_t _sessionStartedAt = 0;
+  uint32_t _sessionBudgetMs = 0;
+  char _sessionCommand[16] = "none";
+  EEPROM24Cxx::Status _sessionStatus{};
+  bool _hasSessionResult = false;
+  uint32_t _completedSessionId = 0;
+  char _completedCommand[16] = "none";
+  EEPROM24Cxx::Status _completedStatus{};
   bool _operation = false;
   bool _interfaceWait = false;
   uint32_t _interfaceReadyAt = 0;

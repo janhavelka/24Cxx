@@ -32,9 +32,22 @@
   the platform validation path; archived vendor provenance stays preserved.
 - Document FieldCore-node ownership, routed callbacks, wrapping clocks and
   retained programming barriers without adding firmware policy to the library.
+- Move non-template blocking helper execution into `src/BlockingMemory.cpp`;
+  retain public declarations and typed codec templates in the header.
+- Share tested WP and electrical recovery policies between ESP32 frameworks,
+  and include the new source/helpers in all build and package checks.
+- Add repository/homepage metadata for package consumers.
 
 ### Added
 
+- Whole-command CLI session IDs and terminal outcomes, serial framing markers,
+  manual polling/timeout controls, cached bus configuration and an overall deadline.
+- Ended-only transfer limits, ACK-poll/timed-wait selection and conservative
+  write-cycle overrides for adapter and scheduler testing.
+- Expanded scratch procedures: cooperative ownership checks, nine-operation
+  mixed cycles, random shadow-window verification and all public typed codecs.
+- A bounded serial HIL runner with explicit write opt-in, durable preimages,
+  strict stage/restoration evidence and offline/actual-CLI transcript tests.
 - Current-address reads with explicit transport opt-in and conservative pointer
   tracking; direct synchronous reads and init/unbind lifecycle aliases.
 - Cooperative compare-before-write updates, skipped-byte/comparison evidence,
@@ -51,14 +64,6 @@
   size, heap, verbose and read-only selftest diagnostics.
 - Transport regression suite, reproducible exported-package checks, and the
   documented sixteen-library audit and validation results.
-
-### Changed
-
-- Move non-template blocking helper execution into `src/BlockingMemory.cpp`;
-  retain public declarations and typed codec templates in the header.
-- Share tested WP and electrical recovery policies between ESP32 frameworks,
-  and include the new source/helpers in all build and package checks.
-- Add repository/homepage metadata for package consumers.
 
 ## EEPROM24Cxx 1.0.0 - 2026-09-22
 

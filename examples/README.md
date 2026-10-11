@@ -129,6 +129,26 @@ binding. `offline [0..255]` stages the passive failure threshold while ended;
 zero disables OFFLINE. `geometry` and `timing` show cached settings and health,
 while `page [addr]` reports page number, offset and remaining page/bank bytes.
 
+`bus` shows the application's configured SDA, SCL, frequency and WP pin without
+touching I2C. These are configured values, not measured electrical properties.
+While ended, `limits <tx> <rx>` can reduce transfer sizes up to the original
+adapter limits; TX includes the address-pointer bytes. `ackpoll 0` selects the
+conservative timed write wait, and `ackpoll 1` re-enables the supplied probe
+callback. It cannot create a probe capability that the adapter lacks.
+`writecycle <ms>` can extend the preset programming wait but cannot shorten it;
+zero restores the preset. The maximum explicit value is 1000 ms. These staged
+settings take effect at the next successful bind/begin and cannot change while
+a scratch backup needs restoration.
+
+`timeout` bounds each physical adapter call. `deadline <ms>` instead bounds an
+entire asynchronous CLI command, including all buffers, scratch stages and
+automatic restoration. It defaults to zero (disabled), accepts values below
+2^31 ms, requires a clock when enabled, and can change only while idle. Expiry
+stops future scheduling and retains any scratch backup; it does not replay a
+write or start restoration. A callback cannot be preempted: if it returns after
+the deadline, its physical result remains visible while the CLI session reports
+`TIMED_OUT`. Use a budget suitable for the full command, especially large arrays.
+
 ## Input and diagnostic contract
 
 Commands are lowercase. Integers accept decimal or explicit `0x` hexadecimal;
@@ -159,6 +179,23 @@ after it is consumed from the driver.
 For a read-only view spanning several core requests, the first request ID is
 retained as the CLI range ID in all progress and terminal reports, including
 failures and cancellation between buffers.
+
+Every admitted asynchronous command also emits `CLI accepted: command=...
+session=...` and one terminal `CLI result: command=... session=... outcome=...
+status=... code=... detail=...`. Session IDs describe the entire command; request
+IDs describe individual core transfers. A scratch session finishes only after
+restoration or a terminal failure. A prompt, successful stage, or returned
+`IN_PROGRESS` status is not command completion. `result` and `job result` print
+the cached session result again, explicitly on request. `hilmark <token>` echoes
+`CLI marker: token=...`; tokens contain 1..32 ASCII letters, digits, `_` or `-`.
+Markers delimit serial output without issuing I2C.
+
+`job auto 0` pauses automatic owner polling. `job step 0` processes only passive
+time; `job step 1` permits at most one physical callback. Neither bypasses a
+programming wait. `job auto 1` resumes normal scheduling, while `job cancel` and
+`job timeout` end future scheduling without bus traffic. Physical write-cycle
+settling and whole-command deadlines continue even with automatic polling off.
+Bare `job` reports the active command/session, polling mode and progress.
 
 `stats` prints consumed core-job counters plus passive health. Stream buffers
 and scratch stages are separate core jobs. `stats reset` clears those CLI
@@ -234,11 +271,11 @@ included in a restoration write. The whole range must fit the selected chip.
 
 | Command | Primary operation before restoration |
 | --- | --- |
-| `rw_suite <addr> <len> confirm` | Address-derived byte pattern, `0x5A` fill, `0xA5` fill, then update comparison that skips the unchanged data. Every writing stage is readback verified. |
-| `xfer_demo <addr> <len> confirm` | One verified address-derived pattern write, demonstrating the same owner-polled page/bank scheduling used by normal operations. |
-| `stress_mix <addr> <len> <N> confirm` | 1..100 alternating `0xA5`/`0x5A` verified whole-region rounds. |
-| `randbench <addr> <len> <N> confirm` | 1..1000 deterministic pseudorandom byte writes and matching readbacks within the region; seed `0x24C02B01` makes runs repeatable. |
-| `typed_demo <addr> confirm` | A 14-byte layout: little-endian `uint16` `0xA55A`, `uint32` `0x12345678`, and `uint64` `0x0123456789ABCDEF`, using public fixed-width codecs. |
+| `rw_suite <addr> <len> confirm` | Eight stages: pattern write/read, `0x5A` fill/verify, `0xA5` fill, changed update, unchanged update with zero accepted bytes, and independent final update read. |
+| `xfer_demo <addr> <len> confirm` | Pattern write/read and fill/verify, with bus-silent admission, zero-budget polling, busy admission, stale-owner rejection, retained-result and exactly-once consumption checks at each core stage. |
+| `stress_mix <addr> <len> <N> confirm` | 1..100 complete cycles of byte write, independent read, fill, verify, changed update, unchanged update, presence probe, pointer seed, and current read. Unsupported current reads use an explicitly reported addressed-read fallback. |
+| `randbench <addr> <len> <N> confirm` | 1..1000 deterministic changed-byte writes, then N independent random reads and a full-window comparison against a shadow image; seed `0x24C02B01` makes runs repeatable. |
+| `typed_demo <addr> confirm` | Two 28-byte layouts cover every public integer/endian/signed/IEEE codec and both boolean values; each is independently read and decoded. |
 | `scratch` | Cached primary/restore status, backup availability, rounds and metrics. |
 | `restore confirm` | Explicitly authorize a new verified restoration attempt using the retained backup. |
 
@@ -249,6 +286,17 @@ status, primary elapsed milliseconds (including backup), restoration elapsed
 milliseconds, verified pattern bytes and physical read/write/probe counts.
 `randbench` measures this bounded diagnostic flow, including EEPROM cycle waits;
 its primary time excludes restoration.
+
+Every suite checks out-of-range rejection without transfers and compares the
+entire scratch window against its expected shadow image **before** restoration.
+This detects collateral changes inside the window that restoring the backup
+would otherwise conceal. Named `Scratch check` records, operation counters and
+the completed/required round count make omitted steps visible. The host runner
+also compares a full-array preimage after the campaign, covering bytes outside
+the scratch region. All writes, including restoration, consume endurance.
+`xfer_demo` requires adapter transfer counters (provided by both examples).
+Without counters, the other suites report range rejection only and make no
+claim to have measured bus silence.
 
 `scratch` and `result` also retain the last terminal primary and restoration
 core stages separately, including commit uncertainty, accepted/completed/verified
@@ -273,4 +321,5 @@ readback. This RAM backup does not survive reboot or power loss; these examples
 are diagnostic tests, not transactional persistent storage.
 
 See [validation results](../docs/validation.md) for actual build coverage and
-[hardware validation](../docs/hardware-validation.md) for the remaining bench work.
+[hardware validation](../docs/hardware-validation.md) for the serial runner,
+manual fault procedures and remaining bench work.

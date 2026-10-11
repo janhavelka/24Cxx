@@ -18,6 +18,8 @@ pages, an 8-bit memory pointer and a 5 ms maximum programming cycle.
 - Shared read-only CLI dumps, text/string inspection, CRC32 and diagnostics.
 - Explicit scratch tests with backup/verified restoration, mixed stress and
   typed-data demos; optional WP control and application-owned bus recovery.
+- Correlated CLI jobs, manual polling and a serial qualification runner with
+  durable preimages and strict completion/restoration evidence.
 
 ## Integration
 
@@ -71,6 +73,8 @@ counts and write-commit evidence before deciding what to do next.
 The [chip coverage and field helper guide](docs/field-helpers.md) maps the exact
 chip's functions to APIs and CLI commands, including synchronous typed access.
 See the [CLI command reference](examples/README.md) for comprehensive bench tests.
+The [hardware procedure](docs/hardware-validation.md) includes the read-only
+runner and explicitly enabled scratch campaign.
 
 Read the [ownership and completion contract](docs/integration.md) before writing
 an adapter. WP-high may acknowledge a write while preserving old contents;
@@ -87,6 +91,8 @@ python tools/check_contracts.py
 python tools/check_reference_archive.py
 ```
 
+Host tests require Python 3.10 or newer; they use only its standard library.
+The live serial runner separately requires `pyserial`.
 On Windows use Ninja (`-G Ninja`) or MinGW Makefiles. The existing VS Code-managed
 PlatformIO installation is used through the repository wrapper:
 

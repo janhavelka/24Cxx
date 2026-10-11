@@ -1,11 +1,66 @@
 # Local library comparison
 
-The sibling Projects directory was audited again on 2026-09-26. Sixteen existing
+The sibling Projects directory was audited again on 2026-10-11. Sixteen existing
 standalone I2C libraries were found; application repositories, dependencies,
 archives and worktrees are excluded. `EEPROM_24Cxx` is empty.
 
-The [audit findings and parity matrix](audit-2026-09-26.md) record the inspected
-versions, concrete gaps, implemented fixes and intentional protocol differences.
+The [earlier audit findings and parity matrix](audit-2026-09-26.md) record the
+initial API comparison. The deeper CLI/procedure audit below compares actual
+implementations and test collectors, not just command names.
+
+## CLI and procedure audit, 2026-10-11
+
+These are inspected local revisions, not claims about published releases. The
+sibling repositories were read-only references.
+
+| Library | Version | Revision |
+| --- | --- | --- |
+| MB85RC | 4.2.0 | `f888671` |
+| OPT4001 | 1.2.2 | `082754b` |
+| SHT3x-main | 1.9.0 | `93ec054` |
+| TMP1x2 | 1.0.0 | `c8c93dd` |
+| ADS1115 | 2.0.2 | `1390991` |
+| BME280 | 2.2.0 | `f66c2ee` |
+| INA228 | 3.0.4 | `4e10c70` |
+| INA3221 | 3.2.0 | `1ad5c69` |
+| SCD41 | 1.3.2 | `70f8d80` |
+| PCA9555 | 3.0.3 | `386fcd5` |
+| TCA9548A | 1.1.0 | `07acf36` |
+| RV3032-C7 | 3.1.0 | `4dd51d1` |
+| LDC1614 | 3.2.0 | `6ec9043` |
+| MCP45HVX1 | 2.0.0 | `9573f5e` |
+| LSM6DS3TR | 2.1.0 | `9edafd3` |
+| SSD1315 | 4.0.3 | `9c4d2a6` |
+
+| Finding in EEPROM CLI | Applicable sibling evidence | Resolution |
+| --- | --- | --- |
+| An immediate prompt only acknowledged parsing; no whole-command terminal existed | LDC and LSM collectors correlate admitted jobs with terminal results; sensor collectors reject partial replies | Correlated `CLI accepted` / `CLI result` records encompass complete scans, streamed reads, repeats and scratch restoration; marker framing separates synchronous replies |
+| No physical test collector | Every inspected sibling has a serial HIL workflow | Read-only default runner with explicit target expectations, bounded capture, complete payload/CRC validation, structured reports and transcripts; programming needs an explicit scratch window and durable preimage |
+| `stress_mix` only alternated write patterns | MB85RC's mixed tests exercise distinct memory operations | Full mixed cycles exercise EEPROM-relevant operations with separate operation counters |
+| `randbench` checked only the written byte | MB85RC keeps a shadow window and independent random reads | Independent expected contents, random reads and final whole-window comparison detect collateral corruption before restoration could conceal it |
+| `typed_demo` only encoded three unsigned values | MB85RC round-trips signed, unsigned, IEEE and boolean values | Explicit encoded layouts are read back and decoded; boundary guards remain bus-silent |
+| `xfer_demo` was an ordinary verified write | MB85RC checks zero-budget polls, backpressure and retained results | Named admission, budget, stale-owner and retained-result checks accompany actual memory operations |
+| Always-on polling prevented controlled bench inspection | SHT3x and INA3221 have manual owner-step controls | `job auto`, `job step`, cancellation, timeout and retained command results expose scheduling without a second bus owner |
+
+The executable transcript test runs the real shared C++ CLI against the host
+EEPROM fixture and validates its output with the same Python evidence parser
+used by the serial runner. Truncated payloads, missing restoration, mismatched
+sessions and early prompts cannot establish a pass. Host fault tests separately
+exercise primary/restore failures, collateral corruption and cancellation.
+
+Parity preserves useful contracts rather than copying all behavior. Some sibling
+collectors accept a prompt or generic non-error output; those are insufficient
+for asynchronous EEPROM jobs. Some FRAM campaigns write by default or continue
+after a backup failure. EEPROM qualification defaults to read-only work and
+never programs after a failed backup or automatically retries an uncertain write.
+Physical programming NACKs and scan absence are distinct from tracked failures.
+
+Command spelling remains compatible where applicable. `timeout` controls a
+physical callback; `deadline` controls a whole CLI job. `stats reset` retains its
+documented job-and-adapter reset behavior, while `xfer_reset` resets only adapter
+counters. `xfer_assert` retains its existing total/read/write/probe argument order.
+Sibling sensor-only register, FIFO, calibration, identity and sleep commands do
+not apply. The EEPROM core API remains independent of all CLI/HIL additions.
 
 | Library | Protocol | Relevance to 24Cxx EEPROM |
 | --- | --- | --- |

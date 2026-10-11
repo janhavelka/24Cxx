@@ -2,132 +2,8 @@
 #define HEX 16
 #include "Eeprom24CxxCli.h"
 #undef HEX
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <vector>
+#include "../support/CliFixture.h"
 
-using namespace EEPROM24Cxx;
-using eeprom24cxx_cli::BusTransferKind;
-struct Fixture {
-  std::string output;
-  std::vector<uint8_t> addresses;
-  uint8_t memory[2048]{};
-  unsigned transfers = 0;
-  unsigned writes = 0;
-  unsigned reads = 0;
-  unsigned probes = 0;
-  unsigned resets = 0;
-  bool failReset = false;
-  uint32_t pointer = 0;
-  eeprom24cxx_cli::TransferStats counters{};
-  uint32_t ms = 0;
-  uint32_t busyUntil = 0;
-  bool writeProtected = false;
-  bool failWrite = false;
-  unsigned failWriteAttempt = 0;
-  bool nackWrite = false;
-  bool failRead = false;
-  bool failProbe = false;
-  Geometry geometry = geometryFor(DeviceVariant::ZETTA_ZD24C02B);
-  static uint32_t clock(void* user) { return static_cast<Fixture*>(user)->ms; }
-  static void print(void* user, const char* format, va_list args) {
-    char text[2048]; std::vsnprintf(text, sizeof(text), format, args);
-    static_cast<Fixture*>(user)->output += text;
-  }
-  uint32_t address(uint8_t bus, const uint8_t* prefix) const {
-    uint32_t value = prefix[0];
-    if (geometry.wordAddressBytes == 2) value = (value << 8U) | prefix[1];
-    const uint32_t bank = (static_cast<uint32_t>(bus) >> geometry.bankAddressShift) &
-        ((uint32_t{1} << geometry.bankAddressBits) - uint32_t{1});
-    return value | (bank << (8U * geometry.wordAddressBytes));
-  }
-  static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t timeout, void* user) {
-    auto& f = *static_cast<Fixture*>(user);
-    const auto result = writeBody(bus, tx, n, timeout, user);
-    f.counters.record(result.ok(), BusTransferKind::WRITE); return result;
-  }
-  static TransportResult writeBody(uint8_t bus, const uint8_t* tx, size_t n, uint32_t, void* user) {
-    auto& f = *static_cast<Fixture*>(user);
-    ++f.transfers; ++f.writes; f.addresses.push_back(bus);
-    if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED);
-    if (f.failWrite || f.writes == f.failWriteAttempt) { f.failWrite = false; f.busyUntil = f.ms + 5; return TransportResult::Error(TransportCode::TIMEOUT); }
-    if (f.nackWrite) { f.nackWrite = false; return TransportResult::Error(TransportCode::NACK_ADDRESS, 0, WriteCommit::NOT_COMMITTED); }
-    const uint32_t start = f.address(bus, tx);
-    if (n <= f.geometry.wordAddressBytes) return TransportResult::Error(TransportCode::IO_ERROR);
-    if (!f.writeProtected) for (size_t i = f.geometry.wordAddressBytes; i < n; ++i) {
-      const uint32_t target = (start / f.geometry.pageSizeBytes) * f.geometry.pageSizeBytes +
-          (start + static_cast<uint32_t>(i) - f.geometry.wordAddressBytes) % f.geometry.pageSizeBytes;
-      if (target >= sizeof(f.memory)) return TransportResult::Error(TransportCode::IO_ERROR);
-      f.memory[target] = tx[i];
-    }
-    f.busyUntil = f.ms + 5;
-    f.pointer = (start + static_cast<uint32_t>(n) - f.geometry.wordAddressBytes) % f.geometry.capacityBytes;
-    return TransportResult::Ok(n, 0);
-  }
-  static TransportResult read(uint8_t bus, const uint8_t* tx, size_t n,
-                               uint8_t* out, size_t count, uint32_t timeout, void* user) {
-    auto& f = *static_cast<Fixture*>(user);
-    const auto result = readBody(bus, tx, n, out, count, timeout, user);
-    f.counters.record(result.ok(), BusTransferKind::READ); return result;
-  }
-  static TransportResult readBody(uint8_t bus, const uint8_t* tx, size_t n,
-                               uint8_t* out, size_t count, uint32_t, void* user) {
-    auto& f = *static_cast<Fixture*>(user);
-    ++f.transfers; ++f.reads; f.addresses.push_back(bus);
-    if (f.ms < f.busyUntil) return TransportResult::Error(TransportCode::NACK_ADDRESS);
-    if (f.failRead) { f.failRead = false; return TransportResult::Error(TransportCode::TIMEOUT); }
-    const uint32_t start = n ? f.address(bus, tx) : f.pointer;
-    if ((n && n != f.geometry.wordAddressBytes) || start + count > sizeof(f.memory))
-      return TransportResult::Error(TransportCode::IO_ERROR);
-    std::memcpy(out, f.memory + start, count);
-    f.pointer = (start + static_cast<uint32_t>(count)) % f.geometry.capacityBytes;
-    return TransportResult::Ok(n, count);
-  }
-  static TransportResult probe(uint8_t bus, uint32_t, void* user) {
-    auto& f = *static_cast<Fixture*>(user);
-    ++f.transfers; ++f.probes; f.addresses.push_back(bus);
-    if (f.failProbe) { f.failProbe = false; f.counters.record(false, BusTransferKind::PROBE); return TransportResult::Error(TransportCode::TIMEOUT); }
-    const bool acknowledged = bus >= 0x50 && bus <= 0x57 && f.ms >= f.busyUntil;
-    f.counters.record(acknowledged, BusTransferKind::PROBE);
-    if (!acknowledged)
-      return TransportResult::Error(TransportCode::NACK_ADDRESS);
-    return TransportResult::Ok(0, 0);
-  }
-  static Status scan(uint8_t bus, void* user) {
-    return eeprom24cxx_cli::probeStatus(probe(bus, 50, user), "test address probe");
-  }
-  Config config() {
-    Config c;
-    c.i2cWrite = write; c.i2cWriteRead = read; c.i2cProbe = probe; c.i2cUser = this;
-    c.nowMs = clock; c.timeUser = this; c.maxTxBytes = 17; c.maxRxBytes = 16;
-    c.offlineThreshold = 2;
-    c.supportsCurrentAddressRead = true;
-    return c;
-  }
-  eeprom24cxx_cli::Platform platform() {
-    eeprom24cxx_cli::Platform p;
-    p.vprintf = print; p.nowMs = clock; p.probeAddress = scan; p.user = this;
-    p.transferStats = [](void* user) { return static_cast<Fixture*>(user)->counters; };
-    p.resetTransferStats = [](void* user) { static_cast<Fixture*>(user)->counters = {}; };
-    p.readWriteProtect = [](bool& value, void* user) { value = static_cast<Fixture*>(user)->writeProtected; return Status::Ok(); };
-    p.setWriteProtect = [](bool value, void* user) { static_cast<Fixture*>(user)->writeProtected = value; return Status::Ok(); };
-    p.resetInterface = [](void* user) {
-      auto& f = *static_cast<Fixture*>(user); ++f.resets;
-      return f.failReset ? Status::Error(Err::I2C_BUS, "injected reset failure") : Status::Ok();
-    };
-    return p;
-  }
-  bool run(eeprom24cxx_cli::Cli& cli, unsigned ticks = 80) {
-    for (unsigned i = 0; i < ticks; ++i) {
-      const unsigned before = transfers;
-      cli.tick();
-      if (transfers > before + 1) return false;
-      ++ms;
-    }
-    return true;
-  }
-};
 #define CHECK(x) do { if (!(x)) { std::printf("[FAIL] CLI check line %d: %s\n", __LINE__, #x); return 1; } } while (false)
 int main() {
   Fixture f; eeprom24cxx_cli::Cli cli;
@@ -465,20 +341,19 @@ int main() {
   CHECK(scratch.output.find("Original scratch bytes observed") != std::string::npos);
   scratch.output.clear(); before = scratch.writes;
   scratchCli.processCommand("stress_mix 32 8 4 confirm"); CHECK(scratch.run(scratchCli, 200));
-  CHECK(scratch.writes == before + 5);
+  CHECK(scratch.writes == before + 13);
   CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
   scratch.output.clear(); before = scratch.writes;
   scratchCli.processCommand("randbench 32 16 5 confirm"); CHECK(scratch.run(scratchCli, 200));
   CHECK(scratch.writes == before + 7);
   CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
   scratch.output.clear(); scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli, 100));
-  CHECK(scratch.output.find("rounds=1/1") != std::string::npos);
+  CHECK(scratch.output.find("rounds=4/4") != std::string::npos);
   CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
-  before = scratch.writes; scratchCli.processCommand("typed_demo 32 confirm");
-  for (unsigned i = 0; i < 40 && scratch.writes < before + 2; ++i) CHECK(scratch.run(scratchCli, 1));
-  const uint8_t typed[] = {0x5A, 0xA5, 0x78, 0x56, 0x34, 0x12, 0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01};
-  CHECK(std::memcmp(scratch.memory + 32, typed, sizeof(typed)) == 0);
-  CHECK(scratch.run(scratchCli, 100));
+  scratchCli.processCommand("typed_demo 32 confirm");
+  CHECK(scratch.run(scratchCli, 200));
+  CHECK(scratch.output.find("name=typed-le-values result=PASS") != std::string::npos);
+  CHECK(scratch.output.find("name=typed-be-signed-values result=PASS") != std::string::npos);
   CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
   // A backup read failure cannot schedule any programming or claim restore.
   scratch.output.clear(); before = scratch.writes; scratch.failRead = true;
@@ -518,7 +393,7 @@ int main() {
   CHECK(std::memcmp(scratch.memory, original.data(), original.size()) == 0);
   // Restore failure preserves a successful primary result and the original
   // backup. The second explicit restore is a new owner-authorized attempt.
-  scratch.output.clear(); scratch.failWriteAttempt = scratch.writes + 2;
+  scratch.output.clear(); scratch.failWriteAttempt = scratch.writes + 3;
   scratchCli.processCommand("xfer_demo 32 8 confirm"); CHECK(scratch.run(scratchCli));
   CHECK(scratch.output.find("primary=OK detail=0 restore=I2C_TIMEOUT") != std::string::npos);
   CHECK(scratch.output.find("backup=retained restore-required=yes") != std::string::npos);
@@ -547,9 +422,9 @@ int main() {
   restoreCancel.output.clear(); restoreCancelCli.processCommand("restore confirm");
   CHECK(restoreCancel.output.find("NO_RESULT") != std::string::npos);
   restoreCancel.output.clear(); restoreCancelCli.processCommand("xfer_demo 32 16 confirm");
-  for (unsigned i = 0; i < 60 && restoreCancel.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") == std::string::npos; ++i)
+  for (unsigned i = 0; i < 100 && restoreCancel.output.find("name=final-window result=PASS") == std::string::npos; ++i)
     CHECK(restoreCancel.run(restoreCancelCli, 1));
-  CHECK(restoreCancel.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") != std::string::npos);
+  CHECK(restoreCancel.output.find("name=final-window result=PASS") != std::string::npos);
   CHECK(restoreCancel.run(restoreCancelCli, 1)); // First restore page issued.
   before = restoreCancel.transfers; restoreCancel.output.clear(); restoreCancelCli.processCommand("cancel");
   CHECK(restoreCancel.transfers == before);
@@ -587,12 +462,12 @@ int main() {
   CHECK(evidence.output.find("commit=VERIFIED") != std::string::npos);
   // Failure of restoration retains its own detailed effect independently of a
   // successful primary stage and of subsequent ordinary reads.
-  evidence.failWriteAttempt = evidence.writes + 2;
+  evidence.failWriteAttempt = evidence.writes + 3;
   evidenceCli.processCommand("xfer_demo 32 8 confirm"); CHECK(evidence.run(evidenceCli));
   evidenceCli.processCommand("readbyte 32"); CHECK(evidence.run(evidenceCli));
   evidence.output.clear(); evidenceCli.processCommand("scratch");
   CHECK(evidence.output.find("primary=OK detail=0 restore=I2C_TIMEOUT") != std::string::npos);
-  CHECK(evidence.output.find("kind=VERIFIED_WRITE state=SUCCEEDED") != std::string::npos);
+  CHECK(evidence.output.find("kind=READ state=SUCCEEDED") != std::string::npos);
   CHECK(evidence.output.find("kind=VERIFIED_WRITE state=FAILED") != std::string::npos);
   CHECK(evidence.output.find("commit=INDETERMINATE") != std::string::npos);
   evidenceCli.processCommand("restore confirm"); CHECK(evidence.run(evidenceCli));
@@ -632,6 +507,145 @@ int main() {
   CHECK(evidence.output.find("BUSY") != std::string::npos && replacement.transfers == before);
   CHECK(evidence.run(evidenceCli, 7));
   evidenceCli.setup(replacement.platform(), alternate); CHECK(replacement.transfers == before + 1);
-  std::puts("[PASS] CLI parsing, memory views, current/update, watch, counters, scratch programming, fault/restore and cancellation");
+  // A CLI session spans the whole command, survives cached diagnostics, and
+  // emits one correlated terminal record only after all its physical work.
+  Fixture jobs; eeprom24cxx_cli::Cli jobCli;
+  auto jobConfig = jobs.config(); jobConfig.maxRxBytes = 4;
+  jobCli.setup(jobs.platform(), jobConfig); jobs.output.clear();
+  jobCli.processCommand("job auto 0");
+  before = jobs.transfers;
+  for (char value : std::string("read 0 8\n")) jobCli.feed(value);
+  CHECK(jobs.output.find("CLI accepted: command=read session=1") != std::string::npos);
+  CHECK(jobs.output.find("CLI result:") == std::string::npos && jobs.transfers == before);
+  CHECK(jobs.output.find("> ") != std::string::npos); // Admission prompt is not completion.
+  CHECK(jobs.run(jobCli, 5) && jobs.transfers == before);
+  jobCli.processCommand("job step 0"); CHECK(jobs.transfers == before);
+  jobCli.processCommand("settings"); jobCli.processCommand("health");
+  jobCli.processCommand("hilmark sync_1");
+  CHECK(jobs.output.find("CLI marker: token=sync_1") != std::string::npos);
+  jobCli.processCommand("job step 1"); CHECK(jobs.transfers == before + 1);
+  CHECK(jobs.output.find("CLI result:") == std::string::npos);
+  jobCli.processCommand("job step"); CHECK(jobs.transfers == before + 2);
+  const std::string readDone = "CLI result: command=read session=1 outcome=SUCCESS status=OK code=0 detail=0";
+  CHECK(jobs.output.find(readDone) != std::string::npos);
+  CHECK(jobs.output.find(readDone, jobs.output.find(readDone) + 1) == std::string::npos);
+  jobs.output.clear(); jobCli.processCommand("job result");
+  CHECK(jobs.output.find(readDone) != std::string::npos && jobs.transfers == before + 2);
+  jobCli.processCommand("read 8 8"); jobCli.processCommand("job result");
+  CHECK(jobs.output.find("CLI accepted: command=read session=2") != std::string::npos);
+  jobCli.processCommand("job cancel");
+  CHECK(jobs.output.find("CLI result: command=read session=2 outcome=CANCELLED status=CANCELLED code=19") != std::string::npos);
+  CHECK(jobs.transfers == before + 2);
+  jobs.output.clear(); jobCli.processCommand("read 8 8"); jobCli.processCommand("job timeout");
+  CHECK(jobs.output.find("CLI result: command=read session=3 outcome=TIMED_OUT status=TIMEOUT code=4") != std::string::npos);
+  CHECK(jobs.transfers == before + 2);
+  jobs.output.clear();
+  for (const char* command : {"job auto 2", "job step 2", "job step -1", "job cancel extra", "job result extra",
+                              "hilmark", "hilmark a.b", "hilmark token extra", "hilmark 123456789012345678901234567890123"}) {
+    jobCli.processCommand(command);
+  }
+  CHECK(jobs.output.find("CLI marker:") == std::string::npos && jobs.transfers == before + 2);
+  jobCli.processCommand("job auto 1"); jobs.output.clear();
+  jobs.failRead = true; jobCli.processCommand("stress 3"); CHECK(jobs.run(jobCli));
+  CHECK(jobs.output.find("Stress stopped: ok=2 fail=1") != std::string::npos);
+  CHECK(jobs.output.find("CLI result: command=stress session=4 outcome=FAILED") != std::string::npos);
+  jobs.output.clear(); jobCli.processCommand("discover"); CHECK(jobs.run(jobCli, 8));
+  CHECK(jobs.output.find("Scan complete:") != std::string::npos);
+  CHECK(jobs.output.find("CLI result: command=discover session=5 outcome=SUCCESS") != std::string::npos);
+  jobs.output.clear(); jobCli.processCommand("discover"); jobCli.processCommand("stop");
+  CHECK(jobs.output.find("CLI result: command=discover session=6 outcome=CANCELLED") != std::string::npos);
+  CHECK(jobs.output.find("Scan complete:") == std::string::npos);
+  jobCli.processCommand("job auto 0"); jobs.output.clear();
+  jobCli.processCommand("writebyte 0 77"); jobCli.processCommand("job step");
+  const unsigned timedWrites = jobs.writes; before = jobs.transfers;
+  CHECK(jobs.memory[0] == 77);
+  jobCli.processCommand("job timeout"); CHECK(jobs.transfers == before);
+  CHECK(jobs.output.find("CLI result: command=writebyte session=7 outcome=TIMED_OUT") != std::string::npos);
+  jobCli.processCommand("readbyte 0"); CHECK(jobs.transfers == before);
+  CHECK(jobs.output.find("BUSY") != std::string::npos);
+  CHECK(jobs.run(jobCli, 8)); CHECK(jobs.writes == timedWrites);
+  jobs.output.clear(); jobCli.processCommand("readbyte 0"); jobCli.processCommand("job step");
+  CHECK(jobs.output.find("CLI result: command=readbyte session=8 outcome=SUCCESS") != std::string::npos);
+  // One logical range may use several independent 256-byte core jobs.
+  Fixture streamedJobs; streamedJobs.geometry = geometryFor(DeviceVariant::C16);
+  eeprom24cxx_cli::Cli streamedJobCli; auto streamedConfig = streamedJobs.config();
+  streamedConfig.variant = DeviceVariant::C16;
+  streamedJobCli.setup(streamedJobs.platform(), streamedConfig); streamedJobs.output.clear();
+  streamedJobCli.processCommand("crc 0 512"); CHECK(streamedJobs.run(streamedJobCli));
+  const std::string crcDone = "CLI result: command=crc session=1 outcome=SUCCESS";
+  CHECK(streamedJobs.output.find(crcDone) != std::string::npos);
+  CHECK(streamedJobs.output.find(crcDone, streamedJobs.output.find(crcDone) + 1) == std::string::npos);
+  // Runtime protocol controls stay staged until bind and cannot grow beyond
+  // the injected adapter capacity. Timed waiting performs no ACK polls.
+  Fixture protocol; eeprom24cxx_cli::Cli protocolCli;
+  auto protocolPlatform = protocol.platform();
+  protocolPlatform.sdaPin = 8; protocolPlatform.sclPin = 9;
+  protocolPlatform.frequencyHz = 100000; protocolPlatform.writeProtectPin = 4;
+  protocolCli.setup(protocolPlatform, protocol.config()); protocol.output.clear();
+  before = protocol.transfers;
+  for (const char* command : {"bus", "limits", "writecycle", "ackpoll", "deadline"}) protocolCli.processCommand(command);
+  CHECK(protocol.output.find("Bus config: sda=8 scl=9 frequency-hz=100000 wp-pin=4") != std::string::npos);
+  CHECK(protocol.transfers == before);
+  for (const char* command : {"limits 5 3", "writecycle 10", "ackpoll 0"}) protocolCli.processCommand(command);
+  CHECK(protocol.output.find("BUSY") != std::string::npos);
+  CHECK(protocol.transfers == before);
+  protocolCli.processCommand("end"); protocol.output.clear();
+  for (const char* command : {"limits 18 16", "limits 17 17", "limits 1 1", "writecycle 4", "writecycle 1001", "ackpoll 2"})
+    protocolCli.processCommand(command);
+  protocolCli.processCommand("settings");
+  CHECK(protocol.output.find("timeout=50 ms tx=17 rx=16") != std::string::npos);
+  CHECK(protocol.output.find("ack-polling=yes write-cycle-override=0") != std::string::npos);
+  protocolCli.processCommand("limits 5 3"); protocolCli.processCommand("writecycle 10");
+  protocolCli.processCommand("ackpoll 0"); protocolCli.processCommand("bind");
+  CHECK(protocol.transfers == before);
+  const unsigned probesBeforeTimed = protocol.probes;
+  protocolCli.processCommand("fillverify 0 170 9"); CHECK(protocol.run(protocolCli, 100));
+  CHECK(protocol.writes == 3 && protocol.probes == probesBeforeTimed);
+  for (unsigned index = 0; index < 9; ++index) CHECK(protocol.memory[index] == 170);
+  CHECK(protocol.output.find("CLI result: command=fillverify session=1 outcome=SUCCESS") != std::string::npos);
+  protocolCli.processCommand("end"); protocolCli.processCommand("ackpoll 1");
+  protocolCli.processCommand("limits 17 16"); protocolCli.processCommand("writecycle 0");
+  protocolCli.processCommand("begin"); CHECK(protocol.probes == probesBeforeTimed + 1);
+  Fixture noProbe; eeprom24cxx_cli::Cli noProbeCli;
+  auto noProbeConfig = noProbe.config(); noProbeConfig.i2cProbe = nullptr;
+  noProbeCli.setup(noProbe.platform(), noProbeConfig); noProbeCli.processCommand("end"); noProbe.output.clear();
+  before = noProbe.transfers; noProbeCli.processCommand("ackpoll 1");
+  CHECK(noProbe.output.find("UNSUPPORTED") != std::string::npos && noProbe.transfers == before);
+  // A whole-job deadline expires even while owner polling is paused, across
+  // uint32 clock wrap, and after a successful callback that returned too late.
+  Fixture deadlines; eeprom24cxx_cli::Cli deadlineCli;
+  deadlineCli.setup(deadlines.platform(), deadlines.config());
+  deadlineCli.processCommand("job auto 0"); deadlineCli.processCommand("deadline 5");
+  before = deadlines.transfers; deadlines.output.clear();
+  deadlineCli.processCommand("readbyte 0"); deadlineCli.processCommand("deadline 9");
+  CHECK(deadlines.output.find("BUSY") != std::string::npos);
+  deadlines.ms += 5; deadlineCli.tick();
+  CHECK(deadlines.transfers == before);
+  CHECK(deadlines.output.find("CLI result: command=readbyte session=1 outcome=TIMED_OUT") != std::string::npos);
+  deadlines.output.clear(); deadlines.ms = UINT32_MAX - 2U;
+  deadlineCli.processCommand("readbyte 0"); deadlines.ms += 3U; deadlineCli.tick();
+  CHECK(deadlines.output.find("CLI result:") == std::string::npos);
+  deadlines.ms += 2U; deadlineCli.tick();
+  CHECK(deadlines.transfers == before);
+  CHECK(deadlines.output.find("CLI result: command=readbyte session=2 outcome=TIMED_OUT") != std::string::npos);
+  deadlines.output.clear(); deadlineCli.processCommand("deadline 2147483648");
+  CHECK(deadlines.output.find("INVALID_PARAM") != std::string::npos);
+  Fixture late; eeprom24cxx_cli::Cli lateCli; auto lateConfig = late.config();
+  lateConfig.i2cWriteRead = [](uint8_t address, const uint8_t* tx, size_t txLength, uint8_t* rx,
+                             size_t rxLength, uint32_t timeout, void* user) {
+    const auto result = Fixture::read(address, tx, txLength, rx, rxLength, timeout, user);
+    static_cast<Fixture*>(user)->ms += 5U;
+    return result;
+  };
+  lateCli.setup(late.platform(), lateConfig); lateCli.processCommand("deadline 5"); late.output.clear();
+  before = late.transfers; lateCli.processCommand("readbyte 0"); lateCli.tick();
+  CHECK(late.transfers == before + 1);
+  CHECK(late.output.find("kind=READ state=SUCCEEDED") != std::string::npos); // Preserve physical evidence.
+  CHECK(late.output.find("CLI result: command=readbyte session=1 outcome=TIMED_OUT") != std::string::npos);
+  CHECK(late.output.find("CLI result: command=readbyte session=1 outcome=SUCCESS") == std::string::npos);
+  late.output.clear(); lateCli.processCommand("rw_suite 0 8 confirm"); lateCli.tick();
+  CHECK(late.writes == 0); // Deadline after backup cannot start a pattern or restoration.
+  CHECK(late.output.find("CLI result: command=rw_suite session=2 outcome=TIMED_OUT") != std::string::npos);
+  std::puts("[PASS] CLI parsing, memory views, owner polling, correlated sessions, scratch programming, fault/restore and cancellation");
   return 0;
 }
