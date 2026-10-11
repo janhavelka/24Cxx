@@ -196,6 +196,12 @@ The repository is named `24Cxx`; its package, namespace and public include
 directory are `EEPROM24Cxx`. Keep the dependency exact-pinned behind the firmware's
 I2C module. Use the cooperative driver from `I2cTask`; the example CLI and
 `BlockingMemory` facade are optional and need not enter the firmware adapter.
+The example console follows FieldCore's direct-driver and bounded-output pattern,
+but it is a standalone console owner. Keep FieldCore's existing `SerialCli` in
+charge when integrating; do not install another USB driver or copy standalone
+USB/UART initialization into the EEPROM module. The neutral CLI can receive
+application output/backpressure hooks without introducing console policy into
+the memory driver.
 
 For multiplexed heads, keep one driver and stable request buffers per physical
 EEPROM. Select and validate the route before each physical callback, including
@@ -237,8 +243,10 @@ post-recovery write-cycle wait even on failure. Ordinary `recover()` is still
 only a presence check; GPIO recovery is an explicit application operation.
 
 The Arduino and native ESP-IDF examples own their bus and adapt errors to the
-same typed transport. One loop/task alone runs the CLI and driver. The IDF input
-task queues characters only. Neither adapter creates a second owner of the chip.
+same typed transport. One loop/task alone runs the CLI, driver and bounded console
+polling. A fixed output queue preserves partial writes; output pressure pauses
+new command intake and automatic I2C scheduling, while passive tWR and command
+deadlines still advance. Neither adapter creates a second owner of the chip.
 
 The Wire example requires Arduino-ESP32 3.3.11 or newer and explicitly reserves
 its controller for each complete callback: Wire mutex acquisition is not bounded

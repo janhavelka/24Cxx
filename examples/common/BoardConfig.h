@@ -16,6 +16,13 @@
 #ifndef EEPROM24CXX_SERIAL_BAUD
 #define EEPROM24CXX_SERIAL_BAUD 115200
 #endif
+// Native ESP-IDF on ESP32-S2 uses UART0; USB consoles ignore these pins.
+#ifndef EEPROM24CXX_SERIAL_TX
+#define EEPROM24CXX_SERIAL_TX 43
+#endif
+#ifndef EEPROM24CXX_SERIAL_RX
+#define EEPROM24CXX_SERIAL_RX 44
+#endif
 // Opt-in board-owned WP control. Leave -1 when WP is physically strapped or
 // controlled elsewhere. A configured GPIO starts HIGH (writes protected).
 #ifndef EEPROM24CXX_WP_PIN
@@ -28,9 +35,12 @@ inline constexpr int I2C_SCL = EEPROM24CXX_I2C_SCL;
 inline constexpr unsigned I2C_FREQUENCY_HZ = EEPROM24CXX_I2C_FREQUENCY_HZ;
 inline constexpr unsigned I2C_TIMEOUT_MS = EEPROM24CXX_I2C_TIMEOUT_MS;
 inline constexpr unsigned SERIAL_BAUD = EEPROM24CXX_SERIAL_BAUD;
+inline constexpr int SERIAL_TX = EEPROM24CXX_SERIAL_TX;
+inline constexpr int SERIAL_RX = EEPROM24CXX_SERIAL_RX;
 inline constexpr int WP_PIN = EEPROM24CXX_WP_PIN;
 static_assert(I2C_SDA >= 0 && I2C_SCL >= 0 && I2C_SDA != I2C_SCL, "Select distinct valid I2C pins");
 static_assert(I2C_FREQUENCY_HZ > 0 && SERIAL_BAUD > 0, "Bus and serial rates must be positive");
+static_assert(SERIAL_TX >= 0 && SERIAL_RX >= 0 && SERIAL_TX != SERIAL_RX, "Select distinct valid UART pins");
 static_assert(I2C_TIMEOUT_MS > 0 && I2C_TIMEOUT_MS <= 1000, "I2C timeout must be 1..1000 ms");
 static_assert(WP_PIN >= -1 && WP_PIN != I2C_SDA && WP_PIN != I2C_SCL, "WP must be disabled or use a separate GPIO");
 }  // namespace board

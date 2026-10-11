@@ -74,7 +74,10 @@ The [chip coverage and field helper guide](docs/field-helpers.md) maps the exact
 chip's functions to APIs and CLI commands, including synchronous typed access.
 See the [CLI command reference](examples/README.md) for comprehensive bench tests.
 The [hardware procedure](docs/hardware-validation.md) includes the read-only
-runner and explicitly enabled scratch campaign.
+runner, timed soak (`--soak-hours 24`), explicit scratch campaign and S2/S3 USB
+settings. Start with `help quickstart`, `help detection` or `help tests`; `console`
+reports transport and loss telemetry. Arduino S2 serial sessions require DTR=1
+(`--dtr 1` in the runner).
 
 Read the [ownership and completion contract](docs/integration.md) before writing
 an adapter. WP-high may acknowledge a write while preserving old contents;

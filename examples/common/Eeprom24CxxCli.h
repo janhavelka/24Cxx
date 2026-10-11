@@ -13,6 +13,21 @@ struct HeapStats {
   uint32_t minimumFreeBytes = 0;
   uint32_t largestFreeBlock = 0;
 };
+struct ConsoleStats {
+  const char* backend = "unknown";
+  int8_t connected = -1; // -1 means the backend cannot observe host presence.
+  uint32_t baud = 0;
+  uint32_t rxBytes = 0;
+  uint32_t rxOverflows = 0;
+  bool rxOverflowObservable = false;
+  uint32_t txBytes = 0;
+  uint32_t txDropped = 0;
+  uint32_t writeTimeouts = 0;
+  uint32_t formatOverflows = 0;
+  uint32_t queuedBytes = 0;
+  uint32_t highWaterBytes = 0;
+  bool ready = false;
+};
 struct Platform {
   void (*vprintf)(void*, const char*, va_list) = nullptr;
   uint32_t (*nowMs)(void*) = nullptr;
@@ -25,6 +40,9 @@ struct Platform {
   EEPROM24Cxx::Status (*setWriteProtect)(bool, void*) = nullptr;
   EEPROM24Cxx::Status (*resetInterface)(void*) = nullptr;
   HeapStats (*heapStats)(void*) = nullptr;
+  ConsoleStats (*consoleStats)(void*) = nullptr;
+  // Optional output backpressure: pause new polling, keep passive time/deadlines.
+  bool (*outputReady)(void*) = nullptr;
   void* user = nullptr;
   const char* framework = "unknown";
   const char* frameworkVersion = "unknown";
@@ -42,9 +60,11 @@ class Cli {
   // scratch backup owns the old context. Invalid reconfiguration preserves it.
   void setup(const Platform& platform, const EEPROM24Cxx::Config& config);
   void feed(char value);
+  // A transport that loses RX bytes must discard the whole partial line.
+  void discardInput() { _overflow = true; }
   void processCommand(const char* text);
   void tick();
-  void printHelp();
+  void printHelp(const char* topic = nullptr);
   void printPrompt();
  private:
   void print(const char* format, ...);
@@ -52,9 +72,14 @@ class Cli {
   void printVersion();
   void printHealth();
   void printHeap();
+  void printConsole();
+  void printRepeat(bool terminal = false);
+  void completeRepeat(EEPROM24Cxx::Status result);
   void printSettings();
   void printBus();
   void printModels();
+  void printConfiguredBanks();
+  void printDetectionSummary();
   void printStats();
   void printTransferStats();
   void printScratch(bool includeResults = true);
@@ -148,6 +173,7 @@ class Cli {
   uint32_t _sessionId = 0;
   uint32_t _deadlineMs = 0;
   uint32_t _sessionStartedAt = 0;
+  uint32_t _sessionElapsedMs = 0;
   uint32_t _sessionBudgetMs = 0;
   char _sessionCommand[16] = "none";
   EEPROM24Cxx::Status _sessionStatus{};
@@ -172,10 +198,15 @@ class Cli {
   uint32_t _stringCount = 0;
   char _stringPrefix[64]{};
   bool _scan = false;
+  uint8_t _scanFirst = 0;
   uint8_t _scanNext = 0;
   uint8_t _scanLast = 0;
+  unsigned _scanTested = 0;
   unsigned _scanFound = 0;
   unsigned _scanErrors = 0;
+  uint8_t _scanEepromAcks = 0;
+  uint8_t _scanEepromTested = 0;
+  uint8_t _scanEepromErrors = 0;
   bool _stress = false;
   bool _watch = false;
   uint32_t _repeatAddress = 0;
@@ -185,5 +216,16 @@ class Cli {
   uint32_t _nextMs = 0;
   uint32_t _stressSuccess = 0;
   uint32_t _stressFailures = 0;
+  bool _repeatChecking = false;
+  uint8_t _repeatReference[16]{};
+  uint32_t _repeatTarget = 0;
+  uint32_t _repeatStartedMs = 0;
+  uint32_t _repeatElapsedMs = 0;
+  uint32_t _roundStartedMs = 0;
+  uint32_t _repeatReportAt = 0;
+  uint32_t _repeatMinMs = 0;
+  uint32_t _repeatMaxMs = 0;
+  uint64_t _repeatBytes = 0;
+  bool _repeatWasWatch = false;
 };
 }  // namespace eeprom24cxx_cli

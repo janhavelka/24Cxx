@@ -10,6 +10,29 @@ implementations and test collectors, not just command names.
 
 ## CLI and procedure audit, 2026-10-11
 
+The follow-up pass also inspected detection, help indexing, timed stress, Python
+collectors and console implementations. Applicable patterns and their limits:
+
+| Reference | Useful pattern | Applied here |
+| --- | --- | --- |
+| LDC1614 | Topic/per-command help with explicit command contracts | One help catalogue, canonical aliases, filtered topics, quickstart and group ownership/effect notes |
+| TCA9548A and OPT4001 | Per-address scan errors and discovery independent of driver binding | EEPROM-range `detect`, explicit address probes, legal base/bank coverage, absent/error distinction; no fabricated chip identity |
+| INA3221 | Timed host soak with health/latency reporting | Saved-baseline reads and CRC, fixed aggregate metrics and bounded rotating logs; no duration-sized sample lists |
+| MB85RC | Memory stress and HIL operation coverage | Paired rotating read stress plus independently checked whole-array pre/post images; EEPROM soak excludes repeated programming/recovery |
+| FieldCore-node SerialCli | Direct SDK USB driver, bounded console work and explicit ownership | One console owner, zero-wait partial writes, fixed staging, backpressure, explicit S2/S3 transport configuration |
+
+The USB source review found that Arduino S3's HWCDC writer can wait repeatedly
+and replace queued data after a disconnect, Arduino S2's default CDC policy
+includes waiting/reboot triggers, and the native IDF secondary USB console is
+output-only. The examples now select their actual input/output backend explicitly
+and expose queue/loss/connection telemetry. SDK receive-loss observability is
+reported separately from the overflow count. Console backpressure never suspends
+physical programming waits or whole-job deadlines. The Python collector no
+longer retains every completed session ID or repeatedly scans its entire growing
+response buffer; incremental framing and modular session order keep long runs
+bounded. The [hardware guide](hardware-validation.md) records exact control-line
+settings, the remaining SDK limitations and physical long-run procedures.
+
 These are inspected local revisions, not claims about published releases. The
 sibling repositories were read-only references.
 

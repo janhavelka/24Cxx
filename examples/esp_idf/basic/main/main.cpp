@@ -1,6 +1,5 @@
-// Native ESP-IDF: one owner task calls the driver; input task queues bytes only.
+// Native ESP-IDF: one task owns the bus, driver and bounded console polling.
 #include <cstdarg>
-#include <cstdio>
 #include <climits>
 #include <driver/i2c_master.h>
 #include <esp_err.h>
@@ -11,22 +10,121 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <sdkconfig.h>
+#if !defined(CONFIG_ESP_CONSOLE_NONE) || (defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_ESP_CONSOLE_SECONDARY_NONE))
+#error "Regenerate sdkconfig with both default console channels disabled; the CLI owns its console driver"
+#endif
+#if CONFIG_IDF_TARGET_ESP32S3
+#include <driver/usb_serial_jtag.h>
+#include <hal/usb_serial_jtag_ll.h>
+#elif CONFIG_IDF_TARGET_ESP32S2
+#include <driver/uart.h>
+#else
+#error "This example console supports ESP32-S2 and ESP32-S3"
+#endif
 #include "BoardConfig.h"
 #include "Eeprom24CxxCli.h"
+#include "ConsoleOutput.h"
 #include "IdfTransportHelpers.h"
 #include "Esp32WriteProtect.h"
 #include "Esp32BusRecovery.h"
 
 namespace {
 using namespace EEPROM24Cxx;
+#if CONFIG_IDF_TARGET_ESP32S2
+static_assert(board::SERIAL_TX != board::I2C_SDA && board::SERIAL_TX != board::I2C_SCL &&
+              board::SERIAL_RX != board::I2C_SDA && board::SERIAL_RX != board::I2C_SCL &&
+              board::SERIAL_TX != board::WP_PIN && board::SERIAL_RX != board::WP_PIN,
+              "Native ESP32-S2 UART pins must be separate from I2C and EEPROM WP");
+#endif
 struct App {
   i2c_master_bus_handle_t bus = nullptr;
   i2c_master_dev_handle_t devices[8]{};
   bool ready = false;
   eeprom24cxx_cli::TransferStats stats{};
-  QueueHandle_t input = nullptr;
+  bool cliReady = false;
+  eeprom24cxx_cli::ConsoleOutput console{};
+#if CONFIG_IDF_TARGET_ESP32S2
+  QueueHandle_t uartEvents = nullptr;
+#endif
   eeprom24cxx_cli::Cli cli{};
 } app;
+bool initializeConsole() {
+  app.console.stats().baud = board::SERIAL_BAUD;
+#if CONFIG_IDF_TARGET_ESP32S3
+  app.console.stats().backend = "usb-serial-jtag";
+  usb_serial_jtag_driver_config_t config{};
+  config.tx_buffer_size = 1024;
+  config.rx_buffer_size = 1024;
+  // A CPU-only reset can retain interrupt enables from another USB owner.
+  usb_serial_jtag_ll_disable_intr_mask(USB_SERIAL_JTAG_LL_INTR_MASK);
+  const bool ready = usb_serial_jtag_driver_install(&config) == ESP_OK;
+#else
+  app.console.stats().backend = "uart0";
+  app.console.stats().rxOverflowObservable = true;
+  app.console.stats().connected = -1; // UART cannot observe a host connection.
+  uart_config_t config{};
+  config.baud_rate = static_cast<int>(board::SERIAL_BAUD);
+  config.data_bits = UART_DATA_8_BITS;
+  config.parity = UART_PARITY_DISABLE;
+  config.stop_bits = UART_STOP_BITS_1;
+  config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+  config.source_clk = UART_SCLK_DEFAULT;
+  const bool ready = uart_param_config(UART_NUM_0, &config) == ESP_OK &&
+      uart_set_pin(UART_NUM_0, board::SERIAL_TX, board::SERIAL_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) == ESP_OK &&
+      uart_driver_install(UART_NUM_0, 1024, 0, 16, &app.uartEvents, 0) == ESP_OK;
+#endif
+  app.console.ready(ready);
+  return ready;
+}
+size_t writeConsole(const uint8_t* data, size_t length, void*) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  const int written = usb_serial_jtag_write_bytes(data, length, 0);
+#else
+  // No TX ring or blocking write: accept only bytes fitting the hardware FIFO.
+  const int written = uart_tx_chars(UART_NUM_0, reinterpret_cast<const char*>(data), static_cast<uint32_t>(length));
+#endif
+  return written > 0 ? static_cast<size_t>(written) : 0;
+}
+int readConsole() {
+  uint8_t value = 0;
+#if CONFIG_IDF_TARGET_ESP32S3
+  const int received = usb_serial_jtag_read_bytes(&value, 1, 0);
+#else
+  const int received = uart_read_bytes(UART_NUM_0, &value, 1, 0);
+#endif
+  return received == 1 ? value : -1;
+}
+bool checkConsoleInput() {
+#if CONFIG_IDF_TARGET_ESP32S2
+  // The SDK can drop error notifications once its event queue fills. Treat
+  // saturation itself as evidence of possible loss, including UART_DATA-only
+  // queues whose later overflow/parity notifications could not be enqueued.
+  bool lost = app.uartEvents && uxQueueSpacesAvailable(app.uartEvents) == 0;
+  uart_event_t event{};
+  for (unsigned count = 0; count < 16 && app.uartEvents && xQueueReceive(app.uartEvents, &event, 0) == pdTRUE; ++count) {
+    if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL ||
+        event.type == UART_FRAME_ERR || event.type == UART_PARITY_ERR) lost = true;
+  }
+  if (lost) {
+    app.console.countRxOverflow();
+    app.cli.discardInput();
+    (void)uart_flush_input(UART_NUM_0);
+  }
+  return lost;
+#else
+  return false;
+#endif
+}
+eeprom24cxx_cli::ConsoleStats consoleStats(void*) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  app.console.stats().connected = usb_serial_jtag_is_connected() ? 1 : 0;
+#endif
+  return app.console.stats();
+}
+bool outputReady(void*) { return app.console.outputReady(); }
+void reportConsole(const char* format, ...) {
+  va_list args; va_start(args, format); app.console.append(format, args); va_end(args);
+}
 constexpr eeprom24cxx_cli::IdfResultMapper resultMapper{
     ESP_OK, ESP_ERR_TIMEOUT, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_RESPONSE, ESP_ERR_NOT_FOUND};
 TransportResult finish(esp_err_t error, size_t tx, size_t rx, bool memoryWrite) {
@@ -60,7 +158,7 @@ Status probeAddress(uint8_t address, void*) {
   return eeprom24cxx_cli::probeStatus(probeI2c(address, board::I2C_TIMEOUT_MS, nullptr), "IDF address probe");
 }
 uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
-void output(void*, const char* format, va_list args) { std::vprintf(format, args); }
+void output(void*, const char* format, va_list args) { app.console.append(format, args); }
 eeprom24cxx_cli::TransferStats stats(void*) { return app.stats; }
 void resetTransferStats(void*) { app.stats = {}; }
 Status releaseInterface() {
@@ -118,28 +216,13 @@ eeprom24cxx_cli::HeapStats heapStats(void*) {
           static_cast<uint32_t>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
           static_cast<uint32_t>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT))};
 }
-void inputTask(void*) {
-  while (true) {
-    const int value = std::getchar();
-    if (value == EOF) { std::clearerr(stdin); vTaskDelay(pdMS_TO_TICKS(10)); continue; }
-    const char character = static_cast<char>(value);
-    // Backpressure prevents dropped input from changing a write's arguments.
-    (void)xQueueSend(app.input, &character, portMAX_DELAY);
-  }
-}
 }  // namespace
 
-extern "C" void app_main() {
+void startCli() {
   const auto protectedState = eeprom24cxx_cli::initializeWriteProtect();
-  if (!protectedState.ok()) { std::printf("[E] %s\n", protectedState.msg); return; }
+  if (!protectedState.ok()) { reportConsole("[E] %s\n", protectedState.msg); return; }
   const Status initialized = initializeInterface();
-  if (!initialized.ok()) { std::printf("[E] %s detail=%ld\n", initialized.msg, static_cast<long>(initialized.detail)); return; }
-  app.input = xQueueCreate(384, sizeof(char));
-  if (!app.input || xTaskCreate(inputTask, "eeprom_input", 3072, nullptr, 4, nullptr) != pdPASS) {
-    std::puts("[E] Input queue/task creation failed");
-    if (app.input) vQueueDelete(app.input);
-    (void)releaseInterface(); return;
-  }
+  if (!initialized.ok()) { reportConsole("[E] %s detail=%ld\n", initialized.msg, static_cast<long>(initialized.detail)); return; }
   EEPROM24Cxx::Config config{};
   config.i2cWrite = writeI2c;
   config.i2cWriteRead = readI2c;
@@ -157,6 +240,8 @@ extern "C" void app_main() {
   platform.setWriteProtect = eeprom24cxx_cli::setWriteProtect;
   platform.resetInterface = resetInterface;
   platform.heapStats = heapStats;
+  platform.consoleStats = consoleStats;
+  platform.outputReady = outputReady;
   platform.sdaPin = board::I2C_SDA;
   platform.sclPin = board::I2C_SCL;
   platform.writeProtectPin = board::WP_PIN;
@@ -165,9 +250,24 @@ extern "C" void app_main() {
   platform.frameworkVersion = esp_get_idf_version();
   platform.target = CONFIG_IDF_TARGET;
   app.cli.setup(platform, config);
+  app.cliReady = true;
+}
+extern "C" void app_main() {
+  if (initializeConsole()) startCli();
   while (true) {
-    char value = 0;
-    for (unsigned count = 0; count < 64 && xQueueReceive(app.input, &value, 0) == pdTRUE; ++count) app.cli.feed(value);
+    app.console.drain(nowMs(nullptr), writeConsole);
+    (void)checkConsoleInput();
+    for (unsigned count = 0; app.cliReady && app.console.outputReady() && count < 64; ++count) {
+      const int value = readConsole();
+      if (value < 0) break;
+      app.console.countRx();
+      // An ISR can report loss after the initial queue check. Recheck before
+      // submitting a command; discard this already-read EOL too, so it cannot
+      // clear the discard state set for a damaged fragment still in flight.
+      if ((value == '\r' || value == '\n') && checkConsoleInput()) break;
+      app.cli.feed(static_cast<char>(value));
+      if (value == '\r' || value == '\n') break;
+    }
     app.cli.tick();
     vTaskDelay(1);
   }

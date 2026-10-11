@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- Replace blocking/competing example consoles with an explicit console owner,
+  bounded partial output and input polling; prevent detected RX loss from
+  executing a damaged command. Configure S2/S3 control lines and native IDF
+  console/power defaults explicitly for sustained runs.
+- Freeze completed CLI elapsed time and detect inconsistent repeated stress
+  reads without conflating content failures with successful physical transfers.
+- Keep HIL framing and session correlation bounded over long runs; preserve
+  proven failures when subsequent artifact or serial-close operations fail.
 - Reject a blocking readiness wait that finishes after its caller's deadline,
   even when the physical programming barrier expired during the wait.
 - Complete the Zetta protocol-recovery sequence with START before the final
@@ -40,6 +48,14 @@
 
 ### Added
 
+- Topic/per-command help, read-only quickstart, `detect`, targeted address probes,
+  bank coverage and per-address error summaries, legal bases and pointer mapping.
+- Rotating paired read stress with finite intervals, progress/latency/byte metrics,
+  and console queue/loss/capability telemetry.
+- Timed read-only Python soak campaigns with independent baseline/CRC checks,
+  heap/health/console sampling, bounded logs and atomic report checkpoints.
+- Detection/console regressions, actual-CLI soak transcripts and documented USB
+  backpressure/disconnect/long-run bench procedures.
 - Whole-command CLI session IDs and terminal outcomes, serial framing markers,
   manual polling/timeout controls, cached bus configuration and an overall deadline.
 - Ended-only transfer limits, ACK-poll/timed-wait selection and conservative

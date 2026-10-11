@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -135,13 +136,13 @@ class PayloadAndEvidenceTests(unittest.TestCase):
             hil.validate_output("selftest", output, context={"capacity": 10})
 
     def test_stress_early_stop_cannot_pass(self):
-        output = frame("stress", "Stress stopped: ok=2 fail=0\n")
+        output = frame("stress", "Stress stopped: ok=2 fail=0\nRepeat: mode=stress state=STOPPED target=2 completed=2 ok=2 fail=0 bytes=64 elapsed-ms=12 min-ms=1 max-ms=1\n")
         hil.validate_output("stress 2", output)
         with self.assertRaises(hil.EvidenceError):
             hil.validate_output("stress 3", output)
 
     def test_watch_checks_each_sample_payload(self):
-        body = (transfer(2) + dump(b"ab")) * 3 + "Watch stopped: ok=3 fail=0\n"
+        body = (transfer(2) + dump(b"ab")) * 3 + "Watch stopped: ok=3 fail=0\nRepeat: mode=watch state=STOPPED target=3 completed=3 ok=3 fail=0 bytes=6 elapsed-ms=2 min-ms=0 max-ms=0\n"
         hil.validate_output("watch 0 2 3 1", frame("watch", body))
         with self.assertRaises(hil.EvidenceError):
             hil.validate_output("watch 0 2 3 1", frame("watch", body.replace(dump(b"ab"), "", 1)))
@@ -149,11 +150,17 @@ class PayloadAndEvidenceTests(unittest.TestCase):
             hil.validate_output("watch 0 2 3 1", frame("watch", body), context={"array_payload": b"ac"})
 
     def test_scan_requires_expected_address_and_complete_counts(self):
-        body = "  Found 0x50 (EEPROM/bank candidate; identity unverified)\nScan complete: 1 ACK, 0 other transport errors.\n"
+        body = "  Found 0x50 (EEPROM/bank candidate; identity unverified)\nScan complete: 1 ACK, 0 other transport errors.\nDetection summary: tested=8 ack=1 absent=7 errors=0 candidate-acks=1 configured-bank-acks=1/1 base-ack=yes\n"
         hil.validate_output("discover", frame("discover", body), context={"address": 0x50})
         for bad in (body.replace("1 ACK", "2 ACK"), body.replace("0 other", "1 other"), body.replace("0x50", "0x51")):
             with self.assertRaises(hil.EvidenceError):
                 hil.validate_output("discover", frame("discover", bad), context={"address": 0x50})
+        with self.assertRaises(hil.EvidenceError):
+            hil.validate_output("discover", frame("discover", body), context={"address": 0x50, "model": "24lc1025"})
+        banked = body.replace("Scan complete:", "  Found 0x54 (EEPROM/bank candidate; identity unverified)\nScan complete:")
+        banked = banked.replace("1 ACK", "2 ACK").replace("ack=1 absent=7", "ack=2 absent=6")
+        banked = banked.replace("candidate-acks=1", "candidate-acks=2").replace("configured-bank-acks=1/1", "configured-bank-acks=2/2")
+        hil.validate_output("discover", frame("discover", banked), context={"address": 0x50, "model": "24lc1025"})
 
     def test_scratch_needs_primary_restoration_and_complete_named_checks(self):
         body = rw_evidence()
@@ -276,6 +283,16 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(hil.CaptureError):
             session.command("stress 1")
 
+    def test_session_wrap_is_allowed_but_backwards_identity_is_rejected(self):
+        serial, session = self.session({"stress 1": frame("stress", session=0xFFFFFFFF)})
+        session.command("stress 1")
+        serial.responses["stress 1"] = frame("stress", session=1)
+        session.command("stress 1")
+        self.assertEqual(session.last_completed_session, 1)
+        serial.responses["stress 1"] = frame("stress", session=0xFFFFFFFF)
+        with self.assertRaises(hil.CaptureError):
+            session.command("stress 1")
+
     def test_startup_banner_allowed_only_during_initial_drain(self):
         response = "Diagnostic CLI; application owns the bus. Type 'help' for commands.\n"
         _, session = self.session({"version": response})
@@ -294,6 +311,7 @@ class PlanAndDurabilityTests(unittest.TestCase):
         self.assertTrue(plan)
         self.assertFalse(any(step["writes"] for step in plan))
         self.assertFalse(any(step["command"].split()[0] in hil.SCRATCH | {"wp", "iface_reset", "write", "fill", "restore"} for step in plan))
+        self.assertEqual(sum(step["group"] == "full-check" for step in plan), 1)
 
     def test_write_opt_in_requires_exact_bounded_window(self):
         for extra in (("--allow-write",), ("--scratch-address", "0"),
@@ -364,6 +382,36 @@ class PlanAndDurabilityTests(unittest.TestCase):
         self.assertEqual(report["outcome"], "FAIL")
         self.assertEqual(report["cleanup"]["outcome"], "NOT_SENT")
 
+    def test_optional_telemetry_cannot_disappear_after_preflight(self):
+        class Fixture:
+            calls = 0
+            def command(self, command, **_kwargs):
+                self.calls += 1
+                return console_record() if self.calls == 1 else "[E] UNSUPPORTED detail=0: no telemetry\n"
+        report = {"plan": [{"command": "console", "group": "safe", "writes": False}] * 2, "results": []}
+        with tempfile.TemporaryDirectory() as temporary:
+            hil.run_plan(Fixture(), self.args(), Path(temporary), report)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertIn("telemetry disappeared", report["results"][-1]["reason"])
+
+    def test_serial_close_error_preserves_proven_failure(self):
+        class BrokenSerial:
+            def __init__(self, **_kwargs): pass
+            def open(self): pass
+            def close(self): raise OSError("close failed")
+        class SerialModule:
+            Serial = BrokenSerial
+        def failed_plan(_session, _args, _directory, report):
+            report["outcome"] = "FAIL"
+        with tempfile.TemporaryDirectory() as temporary, patch.dict("sys.modules", {"serial": SerialModule}), \
+                patch.object(hil.Session, "command", return_value=""), patch.object(hil, "run_plan", side_effect=failed_plan), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            result = hil.main(["--port", "fake", "--out", temporary, "--model", "zetta", "--address", "0x50"])
+            report = json.loads(next(Path(temporary).glob("*/report.json")).read_text())
+        self.assertEqual(result, 1)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertIn("serial close failed", report["capture_error"])
+
     def test_unexpected_parser_error_is_inconclusive_not_not_run(self):
         class Fixture:
             def command(self, command, **_kwargs):
@@ -372,6 +420,12 @@ class PlanAndDurabilityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch.object(hil, "validate_output", side_effect=RuntimeError("parser defect")):
             hil.run_plan(Fixture(), self.args(), Path(temporary), report)
         self.assertEqual(report["outcome"], "INCONCLUSIVE")
+
+    def test_cleanup_error_preserves_original_capture_reason(self):
+        report = {"outcome": "RUNNING"}
+        hil.capture_failure(report, "serial disconnected")
+        hil.capture_failure(report, "close failed")
+        self.assertEqual(report, {"outcome": "INCONCLUSIVE", "capture_error": "serial disconnected"})
 
     def test_dry_run_creates_not_run_evidence_without_serial_import(self):
         with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stdout(io.StringIO()):
@@ -384,6 +438,129 @@ class PlanAndDurabilityTests(unittest.TestCase):
             self.assertEqual(report["outcome"], "NOT_RUN")
             self.assertFalse(report["serial_executed"])
             self.assertEqual(report["electrical_evidence"], "NOT_RUN")
+
+
+HEALTH = ("Health: state=READY bound=yes consec=0 ok=1 fail=0\n"
+          "EEPROM: transfer-active=no result-pending=no write-cycle-pending=no write-busy-polls=0 ready-at=0\n"
+          "Last: ok=1 ms error=0 ms OK detail=0\n")
+
+
+def console_record(count=100):
+    return (f"Console: backend=test ready=yes connected=1 baud=115200 rx-bytes={count} rx-overflows=0 rx-loss-observable=yes "
+            f"tx-bytes={count} tx-dropped=0 write-timeouts=0 format-overflows=0 queued-bytes=100 high-water-bytes=1024\n")
+
+
+class SoakTests(unittest.TestCase):
+    def args(self, *extras):
+        return hil.parse_args(["--dry-run", "--out", "unused", "--model", "zetta", "--address", "0x50", *extras])
+
+    def run_fixture(self, seconds=4, fault=None):
+        timer = Clock()
+        original = bytes(range(256))
+        class Fixture:
+            def __init__(self):
+                self.commands = []
+                self.transcript = None
+            def command(self, command, **_kwargs):
+                self.commands.append(command)
+                timer.time += 0.01
+                if fault:
+                    injected = fault(command, len(self.commands))
+                    if injected is not None:
+                        return injected
+                tokens = command.split()
+                if tokens[0] == "read":
+                    address, length = int(tokens[1]), int(tokens[2])
+                    return frame("read", transfer(length, address=address) + dump(original[address:address + length], address))
+                if tokens[0] == "crc":
+                    return frame("crc", transfer(256) + f"CRC32/ISO-HDLC: address=0x00000 length=256 crc=0x{zlib.crc32(original):08X}\n")
+                if command == "health": return HEALTH
+                if command == "job": return "CLI job: active=0 command=crc session=1 auto=1\n"
+                if command == "heap": return "Heap: free=10000 minimum-free=9000 largest-free-block=8000 bytes\n"
+                if command == "console": return console_record(100 + len(self.commands))
+                raise AssertionError(command)
+        fixture = Fixture()
+        report = {"outcome": "PASS", "results": []}
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / "array-before.bin").write_bytes(original)
+            hil.run_soak(fixture, self.args("--soak-seconds", str(seconds)), directory, report,
+                         clock=timer, sleep=lambda duration: setattr(timer, "time", timer.time + duration))
+            stored = json.loads((directory / "report.json").read_text())
+            events = [json.loads(line) for line in (directory / "soak-events.jsonl").read_text().splitlines()]
+            self.assertEqual(stored["outcome"], report["outcome"])
+        return report, fixture.commands, events
+
+    def test_long_soak_aggregates_without_growing_report_history(self):
+        report, commands, events = self.run_fixture(1000)
+        self.assertEqual(report["outcome"], "PASS")
+        self.assertGreater(report["soak"]["cycles"], 900)
+        self.assertEqual(report["soak"]["commands"], len(commands))
+        self.assertEqual(len(events), len(commands))
+        self.assertEqual(report["results"], [])
+        self.assertLess(len(json.dumps(report)), 2000)
+        self.assertFalse(set(c.split()[0] for c in commands) & (hil.SCRATCH | {"write", "recover", "restore", "stop"}))
+
+    def test_corruption_stops_without_retry_recovery_or_more_commands(self):
+        report, commands, _ = self.run_fixture(fault=lambda command, n: frame("crc", transfer(256) + "CRC32/ISO-HDLC: address=0x00000 length=256 crc=0x00000000\n") if command.startswith("crc") else None)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertEqual(commands, ["read 0 256", "crc 0 256"])
+
+    def test_failed_event_write_does_not_erase_proven_corruption(self):
+        original_write = hil.RotatingLog.write
+        def broken_write(log, text):
+            if '"outcome": "FAIL"' in text:
+                raise OSError("disk full")
+            return original_write(log, text)
+        with patch.object(hil.RotatingLog, "write", broken_write):
+            report, commands, _ = self.run_fixture(fault=lambda command, n: frame("crc", transfer(256) + "CRC32/ISO-HDLC: address=0x00000 length=256 crc=0x00000000\n") if command.startswith("crc") else None)
+        self.assertEqual(report["outcome"], "FAIL")
+        self.assertEqual(report["soak"]["failure"]["outcome"], "FAIL")
+        self.assertEqual(report["capture_error"], "disk full")
+        self.assertEqual(len(commands), 2)
+
+    def test_disconnect_is_inconclusive_and_never_reconnects(self):
+        def disconnected(command, n):
+            if n == 2: raise hil.CaptureError("device disappeared")
+        report, commands, _ = self.run_fixture(fault=disconnected)
+        self.assertEqual(report["outcome"], "INCONCLUSIVE")
+        self.assertEqual(len(commands), 2)
+
+    def test_console_loss_and_health_errors_fail(self):
+        for target, response in (("console", console_record().replace("tx-dropped=0", "tx-dropped=1")),
+                                 ("health", HEALTH.replace("consec=0", "consec=1"))):
+            report, commands, _ = self.run_fixture(fault=lambda command, n: response if command == target else None)
+            self.assertEqual(report["outcome"], "FAIL")
+            self.assertEqual(commands[-1], target)
+
+    def test_explicit_optional_telemetry_skip_is_recorded(self):
+        report, _, _ = self.run_fixture(fault=lambda command, n: "[E] UNSUPPORTED detail=0: no telemetry\n" if command in {"heap", "console"} else None)
+        self.assertEqual(report["outcome"], "PASS")
+        self.assertEqual(report["soak"]["skipped"], ["heap", "console"])
+
+    def test_rotation_bounds_disk_and_retains_newest_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "events"
+            log = hil.RotatingLog(path, limit=10)
+            for index in range(20): log.write(f"row {index}\n")
+            log.close()
+            files = list(Path(temporary).iterdir())
+            self.assertEqual(len(files), 2)
+            self.assertLessEqual(sum(f.stat().st_size for f in files), 20)
+            self.assertIn("row 19", path.read_text())
+
+    def test_soak_arguments_and_control_lines_are_explicit(self):
+        self.assertEqual(self.args("--soak-hours", "2").soak_seconds, 7200)
+        self.assertEqual(self.args("--dtr", "1").dtr, 1)
+        for extras in (("--soak-hours", "169"), ("--soak-seconds", "nan"), ("--soak-interval", "0"),
+                       ("--soak-hours", "1", "--soak-seconds", "1"), ("--dtr", "2")):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit): self.args(*extras)
+
+    def test_console_partial_or_unmeasurable_fields_are_not_invented(self):
+        evidence = hil.validate_output("console", console_record().replace("rx-loss-observable=yes", "rx-loss-observable=no"))
+        self.assertEqual(evidence["console"]["rx-loss-observable"], "no")
+        for field in ("ready=yes", "rx-bytes=100", "rx-loss-observable=yes", "high-water-bytes=1024"):
+            with self.assertRaises(hil.EvidenceError): hil.validate_output("console", console_record().replace(field, ""))
 
 
 if __name__ == "__main__":

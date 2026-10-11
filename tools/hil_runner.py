@@ -25,6 +25,7 @@ import zlib
 
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_SOAK_SECONDS = 7 * 24 * 60 * 60
 MODELS = {
     "zetta": 256, "24c01": 128, "24c02": 256, "24c04": 512,
     "24c08": 1024, "24c16": 2048, "24c32": 4096, "24c64": 8192,
@@ -32,7 +33,7 @@ MODELS = {
     "24lc1025": 131072, "m24m01": 131072,
 }
 BANK_MASKS = {"24c04": 1, "24c08": 3, "24c16": 7, "24lc1025": 4, "m24m01": 1}
-ALIASES = {"dump": "read", "hexdump": "read", "selfcheck": "selftest", "cur": "current"}
+ALIASES = {"dump": "read", "hexdump": "read", "selfcheck": "selftest", "cur": "current", "detect": "discover"}
 SCRATCH = {"rw_suite", "xfer_demo", "stress_mix", "randbench", "typed_demo"}
 ACCEPTED = re.compile(r"^CLI accepted: command=(\w+) session=([1-9][0-9]*)(?=\n)", re.M)
 TERMINAL = re.compile(
@@ -134,6 +135,8 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
     require(bool(tokens), "empty command")
     head = ALIASES.get(tokens[0], tokens[0])
     require(REBOOT.search(clean) is None, "firmware reset/exception during command")
+    if head in {"heap", "console"} and re.fullmatch(r"\s*\[E\] UNSUPPORTED detail=-?[0-9]+(?::[^\n]*)?\n\s*", clean):
+        return {"supported": False, "reason": "application explicitly reports UNSUPPORTED"}
     require(ERROR.search(clean) is None, "CLI reported an error")
     evidence: dict = {}
     async_command = head in {"read", "current", "crc", "selftest", "discover", "scan", "stress", "watch"} | SCRATCH
@@ -216,6 +219,22 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         addresses = [int(value, 16) for value in re.findall(r"^  Found (0x[0-9A-Fa-f]{2})\b", clean, re.M)]
         require(len(set(addresses)) == len(addresses) == int(summary[1]), "scan address count mismatch")
         require(context.get("address", 0x50) in addresses, "expected EEPROM address did not acknowledge")
+        detection = fields(one_line(clean, "Detection summary:"))
+        expected_count = 112 if head == "scan" else 8
+        require(number(detection.get("tested", "0")) == expected_count and
+                number(detection.get("ack", "-1")) == len(addresses) and detection.get("errors") == "0" and
+                number(detection.get("absent", "-1")) + len(addresses) == expected_count,
+                "incomplete or inconsistent address coverage")
+        require(all((0x08 if head == "scan" else 0x50) <= address <= (0x77 if head == "scan" else 0x57)
+                    for address in addresses), "scan returned an address outside its range")
+        base = context.get("address", 0x50)
+        mask = BANK_MASKS.get(context.get("model", "zetta"), 0)
+        banks = {address for address in range(0x50, 0x58) if address & ~mask == base}
+        require(banks <= set(addresses) and
+                detection.get("configured-bank-acks") == f"{len(banks)}/{len(banks)}" and
+                detection.get("base-ack") == "yes" and
+                number(detection.get("candidate-acks", "-1")) == sum(0x50 <= address <= 0x57 for address in addresses),
+                "incomplete or inconsistent configured-bank coverage")
         evidence["addresses"] = addresses
     elif head in {"stress", "watch"}:
         rounds = number(tokens[1]) if head == "stress" else number(tokens[3])
@@ -224,6 +243,22 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require(match is not None and int(match[1]) == rounds and int(match[2]) == 0,
                 "repeat stopped early or had failures")
         evidence["rounds"] = rounds
+        summaries = [fields(line) for line in clean.splitlines() if line.startswith("Repeat:") and "state=STOPPED" in line]
+        require(len(summaries) == 1, "missing terminal repeat metrics")
+        metrics = summaries[0]
+        require(metrics.get("mode") == head and number(metrics.get("target", "0")) == rounds and
+                number(metrics.get("completed", "0")) == rounds and number(metrics.get("ok", "0")) == rounds and
+                metrics.get("fail") == "0", "repeat metrics mismatch")
+        capacity = context.get("capacity", 256)
+        if head == "watch":
+            expected_bytes = number(tokens[2]) * rounds
+        else:
+            blocks = (capacity + 15) // 16
+            expected_bytes = 2 * ((rounds // blocks) * capacity + min(capacity, (rounds % blocks) * 16))
+        require(number(metrics.get("bytes", "-1")) == expected_bytes, "missing paired-read or repeat byte evidence")
+        require(0 <= number(metrics.get("min-ms", "-1")) <= number(metrics.get("max-ms", "-1")) <= number(metrics.get("elapsed-ms", "-1")),
+                "invalid repeat timing evidence")
+        evidence["metrics"] = metrics
         if head == "watch":
             length, address = number(tokens[2]), number(tokens[1])
             # Each completed watch round emits its own transfer and dump.
@@ -331,6 +366,34 @@ def validate_output(command: str, output: str, *, context: dict | None = None) -
         require(re.match(r"Last: ok=[0-9]+ ms error=[0-9]+ ms [A-Z_]+ detail=-?[0-9]+(?:$|:)", one_line(clean, "Last:")) is not None,
                 "missing retained transfer status/timestamps")
         evidence["health"] = health
+        if "health_fail" in context:
+            require(number(health["fail"]) == context["health_fail"], "tracked health failures changed during campaign")
+    elif head == "heap":
+        data = fields(one_line(clean, "Heap:"))
+        require(set(data) == {"free", "minimum-free", "largest-free-block"} and
+                all(re.fullmatch(r"[0-9]+", value) for value in data.values()), "incomplete heap telemetry")
+        heap = {key: number(value) for key, value in data.items()}
+        require(0 <= heap["minimum-free"] <= heap["free"] <= 0xFFFFFFFF and
+                0 <= heap["largest-free-block"] <= heap["free"], "inconsistent heap telemetry")
+        evidence.update(supported=True, heap=heap)
+    elif head == "console":
+        data = fields(one_line(clean, "Console:"))
+        counters = ("baud", "rx-bytes", "rx-overflows", "tx-bytes", "tx-dropped", "write-timeouts", "format-overflows", "queued-bytes", "high-water-bytes")
+        require(set(data) == {"backend", "ready", "connected", "rx-loss-observable", *counters}, "incomplete console telemetry")
+        require(re.fullmatch(r"[A-Za-z0-9_-]+", data["backend"]) is not None and
+                data["ready"] in {"yes", "no"} and data["connected"] in {"-1", "0", "1"} and
+                data["rx-loss-observable"] in {"yes", "no"}, "invalid console capability/state")
+        require(all(re.fullmatch(r"[0-9]+", data[key]) and number(data[key]) <= 0xFFFFFFFF for key in counters),
+                "invalid console counters")
+        console = dict(data, **{key: number(data[key]) for key in counters})
+        require(console["ready"] == "yes" and console["connected"] != "0", "console is unavailable/disconnected")
+        require(console["tx-dropped"] == console["format-overflows"] == console["rx-overflows"] == 0, "console reports lost/truncated input/output")
+        require(console["queued-bytes"] <= console["high-water-bytes"] <= 16384, "invalid console queue evidence")
+        previous = context.get("console_previous")
+        if previous:
+            require(all(console[key] >= previous[key] for key in counters if key not in {"baud", "queued-bytes"}), "console counters regressed (possible reset)")
+            require(all(console[key] == previous[key] for key in ("backend", "baud", "rx-loss-observable")), "console transport/capabilities changed")
+        evidence.update(supported=True, console=console)
     elif head == "probe":
         require(re.search(r"^\[I\] OK detail=0(?:\n|:)", clean, re.M) is not None, "probe did not succeed")
     elif head == "color":
@@ -396,7 +459,7 @@ class Session:
         self.token_factory = token_factory
         self.max_bytes = max_bytes
         self.framing_lost = False
-        self.completed_sessions: set[int] = set()
+        self.last_completed_session: int | None = None
 
     def log(self, value: str) -> None:
         if self.transcript is not None:
@@ -429,7 +492,13 @@ class Session:
         marked = not asynchronous
         if marked:
             self.write("hilmark " + token, deadline)
-        captured = bytearray()
+        pending = bytearray()
+        lines = []
+        received = 0
+        accepted = None
+        completed = None
+        marker_seen = False
+        canonical = ALIASES.get(command.split()[0], command.split()[0])
         while self.clock() < deadline:
             self.serial.timeout = min(0.05, max(0.0, deadline - self.clock()))
             try:
@@ -438,42 +507,56 @@ class Session:
                 raise CaptureError(f"serial read failed: {error}") from error
             if not chunk:
                 continue
-            captured.extend(chunk)
+            pending.extend(chunk)
+            received += len(chunk)
             self.log(chunk.decode("utf-8", errors="replace"))
-            if len(captured) > self.max_bytes:
+            if received > self.max_bytes:
                 raise CaptureError("response exceeded bounded capture size")
-            output = captured.decode("utf-8", errors="replace")
-            clean = plain(output)
-            if not allow_startup and REBOOT.search(clean):
-                raise CaptureError("firmware reset/exception during command")
-            if asynchronous and not marked:
-                accepted = list(ACCEPTED.finditer(clean))
-                completed = list(TERMINAL.finditer(clean))
-                if len(accepted) > 1 or len(completed) > 1:
-                    raise CaptureError("duplicate async command admission/completion")
-                if completed:
-                    if not accepted or accepted[0].group(1, 2) != completed[0].group(1, 2):
-                        raise CaptureError("unmatched command/session completion")
-                    canonical = ALIASES.get(command.split()[0], command.split()[0])
-                    if completed[0][1] != canonical:
-                        raise CaptureError("completion belongs to a different command")
-                    session_id = int(completed[0][2])
-                    if session_id in self.completed_sessions:
-                        raise CaptureError("CLI reused a completed session identity (possible reset/stale response)")
-                    self.completed_sessions.add(session_id)
-                    marked = True
-                    self.write("hilmark " + token, deadline)
-                elif ERROR.search(clean) and not accepted:
-                    # Admission failed: synchronize the error without awaiting nonexistent work.
-                    marked = True
-                    self.write("hilmark " + token, deadline)
-            if marked and marker in clean:
-                require(clean.count(marker) == 1, "duplicate command synchronization marker")
-                before, tail = clean.split(marker, 1)
-                if re.fullmatch(r"[>\s]*", tail) is None:
+            # Inspect each complete line once. Repeatedly scanning the complete
+            # array dump makes fragmented USB/UART captures quadratic in size.
+            complete_lines = pending.split(b"\n")
+            pending = complete_lines.pop()
+            if len(pending) > 4096 or any(len(line) > 4096 for line in complete_lines):
+                raise CaptureError("serial line exceeds bounded CLI record length")
+            for raw_line in complete_lines:
+                line = plain(raw_line.decode("utf-8", errors="replace") + "\n")
+                if marker_seen:
+                    if re.fullmatch(r"[>\s]*", line) is None:
+                        raise CaptureError("unexpected output after command synchronization marker")
+                    continue
+                if not allow_startup and REBOOT.search(line):
+                    raise CaptureError("firmware reset/exception during command")
+                if asynchronous:
+                    begin, end = ACCEPTED.match(line), TERMINAL.match(line)
+                    if begin:
+                        if accepted is not None or completed is not None or begin[1] != canonical:
+                            raise CaptureError("duplicate or mismatched async command admission")
+                        accepted = begin.group(1, 2)
+                    if end:
+                        if completed is not None or accepted != end.group(1, 2):
+                            raise CaptureError("duplicate or unmatched command/session completion")
+                        if end[1] != canonical:
+                            raise CaptureError("completion belongs to a different command")
+                        session_id = int(end[2])
+                        distance = ((session_id - self.last_completed_session) & 0xFFFFFFFF) if self.last_completed_session is not None else 1
+                        if session_id > 0xFFFFFFFF or not 0 < distance < 0x80000000:
+                            raise CaptureError("CLI reused/regressed a completed session identity (possible reset/stale response)")
+                        self.last_completed_session = session_id
+                        completed = end.group(1, 2)
+                        marked = True
+                        self.write("hilmark " + token, deadline)
+                    elif not marked and ERROR.search(line) and accepted is None:
+                        marked = True
+                        self.write("hilmark " + token, deadline)
+                if marked and line == marker:
+                    marker_seen = True
+                else:
+                    lines.append(line)
+            if marker_seen:
+                if re.fullmatch(rb"[>\s]*", pending) is None:
                     raise CaptureError("unexpected output after command synchronization marker")
                 self.framing_lost = False
-                return before
+                return "".join(lines)
         raise CaptureError(f"command did not complete before {limit:g}s deadline")
 
 
@@ -500,7 +583,7 @@ def build_plan(args) -> list[dict]:
     plan = []
     def add(command, purpose, group="safe", writes=False):
         plan.append(dict(command=command, purpose=purpose, group=group, writes=writes))
-    for command in ("version", "job", "deadline", "settings", "bus", "scratch", "color off", "verbose off", "help", "geometry", "page 0", "size", "stats", "xfer_stats", "health"):
+    for command in ("version", "job", "deadline", "settings", "bus", "scratch", "color off", "verbose off", "help", "help detection", "help tests", "geometry", "page 0", "size", "stats", "xfer_stats", "health", "heap", "console"):
         add(command, "Firmware/target and cached diagnostics")
     add("discover", "EEPROM-range address acknowledgements")
     add("probe", "Untracked presence check")
@@ -522,9 +605,10 @@ def build_plan(args) -> list[dict]:
         for command in commands:
             add(command, "Explicit scratch procedure with verified restoration", "scratch", True)
             add(f"read {address} {length}", "Independently compare every byte with durable preimage", "restore-check")
-        add(f"read 0 {capacity}", "Check complete array against original capture after scratch procedures", "full-check")
+    add(f"read 0 {capacity}", "Check complete array against original capture after all procedures", "full-check")
     add("scratch", "Confirm retained backup/restoration state")
     add("health", "Confirm no outstanding work and final tracked health")
+    add("console", "Confirm no console output loss")
     return plan
 
 
@@ -544,6 +628,13 @@ def integer(text: str) -> int:
         raise argparse.ArgumentTypeError("expected unsigned decimal or 0x hexadecimal integer") from error
 
 
+def soak_duration(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value) or not 0 <= value <= MAX_SOAK_SECONDS:
+        raise argparse.ArgumentTypeError("duration must be finite, nonnegative and at most seven days")
+    return value
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", help="Explicit serial port; required for a live run")
@@ -554,6 +645,11 @@ def parse_args(argv=None):
     parser.add_argument("--timeout", type=positive_float, default=10.0)
     parser.add_argument("--long-timeout", type=positive_float, default=180.0)
     parser.add_argument("--rounds", type=integer, default=10)
+    duration = parser.add_mutually_exclusive_group()
+    duration.add_argument("--soak-seconds", type=soak_duration, default=0.0)
+    duration.add_argument("--soak-hours", type=soak_duration, default=0.0)
+    parser.add_argument("--soak-interval", type=positive_float, default=1.0, help="Pause between read-only soak cycles in seconds")
+    parser.add_argument("--dtr", type=integer, choices=(0, 1), default=0, help="Explicit control line; use 1 for Arduino ESP32-S2 native CDC; RTS stays 0")
     parser.add_argument("--allow-write", action="store_true", help="Explicitly allow only the selected scratch procedures")
     parser.add_argument("--scratch-address", type=integer)
     parser.add_argument("--scratch-length", type=integer)
@@ -566,6 +662,9 @@ def parse_args(argv=None):
     parser.add_argument("--voltage", default="unspecified", help="Measured EEPROM supply voltage")
     parser.add_argument("--bus-hz", type=integer, help="Recorded actual bus frequency")
     args = parser.parse_args(argv)
+    args.soak_seconds = args.soak_seconds or args.soak_hours * 3600
+    if args.soak_seconds > MAX_SOAK_SECONDS:
+        parser.error("soak duration cannot exceed seven days")
     if not args.dry_run and not args.port:
         parser.error("live runs require --port")
     if not 0x50 <= args.address <= 0x57:
@@ -613,6 +712,14 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
             timeout = args.long_timeout if async_command(command) else args.timeout
             output = session.command(command, timeout=timeout)
             evidence = validate_output(command, output, context=validation)
+            if command in {"heap", "console"}:
+                require(evidence.get("supported") or not context.get(command, False),
+                        "previously available telemetry disappeared")
+                context[command] = evidence["supported"]
+            if command == "health":
+                context["health_fail"] = number(evidence["health"]["fail"])
+            if command == "console" and evidence.get("supported"):
+                context["console_previous"] = evidence["console"]
             if command == "settings":
                 context["current_supported"] = evidence["current_supported"]
             if command == f"read 0 {context['capacity']}" and original is None:
@@ -629,7 +736,7 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                                 length=len(backup), sha256=hashlib.sha256(backup).hexdigest())
                 durable_write(directory / "scratch-preimage.json", (json.dumps(metadata, indent=2) + "\n").encode())
                 report["backup"] = metadata
-            row.update(outcome="PASS", evidence=json_value(evidence))
+            row.update(outcome="SKIPPED" if evidence.get("supported") is False else "PASS", evidence=json_value(evidence))
         except EvidenceError as error:
             row.update(outcome="FAIL", reason=str(error))
             report["outcome"] = "FAIL"
@@ -659,6 +766,176 @@ def run_plan(session: Session, args, directory: Path, report: dict) -> None:
                          "completed response or preflight rejection; no cancellation of preexisting work or automatic restoration"}
 
 
+def checkpoint_report(directory: Path, report: dict) -> None:
+    """Replace a complete checkpoint; a host interruption cannot leave half JSON."""
+    temporary = directory / "report.json.tmp"
+    with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+        json.dump(report, stream, indent=2)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    temporary.replace(directory / "report.json")
+
+
+def capture_failure(report: dict, reason: str) -> None:
+    # Artifact/connection failures cannot erase a failure already proved by the device.
+    if report.get("outcome") != "FAIL":
+        report["outcome"] = "INCONCLUSIVE"
+    report.setdefault("capture_error", reason)
+
+
+class RotatingLog:
+    """Keep the current and previous 8 MiB soak segments; never grow RAM/history."""
+    def __init__(self, path: Path, limit: int = 8 * 1024 * 1024):
+        self.path, self.limit = path, limit
+        self.size, self.rotations = 0, 0
+        self.stream = path.open("x", encoding="utf-8", newline="\n")
+
+    def write(self, text: str) -> None:
+        size = len(text.encode("utf-8"))
+        if size > self.limit:
+            raise CaptureError("single log record exceeds rotation limit")
+        if self.size + size > self.limit:
+            self.stream.close()
+            self.path.replace(self.path.with_name(self.path.name + ".previous"))
+            self.stream = self.path.open("x", encoding="utf-8", newline="\n")
+            self.size = 0
+            self.rotations += 1
+        self.stream.write(text)
+        self.size += size
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+    def close(self) -> None:
+        self.stream.close()
+
+
+def run_soak(session: Session, args, directory: Path, report: dict, *, clock=time.monotonic, sleep=time.sleep) -> None:
+    """Read-only, integrity-checked soak following a successful finite campaign.
+
+    A cycle admitted before the duration ends completes under per-command
+    deadlines. No new cycle starts afterwards; elapsed/overrun are recorded.
+    """
+    if not args.soak_seconds or report["outcome"] != "PASS":
+        return
+    baseline = (directory / "array-before.bin").read_bytes()
+    require(len(baseline) == MODELS[args.model], "soak needs a complete saved baseline")
+    context = dict(model=args.model, address=args.address, capacity=len(baseline), crc=zlib.crc32(baseline))
+    for row in report["results"]:
+        evidence = row.get("evidence", {})
+        if row["command"] in {"heap", "console"}:
+            context[row["command"]] = evidence.get("supported", False)
+        if "health" in evidence:
+            context["health_fail"] = number(evidence["health"]["fail"])
+        if "console" in evidence:
+            context["console_previous"] = evidence["console"]
+    started = clock()
+    summary = dict(outcome="RUNNING", requested_s=args.soak_seconds, elapsed_s=0.0,
+                   cycles=0, commands=0, read_bytes=0, crc_bytes=0,
+                   latency_min_s=None, latency_max_s=0.0, latency_total_s=0.0,
+                   skipped=[], heap=None, console=context.get("console_previous"))
+    report.update(outcome="RUNNING", soak=summary)
+    checkpoint_report(directory, report)
+    transcript = events = None
+    previous_transcript = getattr(session, "transcript", None)
+    checkpoint_at = started
+    offset = 0
+    try:
+        transcript = RotatingLog(directory / "soak-transcript.txt")
+        events = RotatingLog(directory / "soak-events.jsonl")
+        session.transcript = transcript
+        while clock() - started < args.soak_seconds:
+            length = min(256, len(baseline) - offset)
+            cycle = [f"read {offset} {length}", f"crc 0 {len(baseline)}", "job", "health", "heap", "console"]
+            for command in cycle:
+                row = dict(cycle=summary["cycles"] + 1, command=command)
+                before = clock()
+                try:
+                    expected = dict(context)
+                    if command.startswith("read "):
+                        expected["payload"] = baseline[offset:offset + length]
+                    output = session.command(command, timeout=args.long_timeout if async_command(command) else args.timeout)
+                    evidence = validate_output(command, output, context=expected)
+                    if evidence.get("supported") is False:
+                        require(not context.get(command, False), "previously available telemetry disappeared")
+                        if command not in summary["skipped"]:
+                            summary["skipped"].append(command)
+                        row["outcome"] = "SKIPPED"
+                    else:
+                        row["outcome"] = "PASS"
+                    if command == "health":
+                        context["health_fail"] = number(evidence["health"]["fail"])
+                    if command == "heap" and evidence.get("supported"):
+                        heap = evidence["heap"]
+                        if summary["heap"] is None:
+                            summary["heap"] = dict(initial_free=heap["free"], lowest_free=heap["free"])
+                        summary["heap"].update(last_free=heap["free"], minimum_free=heap["minimum-free"],
+                                               largest_free_block=heap["largest-free-block"],
+                                               lowest_free=min(summary["heap"]["lowest_free"], heap["free"]))
+                        context["heap"] = True
+                    if command == "console" and evidence.get("supported"):
+                        summary["console"] = context["console_previous"] = evidence["console"]
+                        context["console"] = True
+                    if command.startswith("read "): summary["read_bytes"] += length
+                    if command.startswith("crc "): summary["crc_bytes"] += len(baseline)
+                    row["evidence"] = json_value(evidence)
+                except EvidenceError as error:
+                    row.update(outcome="FAIL", reason=str(error))
+                except (Exception, KeyboardInterrupt) as error:
+                    row.update(outcome="INCONCLUSIVE", reason=str(error) or "operator interrupted")
+                elapsed = max(0.0, clock() - before)
+                row["elapsed_s"] = round(elapsed, 6)
+                summary["commands"] += 1
+                summary["latency_min_s"] = elapsed if summary["latency_min_s"] is None else min(summary["latency_min_s"], elapsed)
+                summary["latency_max_s"] = max(summary["latency_max_s"], elapsed)
+                summary["latency_total_s"] += elapsed
+                if row["outcome"] in {"FAIL", "INCONCLUSIVE"}:
+                    summary.update(outcome=row["outcome"], failure=row)
+                    report["outcome"] = row["outcome"]
+                events.write(json.dumps(row) + "\n")
+                events.flush()
+                if row["outcome"] in {"FAIL", "INCONCLUSIVE"}:
+                    return
+            summary["cycles"] += 1
+            offset = (offset + length) % len(baseline)
+            summary["elapsed_s"] = max(0.0, clock() - started)
+            if clock() - checkpoint_at >= 30:
+                checkpoint_report(directory, report)
+                checkpoint_at = clock()
+            remaining = args.soak_seconds - (clock() - started)
+            if remaining > 0:
+                sleep(min(args.soak_interval, remaining))
+        if summary["cycles"]:
+            summary["outcome"] = report["outcome"] = "PASS"
+        else:
+            summary.update(outcome="INCONCLUSIVE", reason="no complete soak cycle within requested duration")
+            report["outcome"] = "INCONCLUSIVE"
+    except (Exception, KeyboardInterrupt) as error:
+        reason = str(error) or "operator interrupted"
+        capture_failure(report, reason)
+        summary.update(outcome=report["outcome"], reason=reason)
+    finally:
+        summary["elapsed_s"] = max(0.0, clock() - started)
+        summary["overrun_s"] = max(0.0, summary["elapsed_s"] - args.soak_seconds)
+        summary["transcript_rotations"] = transcript.rotations if transcript else 0
+        summary["event_rotations"] = events.rotations if events else 0
+        summary["latency_mean_s"] = summary["latency_total_s"] / max(1, summary["commands"])
+        session.transcript = previous_transcript
+        for stream in (transcript, events):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError as error:
+                    capture_failure(report, f"soak log close failed: {error}")
+        summary["outcome"] = report["outcome"]
+        try:
+            checkpoint_report(directory, report)
+        except OSError as error:
+            capture_failure(report, f"soak checkpoint failed: {error}")
+            summary["outcome"] = report["outcome"]
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -669,16 +946,18 @@ def main(argv=None) -> int:
                   firmware=args.firmware, chip=args.chip, voltage=args.voltage, bus_hz=args.bus_hz,
                   allow_write=args.allow_write, plan=build_plan(args), results=[], serial_executed=False,
                   electrical_evidence="NOT_RUN")
+    report.update(dtr=args.dtr, soak=dict(outcome="NOT_RUN", requested_s=args.soak_seconds))
     if args.allow_write and args.scratch_length < 28:
         report["omitted"] = [{"command": "typed_demo", "outcome": "SKIPPED", "reason": "authorized scratch window is smaller than 28 bytes"}]
     serial = None
     try:
+        checkpoint_report(directory, report)
         if not args.dry_run:
             # Import only for live runs. No installation, discovery, upload, or
             # deliberate DTR/RTS reset occurs in this tool.
             import serial as pyserial  # type: ignore
             serial = pyserial.Serial(port=None, baudrate=args.baud, timeout=0.05, write_timeout=2)
-            serial.dtr = False
+            serial.dtr = bool(args.dtr)
             serial.rts = False
             serial.port = args.port
             serial.open()
@@ -686,20 +965,28 @@ def main(argv=None) -> int:
                 session = Session(serial, timeout=args.timeout, transcript=transcript)
                 # Unique marker drains startup/stale text without resetting the MCU.
                 report["serial_executed"] = True
+                report["outcome"] = "RUNNING"
+                checkpoint_report(directory, report)
                 session.command("hilmark " + secrets.token_hex(12), asynchronous=False, allow_startup=True)
                 run_plan(session, args, directory, report)
+                run_soak(session, args, directory, report)
     except (ImportError, OSError, CaptureError, EvidenceError, KeyboardInterrupt) as error:
-        report.update(outcome="INCONCLUSIVE", reason=str(error) or "operator interrupted")
+        capture_failure(report, str(error) or "operator interrupted")
     except Exception as error:
-        report.update(outcome="INCONCLUSIVE", reason=f"unexpected runner error: {type(error).__name__}: {error}")
+        capture_failure(report, f"unexpected runner error: {type(error).__name__}: {error}")
     finally:
         if serial is not None:
             try:
                 serial.close()
             except OSError as error:
-                report.update(outcome="INCONCLUSIVE", close_error=str(error))
-        (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+                capture_failure(report, f"serial close failed: {error}")
+        try:
+            checkpoint_report(directory, report)
+        except OSError as error:
+            capture_failure(report, f"report checkpoint failed: {error}")
     print(f"{report['outcome']}: {directory}")
+    if "capture_error" in report:
+        print(report["capture_error"], file=sys.stderr)
     return 0 if report["outcome"] in {"PASS", "NOT_RUN"} else 1 if report["outcome"] == "FAIL" else 2
 
 

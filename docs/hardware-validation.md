@@ -28,8 +28,13 @@ python tools/hil_runner.py --port COM5 --model zetta --address 0x50 --out build-
 The default campaign reads the full array, saves `array-before.bin`, compares
 firmware CRC/selftest results against those independently captured bytes, and
 exercises discovery, presence, current-address access, read stress and watch.
+It finishes with another independent full-array comparison, including in the
+read-only campaign, and records heap/console telemetry where available.
 It does not program EEPROM or change WP, reset the bus, upload firmware or
-deliberately toggle DTR/RTS. Current reads are skipped only when the adapter
+deliberately pulse DTR/RTS for a reset. Control-line states are set before opening
+the port: DTR defaults to zero (`--dtr 1` for Arduino S2), RTS stays zero. Drivers
+or USB-UART hardware may still glitch these lines during open; check the board.
+Current reads are skipped only when the adapter
 explicitly reports that capability unavailable. Hardware and firmware metadata
 are operator records; the printed library version alone does not certify the
 flashed source revision or physical part marking.
@@ -68,6 +73,102 @@ the affected bytes before explicitly choosing `restore confirm`. Retained RAM
 backup is lost on reset; the saved external preimage remains available for
 operator-directed recovery. Never send further commands while another tool
 owns the serial port or the previous line may be only partly transmitted.
+
+## Timed read-only soak
+
+After a successful finite campaign, `--soak-hours` (or `--soak-seconds`) starts
+a timed read-only phase. Maximum duration is seven days; `--soak-interval`
+sets the positive pause between cycles, default one second. Preview first:
+
+```powershell
+python tools/hil_runner.py --dry-run --model zetta --address 0x50 --out build-hil --soak-hours 24
+python tools/hil_runner.py --port COM5 --model zetta --address 0x50 --out build-hil --soak-hours 24 --board ESP32-S3 --firmware YOUR_FLASHED_COMMIT
+```
+
+Each cycle compares a rotating up-to-256-byte read with `array-before.bin`,
+checks a whole-array CRC against that same preimage, and samples idle job state,
+health, heap and console. Newly tracked bus failures, content mismatch, console
+loss or counter regression stop the run. Optional heap/console data are skipped
+only on an explicit `UNSUPPORTED` reply; disappearing supported telemetry fails.
+Heap samples record initial, lowest and last free space plus minimum-free and
+largest-block values; they do not automatically classify every allocation as a
+leak. A stall counter is recorded separately from actual dropped bytes.
+
+The soak phase never writes, even if the preceding finite campaign was authorized
+with `--allow-write`. There is one in-flight command, no automatic reconnect,
+reset, replay or post-failure cleanup. A cycle admitted before the duration ends
+finishes under the per-command deadlines; actual elapsed time and overrun are
+reported. Choose `--long-timeout` for the fitted capacity and serial throughput.
+
+`report.json` contains fixed-size aggregates (cycles, bytes, command latency,
+heap, console and failure evidence) and is atomically checkpointed at startup,
+after a cycle when 30 seconds have elapsed since the last checkpoint, and on exit.
+A killed process may leave
+`RUNNING`; it is not a pass. `soak-events.jsonl` and `soak-transcript.txt` each
+retain current and previous 8 MiB segments, bounding soak logs to 32 MiB total.
+Rotation deliberately discards older detailed records; the finite campaign,
+preimages and aggregate report remain separate. Disk/capture/close errors make
+the run inconclusive unless a failure was already established, in which case
+`FAIL` is preserved. These offline-tested reporting rules are not hardware results.
+
+## USB and console settings
+
+| Example | Runtime console | Host control lines | Settings |
+| --- | --- | --- | --- |
+| Arduino S3 | Direct IDF USB Serial/JTAG driver, native USB connector | DTR=0, RTS=0 | USB mode 1, automatic CDC-on-boot disabled; 1024-byte RX/TX driver buffers |
+| Arduino S2 | Explicitly initialized TinyUSB CDC, native USB connector | DTR=1, RTS=0 (`--dtr 1`) | USB mode 0, CDC-on-boot disabled; 1024-byte RX, zero TX wait, runtime USB reboot triggers disabled |
+| Native IDF S3 | Direct USB Serial/JTAG driver, native USB connector | DTR=0, RTS=0 | 1024-byte RX/TX driver buffers; primary and secondary SDK consoles disabled |
+| Native IDF S2 | UART0 via a USB-UART adapter, not the native USB connector | DTR=0, RTS=0 | 115200 8N1, no flow control; GPIO43 TX / GPIO44 RX by default, 1024-byte RX, direct FIFO TX |
+
+Override native S2 pins through `EEPROM24CXX_SERIAL_TX` and
+`EEPROM24CXX_SERIAL_RX` in `BoardConfig.h`/build defines. The native IDF defaults
+disable power management and tickless idle; the application does not enter sleep.
+Do not enable light/deep sleep during a connected USB qualification run. Existing
+generated sdkconfig files retain old choices: regenerate those generated files
+or set both SDK console channels to NONE. Build guards reject competing console
+owners. Arduino S2 no longer treats a 1200-baud/control-line sequence as a reboot
+request; subsequent flashing may require the board's manual BOOT/RESET sequence.
+
+The shared output ring retains ordered data when the host pauses and records
+queue pressure. At an 8 KiB reserve threshold it pauses command intake and
+automatic bus scheduling, while tWR and whole-job deadlines still advance.
+Zero-wait driver calls keep output backpressure out of the EEPROM owner loop;
+`write-timeouts` counts episodes with at least one second without output progress.
+An SDK accepting bytes is not proof that the terminal received them. Native S2
+UART cannot detect whether the USB-UART host is present. S3 connection telemetry
+observes USB host activity, not whether a terminal has the port open.
+
+TinyUSB and UART expose receive overflow events, which invalidate queued input
+before accepting another line. Native UART also treats a full event queue as
+possible loss and rechecks errors before submitting a line. S3's public USB driver exposes no RX overflow
+counter; `rx-loss-observable=no` reports that limitation explicitly. Zero reported
+overflow on that backend cannot establish zero RX loss. Send one bounded command
+at a time and wait for correlated completion; do not flood or paste batches of
+programming commands. The runner follows this rule.
+
+For a physical long-run qualification:
+
+1. Use stable board power and a known data cable, record the USB topology and
+   port, and close every other serial monitor. Record the host's suspend and USB
+   power-saving settings; keep it awake for the planned run. The runner does not
+   modify OS power policy.
+2. Run a finite read-only campaign and inspect `console`, `heap`, `detect` and
+   `help tests`. Confirm the expected backend, geometry, bank ACKs and no loss.
+3. Run a 24-hour read-only soak, then inspect baseline integrity, heap trend,
+   latency, loss counters, resets, completed cycles and actual duration. Repeat
+   on each intended framework/board, bus speed and hub/cable setup.
+4. Separately pause host reads during a long read and confirm ordered continuation
+   and bounded owner activity. Test disconnect/reconnect and control-line changes
+   while observing power, resets and a bus trace. A disconnected runner must stop;
+   resuming qualification requires a new operator-started campaign.
+5. With an external backup and disposable scratch region, separately test a
+   disconnect after physical programming starts. Check retained evidence and
+   tWR, then inspect contents before explicitly choosing restoration. Do not
+   interpret a surviving USB session as power-loss or endurance qualification.
+
+The transport choices were checked against the installed Arduino 3.3.11 and IDF
+sources, including the [IDF USB driver contract](https://github.com/espressif/esp-idf/blob/v5.3.2/components/esp_driver_usb_serial_jtag/include/driver/usb_serial_jtag.h)
+and [SDK console configuration](https://github.com/espressif/esp-idf/blob/v5.3.2/components/esp_system/Kconfig).
 
 ## Manual scheduler and fault procedures
 

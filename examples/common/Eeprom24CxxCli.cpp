@@ -17,7 +17,7 @@ const char* canonicalCommand(const char* command) {
     {"status", "progress"}, {"job", "progress"}, {"result", "progress"},
     {"cancel", "stop"}, {"unbind", "end"}, {"init", "begin"},
     {"dump", "read"}, {"hexdump", "read"}, {"cur", "current"},
-    {"selfcheck", "selftest"}
+    {"selfcheck", "selftest"}, {"detect", "discover"}
   };
   for (const auto& alias : aliases) if (equals(command, alias.alias)) return alias.command;
   return command;
@@ -50,6 +50,18 @@ constexpr Model models[] = {
 const char* modelName(DeviceVariant variant) {
   for (const auto& model : models) if (model.variant == variant) return model.name;
   return "custom";
+}
+bool validBankLayout(const Geometry& geometry) {
+  return geometry.bankAddressBits <= 3 && geometry.bankAddressShift <= 2 &&
+      geometry.bankAddressBits + geometry.bankAddressShift <= 3;
+}
+uint8_t addressBankMask(const Geometry& geometry) {
+  return validBankLayout(geometry) ?
+      static_cast<uint8_t>(((1U << geometry.bankAddressBits) - 1U) << geometry.bankAddressShift) : 0;
+}
+bool baseMatchesBanks(const Geometry& geometry, uint8_t address) {
+  return validBankLayout(geometry) && address >= cmd::MIN_ADDRESS && address <= cmd::MAX_ADDRESS &&
+      (address & addressBankMask(geometry)) == 0;
 }
 }  // namespace
 
@@ -130,76 +142,117 @@ void Cli::printVersion() {
   print("Library: %s\n", EEPROM24CXX_VERSION_FULL);
 #endif
 }
-void Cli::printHelp() {
-  print("%s=== EEPROM24Cxx CLI Help ===%s\n", color(36), color(0));
-  const auto section = [this](const char* title) { print("\n%s[%s]%s\n", color(32), title, color(0)); };
-  const auto item = [this](const char* command, const char* description) {
-    print("  %s%-32s%s - %s\n", color(36), command, color(0), description);
+void Cli::printHelp(const char* topic) {
+  struct Group { const char* key; const char* title; const char* contract; };
+  static constexpr Group groups[] = {
+    {"common", "Common", "Cached console controls; no I2C. Use help <topic|command> or help quickstart."},
+    {"detection", "Detection and binding", "ACK proves presence only. Discovery never selects a target or infers geometry; bank aliases may be one chip."},
+    {"memory", "Read-only memory", "Bus-silent admission, owner-polled reads. Require matching CLI result and complete byte/CRC evidence."},
+    {"programming", "Explicit programming", "Writes consume endurance. ACK does not prove storage; use verified variants. No automatic replay after faults."},
+    {"jobs", "Jobs and cancellation", "One owner; step permits at most one callback. Stop/timeout cannot undo issued programming. Prompts are not completion."},
+    {"configuration", "Configuration", "Queries are cached. Stage bus protocol settings while ended and without a retained backup; apply with bind/begin."},
+    {"diagnostics", "Diagnostics and read-only stress", "Passive telemetry is separate from physical attempts. Stress compares paired reads; host soak checks the saved whole array."},
+    {"tests", "Explicit scratch tests", "Require literal confirm and a <=256-byte disposable range. Backup before writing, inspect before verified restore; failures retain backup."}
   };
-  section("Common");
-  item("help / ?", "Show this help");
-  item("version / ver", "Firmware, library and framework version");
-  item("scan / discover", "Probe 0x08..0x77 / 0x50..0x57, one address per tick");
-  item("init / begin [addr]", "Bind optional address and check presence; no EEPROM write");
-  item("bind / unbind / end", "Bus-silent binding or release; end cancels scheduling");
-  item("addr [0x50..0x57]", "Set strap base while ended; model restricts bank bits");
-  item("model [name]", "List/select geometry while ended; never auto-detected");
-  item("color [0|1|off|on]", "Show or toggle ANSI colors");
-  item("verbose [0|1|off|on]", "Show or toggle per-round stress output");
-  section("Memory");
-  item("read / dump / hexdump <addr> [N]", "Bounded hex+ASCII view; default 16, up to capacity");
-  item("readbyte <addr>", "Read one byte");
-  item("current / cur [N]", "Current-pointer read, default 1; requires known pointer");
-  item("text <addr> [N]", "Escaped ASCII view; default 64, up to capacity");
-  item("strings [addr N [minLen]]", "Printable strings; whole chip by default, minLen=4 (1..64)");
-  item("crc <addr> <N>", "Compute CRC32/ISO-HDLC over a read-only range");
-  item("write <addr> <byte...>", "Explicitly overwrite 1..32 bytes; no readback");
-  item("writebyte <addr> <byte>", "Explicitly overwrite one byte; no readback");
-  item("wverify <addr> <byte...>", "Explicit write with readback verification");
-  item("update / uverify <addr> <bytes>", "Read first; skip unchanged pages, optional verification");
-  item("fill <addr> <byte> <N>", "Explicitly overwrite a range; no readback");
-  item("fillverify <addr> <byte> <N>", "Explicit fill with readback verification");
-  item("verify <addr> <byte...>", "Read-only comparison against 1..32 expected bytes");
-  item("progress / status / job / result", "Cached operation progress and commit evidence");
-  item("job auto [0|1] / job step [0|1]", "Control owner polling; step uses at most one transfer");
-  item("job cancel / timeout / result", "End scheduling or inspect the last complete CLI job");
-  item("stop / cancel", "Cancel future work; an issued EEPROM write continues");
-  section("Configuration");
-  item("cfg / settings / snapshot", "Cached staged settings and geometry; no I2C");
-  item("bus", "Cached application pins, rate and WP configuration");
-  item("timeout [1..1000]", "Set transaction timeout while ended");
-  item("limits [tx rx]", "Set chunk limits while ended; cannot exceed adapter limits");
-  item("writecycle [0..1000]", "Set tWR while ended; 0=preset, never shorten preset");
-  item("ackpoll [0|1]", "Set ACK polling while ended; 0 uses timed waiting");
-  item("deadline [ms]", "Whole CLI job deadline; 0=disabled, maximum 2147483647");
-  item("offline [0..255]", "Set passive offline threshold while ended; 0 disables");
-  item("variants / size", "List profile geometry / show configured capacity");
-  item("geometry / timing / page [addr]", "Cached geometry/timing or page and bank boundaries");
-  section("Diagnostics");
-  item("drv / health / state / online", "Cached health and independent physical bus counters");
-  item("diag", "Version, staged settings and cached health");
-  item("probe", "Presence check; bypasses tracked driver health");
-  item("recover", "One explicit presence check; no writes or bus reset");
-  item("stress [N]", "Finite read-only test, default 100; 1..10000 rounds");
-  item("watch <addr> <len> [N interval]", "Read-only repeated view; defaults 20 rounds, 1000 ms");
-  item("selfcheck / selftest", "Read whole configured array; geometry, CRC and health report");
-  item("heap", "Application heap telemetry, when adapter supports it");
-  item("stats [reset]", "CLI job counts and health; reset preserves driver health");
-  item("xfer_stats [reset] / xfer_reset", "Physical bus counters, including scans and ACK polls");
-  item("xfer_assert <N> [read write probe]", "Assert exact physical transfer counts");
-  item("wp [0|1]", "Read/set application WP pin; 1=protected, 0=writable");
-  item("iface_reset", "Explicit application bus recovery while idle and settled");
-  section("Explicit scratch tests");
-  item("rw_suite <addr> <len> confirm", "Backup <=256 bytes, pattern/fill/update tests, restore+verify");
-  item("xfer_demo <addr> <len> confirm", "Admission/budget/owner/result checks, write/read/restore");
-  item("stress_mix <addr> <len> N confirm", "1..100 cycles of nine memory operations, then restore");
-  item("randbench <addr> <len> N confirm", "1..1000 random writes, independent reads, window check");
-  item("typed_demo <addr> confirm", "28-byte unsigned/signed/IEEE/bool round trip, then restore");
-  item("scratch / restore confirm", "Show retained backup / explicitly authorize restoration");
-  print("Scratch tests consume endurance; failures/cancel retain backup and require explicit restore confirm.\n");
-  print("\nNumbers: decimal or 0x hex. Write acceptance is not persistence; WP may silently suppress writes.\n");
-  print("Address aliases may belong to one banked chip. ACK cannot identify manufacturer or capacity.\n");
-  print("Automation: hilmark <token> echoes an alphanumeric/_/- token (1..32 chars); prompts do not mean job completion.\n");
+  struct Entry { unsigned group; const char* keys; const char* syntax; const char* description; };
+  // A single catalogue serves complete, topic and per-command help. Space-separated
+  // keys include command pairs with different semantics; ordinary aliases canonicalize.
+  static constexpr Entry entries[] = {
+    {0, "help", "help / ?", "All commands; help <topic|command>, help quickstart"},
+    {0, "version", "version / ver", "Firmware, library and framework version"},
+    {0, "color", "color [0|1|off|on]", "Show or toggle ANSI colors"},
+    {0, "verbose", "verbose [0|1|off|on]", "Show or toggle per-round stress details"},
+    {0, "hilmark", "hilmark <token>", "Echo 1..32 ASCII letters/digits/_/- for serial framing"},
+    {1, "scan discover", "scan / discover / detect", "Probe 0x08..0x77 / EEPROM 0x50..0x57; one address/tick"},
+    {1, "probe", "probe [0x50..0x57]", "Presence only; explicit address leaves binding unchanged"},
+    {1, "begin", "init / begin [addr]", "Bind optional address and perform one tracked presence check"},
+    {1, "bind end", "bind / unbind / end", "Bus-silent binding/release; end cancels scheduling"},
+    {1, "recover", "recover", "One tracked presence check; no reset or content restoration"},
+    {1, "model variants", "model [name] / variants", "List profiles and legal bases; select model while ended"},
+    {1, "addr", "addr [0x50..0x57]", "Set strapped base while ended; bank bits must be clear"},
+    {2, "read", "read / dump / hexdump <addr> [N]", "Hex+ASCII; default 16 bytes, up to configured capacity"},
+    {2, "readbyte", "readbyte <addr>", "Read exactly one byte"},
+    {2, "current", "current / cur [N]", "Pure SLA+R; default 1, max 256; known bank-local pointer"},
+    {2, "text", "text <addr> [N]", "Escaped ASCII; default 64, up to capacity"},
+    {2, "strings", "strings [addr N [minLen]]", "Printable runs; defaults whole chip, minLen=4 (1..64)"},
+    {2, "crc", "crc <addr> <N>", "CRC32/ISO-HDLC over a nonempty valid range"},
+    {2, "verify", "verify <addr> <byte...>", "Read-only comparison against 1..32 expected bytes"},
+    {3, "write", "write <addr> <byte...>", "Overwrite 1..32 bytes; completion without readback"},
+    {3, "writebyte", "writebyte <addr> <byte>", "Overwrite one byte; completion without readback"},
+    {3, "wverify", "wverify <addr> <byte...>", "Write 1..32 bytes and verify the complete range"},
+    {3, "update uverify", "update / uverify <addr> <bytes>", "Skip equal chunks; uverify also verifies all bytes"},
+    {3, "fill", "fill <addr> <byte> <N>", "Program a nonempty range without readback"},
+    {3, "fillverify", "fillverify <addr> <byte> <N>", "Program and readback-verify the complete range"},
+    {3, "wp", "wp [0|1]", "Optional GPIO: 1=protected, 0=writable; set only settled"},
+    {4, "progress", "progress / status / job / result", "Cached progress, session, timing and commit evidence"},
+    {4, "progress", "job auto [0|1] / job step [0|1]", "Pause/resume automatic polling or grant a single budget"},
+    {4, "progress", "job cancel / timeout / result", "End scheduling or inspect retained command result"},
+    {4, "stop", "stop / cancel", "Stop future work; physical programming may continue"},
+    {4, "deadline", "deadline [ms]", "Whole-command budget; 0=disabled, max 2147483647; idle only"},
+    {5, "settings", "cfg / settings / snapshot", "Cached active/staged configuration and transport limits"},
+    {5, "bus", "bus", "Application SDA/SCL, frequency and WP pin; no reconfiguration"},
+    {5, "timeout", "timeout [1..1000]", "Physical transaction timeout in ms; set while ended"},
+    {5, "limits", "limits [tx rx]", "Chunk limits within supplied adapter capacities; TX includes pointer"},
+    {5, "writecycle", "writecycle [0..1000]", "tWR override in ms; 0=preset, cannot shorten preset"},
+    {5, "ackpoll", "ackpoll [0|1]", "0=timed wait, 1=provided address-only ACK-poll callback"},
+    {5, "offline", "offline [0..255]", "Passive failure threshold; 0 disables OFFLINE"},
+    {5, "size", "size", "Configured capacity; not physically detected"},
+    {5, "geometry page", "geometry / timing / page [addr]", "Cached geometry or encoded SLA/pointer and page/bank boundaries"},
+    {6, "health", "drv / health / state / online", "Cached driver health and separate adapter counters"},
+    {6, "diag", "diag", "Version, bus, console, configuration and cached health"},
+    {6, "console", "console", "Backend/readiness, RX/TX bytes and output-loss counters"},
+    {6, "stress", "stress [N [interval_ms]]", "1..10000 paired reads rotating across array; defaults 100, 10 ms"},
+    {6, "watch", "watch <addr> <len> [N interval]", "1..256-byte repeated view; defaults 20 rounds, 1000 ms"},
+    {6, "selftest", "selfcheck / selftest", "Read entire configured array; CRC and health, no programming"},
+    {6, "heap", "heap", "Application free/minimum/largest heap block, if available"},
+    {6, "stats", "stats [reset]", "Core-job counts and health; reset also clears adapter counts"},
+    {6, "xfer_stats xfer_reset", "xfer_stats [reset] / xfer_reset", "Physical attempts, including scans and ACK polls"},
+    {6, "xfer_assert", "xfer_assert <N> [read write probe]", "Assert exact attempt counts without bus traffic"},
+    {6, "iface_reset", "iface_reset", "Explicit idle/settled application bus recovery, then tWR wait"},
+    {7, "rw_suite", "rw_suite <addr> <len> confirm", "Eight pattern/fill/update stages, whole-window check, restore"},
+    {7, "xfer_demo", "xfer_demo <addr> <len> confirm", "Admission/budget/stale-owner/result checks; requires counters"},
+    {7, "stress_mix", "stress_mix <addr> <len> N confirm", "1..100 cycles of nine memory operations, then restore"},
+    {7, "randbench", "randbench <addr> <len> N confirm", "1..1000 random writes, independent reads and shadow check"},
+    {7, "typed_demo", "typed_demo <addr> confirm", "Two 28-byte integer/endian/signed/IEEE/bool layouts, then restore"},
+    {7, "scratch restore", "scratch / restore confirm", "Cached retained evidence / explicit verified restoration"}
+  };
+  if (topic && equals(topic, "quickstart")) {
+    print("Quickstart (read-only): version -> bus -> console -> model -> discover -> selftest -> read 0 16\n");
+    print("If needed: end -> model <verified-profile> -> addr <strapped-base> -> begin\n");
+    print("Use help detection, help jobs, help tests. Select a disposable scratch region only after identifying the fitted part.\n");
+    return;
+  }
+  const bool all = !topic || equals(topic, "all");
+  const char* key = all ? "" : canonicalCommand(topic);
+  const auto matches = [key](const char* keys) {
+    const size_t size = std::strlen(key);
+    for (const char* start = keys; *start;) {
+      const char* end = std::strchr(start, ' ');
+      const size_t length = end ? static_cast<size_t>(end - start) : std::strlen(start);
+      if (length == size && std::strncmp(start, key, size) == 0) return true;
+      if (!end) break;
+      start = end + 1;
+    }
+    return false;
+  };
+  bool found = false;
+  for (const auto& entry : entries)
+    if (all || equals(topic, groups[entry.group].key) || matches(entry.keys)) found = true;
+  if (!found) { status(EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::INVALID_PARAM, "unknown help topic/command")); return; }
+  print("%s=== EEPROM24Cxx CLI Help ===%s\n", color(36), color(0));
+  unsigned previous = sizeof(groups) / sizeof(groups[0]);
+  for (const auto& entry : entries) {
+    if (!all && !equals(topic, groups[entry.group].key) && !matches(entry.keys)) continue;
+    if (entry.group != previous) {
+      print("\n%s[%s]%s\n", color(32), groups[entry.group].title, color(0));
+      if (!all) print("%s\n", groups[entry.group].contract);
+      previous = entry.group;
+    }
+    print("  %s%-32s%s - %s\n", color(36), entry.syntax, color(0), entry.description);
+  }
+  if (all) print("\nTopics: common detection memory programming jobs configuration diagnostics tests quickstart\n");
+  print("Numbers: decimal or 0x hex. Explicit writes consume endurance; ACK is not stored-content evidence.\n");
+  print("Scratch failure/cancel retains backup; inspect scratch before restore confirm. Backup is lost on reset.\n");
 }
 bool Cli::workActive() const {
   return _operation || _scan || _stress || _readView != ReadView::NONE ||
@@ -212,7 +265,7 @@ void Cli::beginSession(const char* command) {
   std::strncpy(_sessionCommand, command, sizeof(_sessionCommand) - 1);
   _sessionCommand[sizeof(_sessionCommand) - 1] = '\0';
   _sessionStatus = EEPROM24Cxx::Status::Ok();
-  _sessionStartedAt = now(); _sessionBudgetMs = _deadlineMs;
+  _sessionStartedAt = now(); _sessionBudgetMs = _deadlineMs; _sessionElapsedMs = 0;
   print("CLI accepted: command=%s session=%lu\n", _sessionCommand, static_cast<unsigned long>(_sessionId));
 }
 void Cli::printJobResult() {
@@ -228,7 +281,8 @@ void Cli::printJob() {
   print("CLI job: active=%u command=%s session=%lu auto=%u\n", _sessionActive ? 1U : 0U,
         _sessionCommand, static_cast<unsigned long>(_sessionId), _autoPoll ? 1U : 0U);
   print("CLI timing: deadline-ms=%lu elapsed-ms=%lu\n", static_cast<unsigned long>(_sessionBudgetMs),
-        static_cast<unsigned long>(_sessionId ? now() - _sessionStartedAt : 0));
+        static_cast<unsigned long>(_sessionActive ? now() - _sessionStartedAt : _sessionElapsedMs));
+  if (_stress) printRepeat();
 }
 bool Cli::expireSession() {
   if (!_sessionActive || !_sessionBudgetMs || now() - _sessionStartedAt < _sessionBudgetMs) return false;
@@ -244,6 +298,7 @@ void Cli::finishSession() {
     if (!_scratchPrimary.ok()) _sessionStatus = _scratchPrimary;
     else if (!_scratchRestore.ok()) _sessionStatus = _scratchRestore;
   }
+  _sessionElapsedMs = now() - _sessionStartedAt;
   _sessionActive = false;
   _completedSessionId = _sessionId;
   std::memcpy(_completedCommand, _sessionCommand, sizeof(_completedCommand));
@@ -291,12 +346,55 @@ void Cli::printModels() {
   print("Profiles (configured geometry; never detected from ACK):\n");
   for (const auto& model : models) {
     const auto geometry = EEPROM24Cxx::geometryFor(model.variant);
-    print("  %-10s capacity=%lu page=%u pointer=%u bank-bits=%u bank-shift=%u tWR=%lu ms\n",
+    print("  %-10s capacity=%lu page=%u pointer=%u bank-bits=%u bank-shift=%u tWR=%lu ms bases=",
           model.name, static_cast<unsigned long>(geometry.capacityBytes), static_cast<unsigned>(geometry.pageSizeBytes),
           static_cast<unsigned>(geometry.wordAddressBytes), static_cast<unsigned>(geometry.bankAddressBits),
           static_cast<unsigned>(geometry.bankAddressShift), static_cast<unsigned long>(geometry.writeCycleMs));
+    bool first = true;
+    for (uint8_t address = cmd::MIN_ADDRESS; address <= cmd::MAX_ADDRESS; ++address) {
+      if (!baseMatchesBanks(geometry, address)) continue;
+      print("%s0x%02X", first ? "" : ",", static_cast<unsigned>(address)); first = false;
+    }
+    print("\n");
   }
   print("Generic 24cXX profiles require confirmation against the fitted manufacturer's datasheet.\n");
+}
+void Cli::printConfiguredBanks() {
+  const auto geometry = _config.variant == EEPROM24Cxx::DeviceVariant::CUSTOM ?
+      _config.customGeometry : EEPROM24Cxx::geometryFor(_config.variant);
+  const bool valid = baseMatchesBanks(geometry, _config.i2cAddress);
+  print("Configured banks: base-valid=%s bank-mask=0x%02X addresses=", valid ? "yes" : "no",
+        static_cast<unsigned>(addressBankMask(geometry)));
+  if (valid) {
+    for (unsigned bank = 0; bank < (1U << geometry.bankAddressBits); ++bank)
+      print("%s0x%02X", bank ? "," : "", static_cast<unsigned>(_config.i2cAddress) |
+            (bank << geometry.bankAddressShift));
+  } else print("none");
+  print("\n");
+}
+void Cli::printDetectionSummary() {
+  const auto geometry = _config.variant == EEPROM24Cxx::DeviceVariant::CUSTOM ?
+      _config.customGeometry : EEPROM24Cxx::geometryFor(_config.variant);
+  unsigned candidates = 0, configuredAcks = 0, configuredCount = 0;
+  for (unsigned bit = 0; bit < 8; ++bit) if (_scanEepromAcks & (1U << bit)) ++candidates;
+  if (baseMatchesBanks(geometry, _config.i2cAddress)) {
+    configuredCount = 1U << geometry.bankAddressBits;
+    for (unsigned bank = 0; bank < configuredCount; ++bank) {
+      const unsigned address = static_cast<unsigned>(_config.i2cAddress) | (bank << geometry.bankAddressShift);
+      if (_scanEepromAcks & (1U << (address - cmd::MIN_ADDRESS))) ++configuredAcks;
+    }
+  }
+  const char* baseAck = "not-tested";
+  if (_config.i2cAddress >= cmd::MIN_ADDRESS && _config.i2cAddress <= cmd::MAX_ADDRESS) {
+    const unsigned baseBit = 1U << (_config.i2cAddress - cmd::MIN_ADDRESS);
+    if (_scanEepromTested & baseBit) baseAck = (_scanEepromAcks & baseBit) ? "yes" :
+        (_scanEepromErrors & baseBit) ? "error" : "no";
+  }
+  print("Detection summary: tested=%u ack=%u absent=%u errors=%u candidate-acks=%u configured-bank-acks=%u/%u base-ack=%s\n",
+        _scanTested, _scanFound, _scanTested - _scanFound - _scanErrors, _scanErrors,
+        candidates, configuredAcks, configuredCount, baseAck);
+  if (!candidates) print("Detection: no EEPROM address ACKs observed; identity and capacity remain unverified.\n");
+  if (_scanErrors) print("Detection: transport errors leave presence unresolved at the affected addresses.\n");
 }
 void Cli::printHeap() {
   if (!_platform.heapStats) {
@@ -896,14 +994,60 @@ void Cli::complete() {
       printBytes(result.address, result.bytesCompleted);
   }
   if (_stress) {
-    if (result.status.ok()) ++_stressSuccess; else ++_stressFailures;
-    if (_remaining) --_remaining;
-    _nextMs = now() + _repeatInterval;
-    if (!_remaining) {
-      print("%s stopped: ok=%lu fail=%lu\n", _watch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
-            static_cast<unsigned long>(_stressFailures));
-      _stress = false; _watch = false;
+    _repeatBytes += result.bytesCompleted;
+    if (!_watch && result.status.ok() && !_repeatChecking) {
+      std::memcpy(_repeatReference, _data, _repeatLength);
+      _repeatChecking = true; _nextMs = now();
+      return;
     }
+    auto roundStatus = result.status;
+    if (!_watch && roundStatus.ok() && std::memcmp(_repeatReference, _data, _repeatLength) != 0) {
+      roundStatus = EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::VERIFY_MISMATCH, "paired stress reads differ");
+      status(roundStatus);
+    }
+    completeRepeat(roundStatus);
+  }
+}
+void Cli::printConsole() {
+  if (!_platform.consoleStats) { status(EEPROM24Cxx::Status::Error(EEPROM24Cxx::Err::UNSUPPORTED, "no console telemetry")); return; }
+  const auto s = _platform.consoleStats(_platform.user);
+  print("Console: backend=%s ready=%s connected=%d baud=%lu rx-bytes=%lu rx-overflows=%lu rx-loss-observable=%s tx-bytes=%lu tx-dropped=%lu write-timeouts=%lu format-overflows=%lu queued-bytes=%lu high-water-bytes=%lu\n",
+        s.backend, s.ready ? "yes" : "no", static_cast<int>(s.connected), static_cast<unsigned long>(s.baud),
+        static_cast<unsigned long>(s.rxBytes), static_cast<unsigned long>(s.rxOverflows), s.rxOverflowObservable ? "yes" : "no",
+        static_cast<unsigned long>(s.txBytes), static_cast<unsigned long>(s.txDropped),
+        static_cast<unsigned long>(s.writeTimeouts), static_cast<unsigned long>(s.formatOverflows),
+        static_cast<unsigned long>(s.queuedBytes), static_cast<unsigned long>(s.highWaterBytes));
+}
+void Cli::printRepeat(bool terminal) {
+  print("Repeat: mode=%s state=%s target=%lu completed=%lu ok=%lu fail=%lu bytes=%llu elapsed-ms=%lu min-ms=%lu max-ms=%lu next-address=0x%05lX interval-ms=%lu\n",
+        _repeatWasWatch ? "watch" : "stress", terminal ? "STOPPED" : "RUNNING", static_cast<unsigned long>(_repeatTarget),
+        static_cast<unsigned long>(_stressSuccess + _stressFailures), static_cast<unsigned long>(_stressSuccess),
+        static_cast<unsigned long>(_stressFailures), static_cast<unsigned long long>(_repeatBytes),
+        static_cast<unsigned long>(terminal ? _repeatElapsedMs : now() - _repeatStartedMs),
+        static_cast<unsigned long>(_repeatMinMs), static_cast<unsigned long>(_repeatMaxMs),
+        static_cast<unsigned long>(_repeatAddress), static_cast<unsigned long>(_repeatInterval));
+}
+void Cli::completeRepeat(EEPROM24Cxx::Status result) {
+  const auto elapsed = now() - _roundStartedMs;
+  if (!_stressSuccess && !_stressFailures) _repeatMinMs = elapsed;
+  if (elapsed < _repeatMinMs) _repeatMinMs = elapsed;
+  if (elapsed > _repeatMaxMs) _repeatMaxMs = elapsed;
+  if (result.ok()) ++_stressSuccess;
+  else { ++_stressFailures; if (_sessionStatus.ok()) _sessionStatus = result; }
+  _repeatChecking = false;
+  if (_remaining) --_remaining;
+  _nextMs = now() + _repeatInterval;
+  if (!_watch) {
+    _repeatAddress += _repeatLength;
+    if (_repeatAddress >= _device.capacityBytes()) _repeatAddress = 0;
+    const auto remaining = _device.capacityBytes() - _repeatAddress;
+    _repeatLength = remaining < sizeof(_repeatReference) ? remaining : sizeof(_repeatReference);
+  }
+  if (!_remaining) {
+    _repeatElapsedMs = now() - _repeatStartedMs;
+    print("%s stopped: ok=%lu fail=%lu\n", _watch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess), static_cast<unsigned long>(_stressFailures));
+    printRepeat(true);
+    _stress = false; _watch = false;
   }
 }
 void Cli::stop(EEPROM24Cxx::Status reason) {
@@ -920,6 +1064,7 @@ void Cli::stop(EEPROM24Cxx::Status reason) {
           _device.timeoutTransfer(_device.transferSnapshot().requestId) : _device.cancel();
       if (!cancelled.ok()) status(cancelled);
     }
+    if (wasStress) _repeatBytes += _device.transferSnapshot().bytesCompleted;
     complete();
     if (writesMemory(kind))
       print("Scheduling stopped; already-issued EEPROM programming cannot be undone.\n");
@@ -934,6 +1079,7 @@ void Cli::stop(EEPROM24Cxx::Status reason) {
     abortScratch(reason);
   if (wasStress) print("%s stopped: ok=%lu fail=%lu\n", wasWatch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
                        static_cast<unsigned long>(_stressFailures));
+  if (wasStress) { _repeatElapsedMs = now() - _repeatStartedMs; printRepeat(true); }
   _watch = false;
   finishSession();
 }
@@ -1010,7 +1156,7 @@ void Cli::processCommand(const char* text) {
     }
     invalid(); return;
   }
-  if (equals(command, "help") && count == 1) { printHelp(); return; }
+  if (equals(command, "help") && count <= 2) { printHelp(count == 2 ? args[1] : nullptr); return; }
   if (equals(command, "version") && count == 1) { printVersion(); return; }
   if (equals(command, "color") || equals(command, "verbose")) {
     if (count > 2) { invalid(); return; }
@@ -1026,6 +1172,7 @@ void Cli::processCommand(const char* text) {
   if (equals(command, "health") && count == 1) { printHealth(); return; }
   if (equals(command, "settings") && count == 1) { printSettings(); return; }
   if (equals(command, "bus") && count == 1) { printBus(); return; }
+  if (equals(command, "console") && count == 1) { printConsole(); return; }
   if (equals(command, "deadline")) {
     uint32_t value = _deadlineMs;
     if (count > 2 || (count == 2 && !integer(args[1], 0, 0x7FFFFFFFU, value))) { invalid(); return; }
@@ -1044,12 +1191,20 @@ void Cli::processCommand(const char* text) {
     const auto geometry = _device.isBound() ? _device.settingsSnapshot().geometry :
         _config.variant == DeviceVariant::CUSTOM ? _config.customGeometry : geometryFor(_config.variant);
     if (geometry.wordAddressBytes != 1 && geometry.wordAddressBytes != 2) { status(Status::Error(Err::INVALID_CONFIG, "invalid geometry pointer width")); return; }
+    if (!baseMatchesBanks(geometry, _config.i2cAddress)) { status(Status::Error(Err::INVALID_CONFIG, "configured base address overlaps geometry bank bits")); return; }
     if (!geometry.pageSizeBytes || address >= geometry.capacityBytes) { status(Status::Error(Err::ADDRESS_OUT_OF_RANGE, "page address exceeds capacity")); return; }
-    print("Page: address=0x%05lX number=%lu offset=%lu remaining=%lu bank-remaining=%lu\n",
+    const unsigned pointerBits = 8U * geometry.wordAddressBytes;
+    const uint32_t bank = address >> pointerBits;
+    if (bank >= (1U << geometry.bankAddressBits)) { status(Status::Error(Err::INVALID_CONFIG, "address exceeds geometry bank mapping")); return; }
+    const unsigned busAddress = static_cast<unsigned>(_config.i2cAddress) | (bank << geometry.bankAddressShift);
+    const uint32_t pointer = address & ((uint32_t{1} << pointerBits) - 1U);
+    print("Page: address=0x%05lX number=%lu offset=%lu remaining=%lu bank-remaining=%lu sla=0x%02X pointer=0x%0*lX pointer-bytes=%u\n",
           static_cast<unsigned long>(address), static_cast<unsigned long>(address / geometry.pageSizeBytes),
           static_cast<unsigned long>(address % geometry.pageSizeBytes),
           static_cast<unsigned long>(memory::pageRemaining(geometry, address)),
-          static_cast<unsigned long>(memory::bankRemaining(geometry, address))); return;
+          static_cast<unsigned long>(memory::bankRemaining(geometry, address)), busAddress,
+          2 * static_cast<int>(geometry.wordAddressBytes), static_cast<unsigned long>(pointer),
+          static_cast<unsigned>(geometry.wordAddressBytes)); return;
   }
   if (equals(command, "stats") || equals(command, "xfer_stats") || equals(command, "xfer_reset")) {
     const bool reset = equals(command, "xfer_reset") || (count == 2 && equals(args[1], "reset"));
@@ -1107,7 +1262,7 @@ void Cli::processCommand(const char* text) {
     }
     printProgress(result); if (_scratchStage != ScratchStage::NONE || _backupValid) printScratch(); return;
   }
-  if (equals(command, "diag") && count == 1) { printVersion(); printBus(); printSettings(); printHealth(); return; }
+  if (equals(command, "diag") && count == 1) { printVersion(); printBus(); if (_platform.consoleStats) printConsole(); printSettings(); printHealth(); return; }
   if (equals(command, "end") && count == 1) {
     stop(); _device.end(); print("Driver released; bus unchanged.\n"); return;
   }
@@ -1115,9 +1270,14 @@ void Cli::processCommand(const char* text) {
   if ((equals(command, "scan") || equals(command, "discover")) && count == 1) {
     if (_device.settingsSnapshot().writeCyclePending) { status(Status::Error(Err::BUSY, "wait for physical write cycle before scanning")); return; }
     if (!_platform.probeAddress) { status(Status::Error(Err::INVALID_CONFIG, "no scan adapter")); return; }
-    _scan = true; _scanNext = equals(command, "scan") ? 0x08 : 0x50;
+    _scan = true; _scanFirst = _scanNext = equals(command, "scan") ? 0x08 : 0x50;
     _scanLast = equals(command, "scan") ? 0x77 : 0x57; _scanFound = 0; _scanErrors = 0;
-    beginSession(command); return;
+    _scanTested = 0; _scanEepromAcks = 0; _scanEepromTested = 0; _scanEepromErrors = 0;
+    beginSession(command);
+    print("Detection: range=0x%02X..0x%02X model=%s base=0x%02X identity=unverified\n",
+          static_cast<unsigned>(_scanFirst), static_cast<unsigned>(_scanLast), modelName(_config.variant),
+          static_cast<unsigned>(_config.i2cAddress));
+    printConfiguredBanks(); return;
   }
   if (equals(command, "begin")) {
     uint32_t address = _config.i2cAddress;
@@ -1129,7 +1289,21 @@ void Cli::processCommand(const char* text) {
     return;
   }
   if (equals(command, "bind") && count == 1) { status(_device.bind(_config)); return; }
-  if (equals(command, "probe") && count == 1) { status(_device.probe()); return; }
+  if (equals(command, "probe")) {
+    uint32_t address = _config.i2cAddress;
+    if (count > 2 || (count == 2 && !integer(args[1], cmd::MIN_ADDRESS, cmd::MAX_ADDRESS, address))) { invalid(); return; }
+    const auto snapshot = _device.settingsSnapshot();
+    if (snapshot.transferActive || snapshot.resultPending || snapshot.writeCyclePending) {
+      status(Status::Error(Err::BUSY, "finish work and physical write cycle before probing")); return;
+    }
+    const auto result = count == 1 ? _device.probe() : _platform.probeAddress ?
+        _platform.probeAddress(static_cast<uint8_t>(address), _platform.user) :
+        Status::Error(Err::UNSUPPORTED, "no address-only probe adapter");
+    print("Presence: address=0x%02X mode=%s status=%s detail=%ld identity=unverified\n",
+          static_cast<unsigned>(address), count == 1 ? "driver" : "address-only", errorName(result.code),
+          static_cast<long>(result.detail));
+    status(result); return;
+  }
   if (equals(command, "recover") && count == 1) { status(_device.recover()); return; }
   if (equals(command, "wp")) {
     uint32_t value = 0;
@@ -1230,12 +1404,16 @@ void Cli::processCommand(const char* text) {
       if (count < 3 || count > 5 || !integer(args[1], 0, UINT32_MAX, address) || !integer(args[2], 1, sizeof(_data), n) ||
           (count >= 4 && !integer(args[3], 1, 10000, rounds)) ||
           (count == 5 && !integer(args[4], 1, 60000, interval))) { invalid(); return; }
-    } else if (count > 2 || (count == 2 && !integer(args[1], 1, 10000, rounds))) { invalid(); return; }
+    } else if (count > 3 || (count >= 2 && !integer(args[1], 1, 10000, rounds)) ||
+               (count == 3 && !integer(args[2], 1, 60000, interval))) { invalid(); return; }
     if (!_device.isBound()) { status(Status::Error(Err::NOT_INITIALIZED, "bind driver first")); return; }
     if (!memory::fitsRange(_device.capacityBytes(), address, n)) { status(Status::Error(Err::ADDRESS_OUT_OF_RANGE, "watch range exceeds capacity")); return; }
     if (!_platform.nowMs && !_config.nowMs) { status(Status::Error(Err::INVALID_CONFIG, "CLI stress requires a clock callback")); return; }
     _stress = true; _watch = watch; _remaining = rounds; _stressSuccess = 0; _stressFailures = 0; _nextMs = now();
     _repeatAddress = address; _repeatLength = n; _repeatInterval = interval;
+    _repeatWasWatch = watch; _repeatChecking = false; _repeatTarget = rounds;
+    _repeatStartedMs = now(); _repeatElapsedMs = 0; _repeatReportAt = now() + 5000U;
+    _repeatMinMs = _repeatMaxMs = 0; _repeatBytes = 0;
     beginSession(command);
     print("Read-only %s: %lu rounds, %lu ms interval; stop cancels.\n", watch ? "watch" : "stress",
           static_cast<unsigned long>(rounds), static_cast<unsigned long>(interval)); return;
@@ -1301,7 +1479,7 @@ void Cli::processCommand(const char* text) {
 }
 void Cli::tick() {
   if (expireSession()) return;
-  if (_autoPoll) advance();
+  if (_autoPoll && (!_platform.outputReady || _platform.outputReady(_platform.user))) advance();
   else _device.tick(now()); // Passive physical settling continues while owner polling is paused.
   if (!expireSession()) finishSession();
 }
@@ -1314,30 +1492,35 @@ void Cli::advance() {
   }
   if (_scan) {
     const auto result = _platform.probeAddress(_scanNext, _platform.user);
+    ++_scanTested;
+    const uint8_t candidateBit = _scanNext >= 0x50 && _scanNext <= 0x57 ?
+        static_cast<uint8_t>(1U << (_scanNext - 0x50)) : 0;
+    _scanEepromTested |= candidateBit;
     if (result.ok()) {
       ++_scanFound;
+      _scanEepromAcks |= candidateBit;
       print("  Found 0x%02X%s\n", _scanNext, _scanNext >= 0x50 && _scanNext <= 0x57 ? " (EEPROM/bank candidate; identity unverified)" : "");
     } else if (!result.is(EEPROM24Cxx::Err::I2C_NACK_ADDR)) {
       ++_scanErrors;
+      _scanEepromErrors |= candidateBit;
       if (_sessionStatus.ok()) _sessionStatus = result;
-    }
+      print("Scan error: address=0x%02X status=%s detail=%ld\n", static_cast<unsigned>(_scanNext),
+            EEPROM24Cxx::errorName(result.code), static_cast<long>(result.detail));
+    } else if (_verbose) print("Scan absent: address=0x%02X status=I2C_NACK_ADDR detail=%ld\n",
+                               static_cast<unsigned>(_scanNext), static_cast<long>(result.detail));
     if (_scanNext++ == _scanLast) {
       _scan = false; print("Scan complete: %u ACK, %u other transport errors.\n", _scanFound, _scanErrors);
+      printDetectionSummary();
     }
     return;
   }
   if (_stress && !_operation && static_cast<int32_t>(now() - _nextMs) >= 0) {
+    if (!_repeatChecking) _roundStartedMs = now();
     const auto result = _device.startRead(_repeatAddress, _data, _repeatLength);
     if (result.ok()) { _operation = true; _hasResult = false; }
     else {
       status(result);
-      if (_sessionStatus.ok()) _sessionStatus = result;
-      ++_stressFailures; if (_remaining) --_remaining; _nextMs = now() + _repeatInterval;
-      if (!_remaining) {
-        print("%s stopped: ok=%lu fail=%lu\n", _watch ? "Watch" : "Stress", static_cast<unsigned long>(_stressSuccess),
-              static_cast<unsigned long>(_stressFailures));
-        _stress = false; _watch = false;
-      }
+      completeRepeat(result);
     }
   }
   scheduleScratch();
@@ -1358,6 +1541,9 @@ void Cli::advance() {
   if (_operation) {
     const auto result = _device.poll(now(), 1);
     if (!result.inProgress()) complete();
+  }
+  if (_stress && static_cast<int32_t>(now() - _repeatReportAt) >= 0) {
+    printRepeat(); _repeatReportAt = now() + 5000U;
   }
 }
 }  // namespace eeprom24cxx_cli

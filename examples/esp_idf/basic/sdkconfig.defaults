@@ -1,3 +1,9 @@
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+# CLI owns the direct driver; libc/logging must not compete for its FIFO.
+CONFIG_ESP_CONSOLE_NONE=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+# Connected USB must keep running independently of console/EEPROM inactivity.
+CONFIG_PM_ENABLE=n
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=n

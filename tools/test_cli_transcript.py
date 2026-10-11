@@ -7,7 +7,7 @@ import sys
 import tempfile
 import zlib
 
-from hil_runner import build_plan, parse_args, plain, run_plan, validate_output
+from hil_runner import build_plan, parse_args, plain, run_plan, run_soak, validate_output
 
 
 def capture(commands):
@@ -60,10 +60,10 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         args = parse_args(["--dry-run", "--model", "zetta", "--address", "0x50",
                            "--out", temporary, "--allow-write", "--scratch-address", "32",
-                           "--scratch-length", "40", "--scratch-rounds", "3"])
+                           "--scratch-length", "40", "--scratch-rounds", "3", "--soak-seconds", "2"])
         plan = build_plan(args)
-        outputs = iter(zip((step["command"] for step in plan),
-                           capture([step["command"] for step in plan])))
+        scripted = [step["command"] for step in plan] + ["read 0 256", "crc 0 256", "job", "health", "heap", "console"] * 2
+        outputs = iter(zip(scripted, capture(scripted)))
 
         class RecordedSession:
             def command(self, command, **_kwargs):
@@ -78,8 +78,14 @@ def main():
             raise AssertionError(report)
         if (Path(temporary) / "scratch-preimage.bin").read_bytes() != baseline[32:72]:
             raise AssertionError("durable scratch backup differs from known preimage")
+        now = [0.0]
+        run_soak(RecordedSession(), args, Path(temporary), report, clock=lambda: now[0],
+                 sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+        if report["outcome"] != "PASS" or report["soak"]["cycles"] != 2:
+            raise AssertionError(report)
     print(f"[PASS] {len(commands)} real CLI transcripts satisfy HIL evidence contracts")
     print(f"[PASS] complete {len(plan)}-command runner campaign against modeled CLI")
+    print("[PASS] two soak cycles with actual CLI output, checkpoints and optional telemetry")
     return 0
 
 

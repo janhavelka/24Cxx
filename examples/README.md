@@ -28,11 +28,15 @@ From the repository root, with the existing managed PlatformIO installation:
 The first command builds Arduino examples; the second builds native ESP-IDF.
 Both configurations use a 4 MB firmware flash layout.
 The native example also supports `idf.py` from `esp_idf/basic`. Both use 115200
-baud and the configured board console. Select the right pins and console for
-your actual hardware.
+baud where applicable. S3 uses direct USB Serial/JTAG, Arduino S2 uses TinyUSB
+CDC, and native S2 uses UART0 through a USB-UART adapter. Arduino S2 requires
+DTR asserted; the other examples default to DTR/RTS deasserted. See the
+[USB settings and long-run procedure](../docs/hardware-validation.md#usb-and-console-settings)
+before opening a port. Existing native build directories must regenerate their
+generated sdkconfig when changing the console defaults.
 
 The Arduino loop is the only owner of Wire and the driver. In native IDF,
-`app_main` alone owns the driver and I2C; an input task only queues characters.
+`app_main` alone owns the driver, I2C and console polling.
 IDF pre-creates handles for 0x50 through 0x57 so bank-address changes do not
 allocate during transfers. No Arduino compatibility layer is involved.
 
@@ -80,11 +84,21 @@ diagnostics remain available.
 configured page/bank boundary, and report geometry, completed bytes, CRC32 and
 health. The report is compact; it does not dump the entire chip. A PASS
 demonstrates access only, without identifying the chip, proving capacity or
-address uniqueness, testing WP or exercising programming. `stress [N]`
-performs 1..10000 read-only rounds, default 100, with ten milliseconds between
-rounds; `verbose on` enables each round's transfer report. Failures are always
-reported and count toward the finite limit. These diagnostics never consume
-EEPROM write endurance.
+address uniqueness, testing WP or exercising programming. `stress [N [interval_ms]]`
+performs 1..10000 read-only rounds, default 100. Each round reads the same
+up-to-16-byte window twice and compares the bytes, then advances across the
+configured array and wraps. The interval is 1..60000 ms, default 10, measured
+after completion. `verbose on` enables transfer reports. Failures are always
+reported and count toward the finite limit; a mismatch fails the CLI session
+without rewriting the successful physical read evidence. Paired equality cannot
+prove the original contents or detect consistent aliasing; the host runner
+compares against its saved baseline. These diagnostics never consume endurance.
+
+Stress and watch emit a `Repeat:` summary every five seconds and at completion:
+target/completed/OK/failed rounds, successfully read bytes, elapsed time, minimum
+and maximum round latency, next address and interval. Stress byte counts include
+both reads. Cancellation reports only completed rounds and retains partial byte
+evidence. Finished CLI jobs retain their final elapsed time.
 
 `watch <addr> <len> [N [interval_ms]]` repeatedly reads a selected 1..256-byte
 region. Defaults are 20 rounds and 1000 ms between completions and the next
@@ -98,7 +112,7 @@ bank. The transport must explicitly support this operation. Bind, bus recovery
 and uncertain pointer effects invalidate knowledge; the CLI never guesses a
 pointer from a presence ACK. `settings` reports pointer support/knowledge.
 
-`settings`, `health`, `progress`, `diag`, `variants`, `size` and version/help
+`settings`, `health`, `progress`, `diag`, `variants`, `size`, `console` and version/help
 commands do not touch I2C. `heap` reports application heap telemetry when the
 adapter provides it; both ESP32 adapters do. Scans and explicit probe affect
 adapter counters separately from tracked health. Health prints binding
@@ -127,7 +141,8 @@ available even while an operation runs.
 perform one tracked presence check. Invalid configurations preserve the previous
 binding. `offline [0..255]` stages the passive failure threshold while ended;
 zero disables OFFLINE. `geometry` and `timing` show cached settings and health,
-while `page [addr]` reports page number, offset and remaining page/bank bytes.
+while `page [addr]` reports page number, offset, remaining page/bank bytes, encoded
+I2C slave address and pointer bytes. Profile lists include every legal base address.
 
 `bus` shows the application's configured SDA, SCL, frequency and WP pin without
 touching I2C. These are configured values, not measured electrical properties.
@@ -162,14 +177,37 @@ serial line but cannot recover an overflowed or invalid line.
 Help uses the sibling cyan title/commands, green section labels, 32-character
 command column and `> ` prompt. `color off` removes ANSI codes. `verbose` and
 `color` accept only `0`, `1`, `off` or `on` when setting a value.
+`help`/`help all` lists all commands. `help <command>` accepts aliases and shows
+the command's syntax and group contract; `help <topic>` filters to `common`,
+`detection`, `memory`, `programming`, `jobs`, `configuration`, `diagnostics` or
+`tests`. `help quickstart` gives a read-only bring-up sequence. Unknown topics
+are rejected. A single catalogue supplies all help views.
 
 The common aliases are `help`/`?`, `version`/`ver`, `init`/`begin`,
 `end`/`unbind`, `cfg`/`settings`/`snapshot`, `drv`/`health`/`state`/`online`,
 `progress`/`status`/`job`/`result` and `stop`/`cancel`. `bind` performs no transaction;
-`init`/`begin` and `recover` perform one tracked presence check. `probe` performs
-an untracked presence check. `scan` checks 0x08..0x77; `discover` checks
-0x50..0x57, one address per tick. Address aliases can belong to a single chip.
-Scans cannot bypass a retained physical write-cycle barrier after cancellation.
+`init`/`begin` and `recover` perform one tracked presence check. Bare `probe`
+performs an untracked driver presence check. `probe <0x50..0x57>` uses the
+application's address-only callback without changing binding or pointer knowledge.
+`scan` checks 0x08..0x77; `discover`/`detect` checks 0x50..0x57, one address per
+tick, even while unbound when the adapter supports it. Detection lists configured
+bank addresses and reports tested, acknowledged, absent and failed addresses,
+candidate ACKs, configured bank coverage and base-address presence. Transport
+errors retain their address/status/detail instead of becoming ordinary absence.
+ACKs remain candidates with unverified identity; address aliases can belong to
+one chip. Scans and targeted probes cannot bypass a retained write-cycle barrier.
+
+`console` reports the backend, readiness, connection state (`-1` is unknown),
+configured baud, RX/TX counters, loss observability, drops, formatting failures,
+stall episodes and output queue/high-water bytes. It is cached telemetry, not a
+physical delivery acknowledgement. The example-only `ConsoleOutput` uses a
+16 KiB ring with an 8 KiB response reserve, drains at most 256 bytes per loop
+through zero-wait writes, and preserves partial-write ordering. Input polling
+is bounded to 64 bytes and one submitted command per loop. Backpressure pauses
+new command handling and automatic I2C scheduling while passive programming
+waits and CLI deadlines continue. Detected RX loss invalidates pending input;
+see the hardware guide for SDK observability limits. No extra console task or
+allocation is added to the core library.
 
 Memory transfer output includes symbolic kind/state/status, structured error
 detail, request ID, requested/accepted/completed/verified counts, aggregate

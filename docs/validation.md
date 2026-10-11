@@ -1,5 +1,42 @@
 # Validation results
 
+## Detection, console and long-run re-audit: 2026-10-11
+
+The follow-up [sibling comparison](library-comparison.md) covered indexed help,
+bank-aware detection, stress coverage, Python soak runners and USB ownership.
+The core API and driver implementation remain unchanged. New behavior lives in
+the example CLI/adapters and repository host tooling.
+
+- Strict GCC 15.1.0 C++17 CMake/Ninja: all nine CTest entries pass, including new
+  detection and console suites. Detection tests cover all eight EEPROM addresses,
+  the 112-address scan, explicit probe state preservation, bank maps, transport
+  errors, cancellation and tWR. Console tests cover ring wrap, partial writes,
+  bounded drain, stalls across clock rollover, response reserve, invalidated
+  input, paired rotating stress, partial cancellation bytes and paused deadlines.
+- Managed PlatformIO native: seven suites, 30 passing cases; the framework-free
+  core target also builds.
+- Python runner: 49 offline tests pass, including bounded soak aggregates,
+  corruption/disconnect stop behavior, log rotation, explicit telemetry skips,
+  bank coverage, session rollover, control-line arguments and failure preservation
+  when logging or serial close fails.
+- Actual C++ CLI transcripts pass 18 targeted checks, a complete 43-command
+  scratch-enabled campaign and two read-only soak cycles, including checkpoint
+  artifacts. A fake clock exercises over 900 soak cycles with a fixed-size report;
+  this is an offline boundedness check, not a physical endurance or duration test.
+- Full Arduino 3.3.11 and native IDF 5.5.5 firmware builds pass for S2 and S3.
+  Native generated configurations were checked for disabled default consoles and
+  power management. Runtime transport behavior still requires a connected board.
+- Release/framework contracts and reference checksums pass. The exported package
+  contains 43 validated files and its extracted standalone CMake library builds
+  with strict warnings. Read-only and scratch-enabled 24-hour soak dry runs both
+  produce `NOT_RUN` reports without opening a port.
+
+The [hardware procedure](hardware-validation.md) supplies explicit console
+selection/control lines and the 24-hour, host-backpressure, disconnect and
+programming-interruption trials. No port was opened and no board was flashed.
+S3 receive-loss observability remains limited by the public SDK; reporting zero
+overflows is not a physical proof that every received byte was retained.
+
 ## CLI procedure audit: 2026-10-11
 
 The [sixteen-library CLI comparison](library-comparison.md#cli-and-procedure-audit-2026-10-11)
