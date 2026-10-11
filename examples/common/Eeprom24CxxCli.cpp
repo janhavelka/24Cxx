@@ -56,8 +56,8 @@ bool validBankLayout(const Geometry& geometry) {
       geometry.bankAddressBits + geometry.bankAddressShift <= 3;
 }
 uint8_t addressBankMask(const Geometry& geometry) {
-  return validBankLayout(geometry) ?
-      static_cast<uint8_t>(((1U << geometry.bankAddressBits) - 1U) << geometry.bankAddressShift) : 0;
+  return static_cast<uint8_t>(validBankLayout(geometry) ?
+      ((1U << geometry.bankAddressBits) - 1U) << geometry.bankAddressShift : 0U);
 }
 bool baseMatchesBanks(const Geometry& geometry, uint8_t address) {
   return validBankLayout(geometry) && address >= cmd::MIN_ADDRESS && address <= cmd::MAX_ADDRESS &&
@@ -1493,8 +1493,8 @@ void Cli::advance() {
   if (_scan) {
     const auto result = _platform.probeAddress(_scanNext, _platform.user);
     ++_scanTested;
-    const uint8_t candidateBit = _scanNext >= 0x50 && _scanNext <= 0x57 ?
-        static_cast<uint8_t>(1U << (_scanNext - 0x50)) : 0;
+    const uint8_t candidateBit = static_cast<uint8_t>(_scanNext >= 0x50 && _scanNext <= 0x57 ?
+        1U << (_scanNext - 0x50) : 0U);
     _scanEepromTested |= candidateBit;
     if (result.ok()) {
       ++_scanFound;
