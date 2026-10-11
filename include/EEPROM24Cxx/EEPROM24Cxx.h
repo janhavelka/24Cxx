@@ -94,8 +94,8 @@ public:
   const char* variantName() const {
     return _bound ? ::EEPROM24Cxx::variantName(_config.variant) : "unbound";
   }
-  size_t maxWriteDataBytes() const { return _bound ? settingsSnapshot().maxWriteDataBytes : 0; }
-  size_t maxReadDataBytes() const { return _bound ? settingsSnapshot().maxReadDataBytes : 0; }
+  size_t maxWriteDataBytes() const { return _bound ? chunkLength(0, cmd::MAX_WRITE_DATA_BYTES, true) : 0; }
+  size_t maxReadDataBytes() const { return _bound ? chunkLength(0, cmd::MAX_READ_CHUNK, false) : 0; }
   uint16_t pageSizeBytes() const { return _bound ? _geometry.pageSizeBytes : 0; }
   size_t pageRemaining(uint32_t address) const {
     return _bound && address < _geometry.capacityBytes ? _geometry.pageSizeBytes - address % _geometry.pageSizeBytes : 0;
@@ -224,9 +224,21 @@ public:
   Status takeTransferResult(uint32_t requestId, TransferResult& out);
 
 private:
+  // Store only changing transport telemetry; configuration and live transfer
+  // state are composed into the public snapshot when requested.
+  struct Health {
+    DriverState state = DriverState::UNINIT;
+    uint8_t consecutiveFailures = 0;
+    uint32_t totalSuccess = 0;
+    uint32_t totalFailures = 0;
+    uint32_t writeBusyPolls = 0;
+    uint32_t lastOkMs = 0;
+    uint32_t lastErrorMs = 0;
+    Status lastError = Status::Ok();
+  };
   Config _config = {};
   Geometry _geometry = {};
-  SettingsSnapshot _health = {};
+  Health _health = {};
   bool _bound = false;
   TransferResult _result = {};
   uint32_t _nextRequestId = AUTOMATIC_REQUEST_ID_FIRST;
@@ -260,6 +272,7 @@ private:
   uint32_t allocateRequestId();
   Status validateRead(uint32_t address, uint8_t* data, size_t length) const;
   Status validateCurrentRead(uint8_t* data, size_t length) const;
+  Status readTransaction(uint32_t address, size_t length, bool current, uint32_t& nowMs);
   Status readChunk(uint32_t address, uint8_t* data, size_t length, bool current);
   void observeRead(uint32_t address, size_t length);
   void finish(Status status, TransferState state);

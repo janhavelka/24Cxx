@@ -51,6 +51,7 @@ class BlockingMemory {
                     uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
   /// Explicitly wait out an idle residual write barrier after an earlier fault.
   /// No probing, memory traffic or replay; retained/active work must be handled first.
+  /// The deadline includes application waits, even if the barrier expires during one.
   Status waitUntilReady(uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
   /// Whole-range CRC with fixed memory. Output is unchanged unless the full
   /// range succeeds. One deadline covers all chunks, including application waits.

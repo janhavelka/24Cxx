@@ -31,7 +31,7 @@ ENV = None
 try:
     Import("env")  # type: ignore[name-defined]  # PlatformIO / SCons built-in
     ENV = env  # type: ignore[name-defined]
-except Exception:
+except NameError:
     ENV = None
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -84,36 +84,13 @@ def _bump_semver(version: str, part: str) -> str:
 
 
 def _resolve_namespace_dir(project_root: Path) -> Path:
-    include_root = project_root / "include"
-    if not include_root.exists():
-        raise FileNotFoundError(f"Missing include directory: {include_root}")
-
-    # The manifest selects the public namespace even during a device-family
-    # migration where the old generated header may still be present.
+    # The public header in library.json is authoritative; do not guess from
+    # stale generated headers left by an earlier device-family implementation.
     metadata = _load_library_json(project_root / "library.json")
-    declared_headers = metadata.get("headers", [])
-    if declared_headers:
-        namespace = str(declared_headers[0]).split("/")[0]
-        declared = include_root / namespace
-        if declared.is_dir():
-            return declared
-
-    candidates = [path for path in include_root.iterdir() if path.is_dir()]
-    version_candidates = [path for path in candidates if (path / "Version.h").exists()]
-
-    if len(version_candidates) == 1:
-        return version_candidates[0]
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(version_candidates) > 1:
-        raise RuntimeError(
-            f"Multiple Version.h candidates under {include_root}: "
-            + ", ".join(str(path) for path in version_candidates)
-        )
-    raise RuntimeError(
-        f"Unable to resolve namespace directory under {include_root}; found: "
-        + ", ".join(path.name for path in candidates)
-    )
+    header = project_root / "include" / metadata["headers"][0]
+    if not header.is_file():
+        raise FileNotFoundError(f"Missing declared public header: {header}")
+    return header.parent
 
 
 def _macro_prefix(namespace: str) -> str:
@@ -300,15 +277,6 @@ def _expected_outputs(project_root: Path) -> Dict[Path, str]:
             f'PROJECT_NUMBER         = "{version}"',
         )
 
-    security = project_root / "SECURITY.md"
-    if security.exists():
-        major, minor, _ = _parse_semver(version)
-        outputs[security] = replace_required(
-            security,
-            r'^\|\s*\d+\.\d+\.x\s*\|\s*:white_check_mark:\s*\|$',
-            f'| {major}.{minor}.x   | :white_check_mark: |',
-        )
-
     return outputs
 
 
@@ -394,6 +362,7 @@ def main(args: List[str]) -> int:
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
 
-result = main([])
-if result != 0:
-    raise SystemExit(result)
+if ENV is not None:
+    result = main([])
+    if result != 0:
+        raise SystemExit(result)

@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Reject a blocking readiness wait that finishes after its caller's deadline,
+  even when the physical programming barrier expired during the wait.
 - Complete the Zetta protocol-recovery sequence with START before the final
   idle STOP; use the same electrical recovery in Arduino and native ESP-IDF.
 - Enforce WP setup/hold settling and keep failed WP initialization unavailable.
@@ -18,6 +20,18 @@
 - Harden Wire buffer/timeout handling and preserve typed native IDF NACK errors.
 - Reject unsupported characters through both CLI input entry points.
 - Fix PlatformIO native discovery so CLI and transport tests actually run.
+
+### Changed
+
+- Store only passive health telemetry in each driver, keeping the public settings
+  snapshot unchanged; share staged read handling and isolate write-effect validation.
+- Consolidate blocking result consumption, CLI command aliases, adapter counters
+  and probe diagnostics; reuse Wire initialization for startup and recovery.
+- Remove duplicate CLI transport checks, migration-era version-generation
+  fallbacks and the obsolete IDF syntax-only checker. Full firmware builds remain
+  the platform validation path; archived vendor provenance stays preserved.
+- Document FieldCore-node ownership, routed callbacks, wrapping clocks and
+  retained programming barriers without adding firmware policy to the library.
 
 ### Added
 

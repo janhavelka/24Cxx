@@ -4,11 +4,6 @@ Framework-neutral C++17 I2C EEPROM driver for **Zetta ZD24C02B-MAGMT** and
 explicit 24Cxx-family memory layouts. The Zetta default is 256 bytes, 8-byte
 pages, an 8-bit memory pointer and a 5 ms maximum programming cycle.
 
-The closest local template is **MB85RC** for memory operations, typed transport,
-write-effect evidence and application-owned I2C. CLI help, colors and common
-commands follow the sibling libraries; Arduino and native ESP-IDF share one
-command processor. See the [library comparison](docs/library-comparison.md).
-
 - Byte-addressed reads, page/bank-aware writes, fill and readback verification.
 - Current-address reads and compare-before-write updates that skip equal chunks.
 - Optional blocking facade, endian-safe typed storage, range helpers and CRC32.
@@ -23,10 +18,6 @@ command processor. See the [library comparison](docs/library-comparison.md).
 - Shared read-only CLI dumps, text/string inspection, CRC32 and diagnostics.
 - Explicit scratch tests with backup/verified restoration, mixed stress and
   typed-data demos; optional WP control and application-owned bus recovery.
-
-24Cxx devices are EEPROM memory, not temperature sensors. This repository
-replaces the accidentally requested TMP1x2 implementation; its original commit
-and separately archived references remain available. See [provenance](docs/provenance.md).
 
 ## Integration
 
@@ -126,6 +117,8 @@ commands only for data you intend to change; the driver owns no persistence poli
 local reference files, revisions, URLs and checksums. Generic family layouts are
 not interchangeable across every manufacturer: verify the fitted part's page
 size, bank-bit placement, write time, address pins and supply limits.
+See [source provenance](docs/provenance.md) and the
+[sibling-library comparison](docs/library-comparison.md) for implementation history.
 
 [Validation results](docs/validation.md) distinguish host tests and firmware
 builds from [physical hardware validation](docs/hardware-validation.md).

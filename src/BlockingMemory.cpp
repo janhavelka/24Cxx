@@ -79,15 +79,16 @@ Status BlockingMemory::waitUntilReady(uint32_t timeoutMs) {
   const auto snapshot = _driver.settingsSnapshot();
   if (snapshot.transferActive) return busy(BusyDetail::TRANSFER_ACTIVE);
   if (snapshot.resultPending) return busy(BusyDetail::RESULT_PENDING);
+  if (!snapshot.writeCyclePending) return Status::Ok();
   const uint32_t started = now();
   uint32_t previous = started;
   unsigned stalled = 0;
   for (;;) {
     const uint32_t current = now();
     _driver.tick(current);
-    if (!_driver.settingsSnapshot().writeCyclePending) return Status::Ok();
     if (current - started >= timeoutMs || stalled >= MAX_STALLED_WAITS)
       return Status::Error(Err::TIMEOUT, "Write barrier wait timed out");
+    if (!_driver.settingsSnapshot().writeCyclePending) return Status::Ok();
     _wait(1, _waitUser);
     observeClock(previous, stalled);
   }
@@ -161,18 +162,16 @@ Status BlockingMemory::runAdmitted(Status admitted) {
   unsigned stalled = 0;
   for (;;) {
     const Status status = _driver.pollTransfer(id, now(), 1);
-    if (!status.inProgress()) {
-      const Status taken = _driver.takeTransferResult(id, _last);
-      return taken.ok() ? _last.status : taken;
-    }
+    if (!status.inProgress()) break;
     _wait(1, _waitUser);
     observeClock(previous, stalled);
     if (stalled >= MAX_STALLED_WAITS) {
       (void)_driver.timeoutTransfer(id);
-      const Status taken = _driver.takeTransferResult(id, _last);
-      return taken.ok() ? _last.status : taken;
+      break;
     }
   }
+  const Status taken = _driver.takeTransferResult(id, _last);
+  return taken.ok() ? _last.status : taken;
 }
 
 } // namespace EEPROM24Cxx

@@ -2,13 +2,13 @@
 #define HEX 16
 #include "Eeprom24CxxCli.h"
 #undef HEX
-#include "WireTransportHelpers.h"
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
 
 using namespace EEPROM24Cxx;
+using eeprom24cxx_cli::BusTransferKind;
 struct Fixture {
   std::string output;
   std::vector<uint8_t> addresses;
@@ -45,7 +45,7 @@ struct Fixture {
   static TransportResult write(uint8_t bus, const uint8_t* tx, size_t n, uint32_t timeout, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     const auto result = writeBody(bus, tx, n, timeout, user);
-    f.counters.record(result.ok()); ++f.counters.writeAttempts; return result;
+    f.counters.record(result.ok(), BusTransferKind::WRITE); return result;
   }
   static TransportResult writeBody(uint8_t bus, const uint8_t* tx, size_t n, uint32_t, void* user) {
     auto& f = *static_cast<Fixture*>(user);
@@ -69,7 +69,7 @@ struct Fixture {
                                uint8_t* out, size_t count, uint32_t timeout, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     const auto result = readBody(bus, tx, n, out, count, timeout, user);
-    f.counters.record(result.ok()); ++f.counters.readAttempts; return result;
+    f.counters.record(result.ok(), BusTransferKind::READ); return result;
   }
   static TransportResult readBody(uint8_t bus, const uint8_t* tx, size_t n,
                                uint8_t* out, size_t count, uint32_t, void* user) {
@@ -87,16 +87,15 @@ struct Fixture {
   static TransportResult probe(uint8_t bus, uint32_t, void* user) {
     auto& f = *static_cast<Fixture*>(user);
     ++f.transfers; ++f.probes; f.addresses.push_back(bus);
-    if (f.failProbe) { f.failProbe = false; f.counters.record(false); ++f.counters.probeAttempts; return TransportResult::Error(TransportCode::TIMEOUT); }
+    if (f.failProbe) { f.failProbe = false; f.counters.record(false, BusTransferKind::PROBE); return TransportResult::Error(TransportCode::TIMEOUT); }
     const bool acknowledged = bus >= 0x50 && bus <= 0x57 && f.ms >= f.busyUntil;
-    f.counters.record(acknowledged); ++f.counters.probeAttempts;
+    f.counters.record(acknowledged, BusTransferKind::PROBE);
     if (!acknowledged)
       return TransportResult::Error(TransportCode::NACK_ADDRESS);
     return TransportResult::Ok(0, 0);
   }
   static Status scan(uint8_t bus, void* user) {
-    const auto result = probe(bus, 50, user);
-    return result.ok() ? Status::Ok() : Status::Error(Err::I2C_NACK_ADDR, "probe NACK");
+    return eeprom24cxx_cli::probeStatus(probe(bus, 50, user), "test address probe");
   }
   Config config() {
     Config c;
@@ -131,37 +130,6 @@ struct Fixture {
 };
 #define CHECK(x) do { if (!(x)) { std::printf("[FAIL] CLI check line %d: %s\n", __LINE__, #x); return 1; } } while (false)
 int main() {
-  // ESP32 Wire code 2 is ambiguous for payload transactions. An address-only
-  // probe is the only context in which it proves an address NACK.
-  const auto ambiguous = eeprom24cxx_cli::wireResult(2, 9);
-  CHECK(ambiguous.code == TransportCode::NACK_UNSPECIFIED);
-  CHECK(ambiguous.writeCommit == WriteCommit::INDETERMINATE);
-  CHECK(ambiguous.completedTxBytes == 0);
-  CHECK(eeprom24cxx_cli::wireResult(2, 0, 0, true).code == TransportCode::NACK_ADDRESS);
-  CHECK(eeprom24cxx_cli::wireResult(0, 9).completedTxBytes == 9);
-  // Model precisely the relevant Wire mutex/buffer cleanup behavior, not an
-  // entire framework. Flushing must precede STOP; null storage uses no I2C.
-  struct BufferedWire {
-    size_t length = 3;
-    bool locked = true;
-    bool nullBuffer = false;
-    unsigned physical = 0;
-    unsigned payloadSent = 0;
-    void flush() { length = 0; }
-    uint8_t endTransmission(bool) {
-      if (nullBuffer) return 4; // Pinned Wire does not unlock this path.
-      ++physical; payloadSent += static_cast<unsigned>(length); locked = false; return 0;
-    }
-    size_t requestFrom(uint8_t, size_t, bool) {
-      if (!nullBuffer) ++physical;
-      locked = false; return 0;
-    }
-  } wire;
-  CHECK(eeprom24cxx_cli::discardWireTx(wire, 0x50, 3).physicalAttempt);
-  CHECK(!wire.locked && wire.physical == 1 && wire.payloadSent == 0);
-  wire = {}; wire.nullBuffer = true;
-  CHECK(!eeprom24cxx_cli::discardWireTx(wire, 0x50, 0).physicalAttempt);
-  CHECK(!wire.locked && wire.physical == 0 && wire.payloadSent == 0);
   Fixture f; eeprom24cxx_cli::Cli cli;
   cli.setup(f.platform(), f.config());
   CHECK(f.writes == 0 && f.probes == 1);
@@ -171,6 +139,13 @@ int main() {
   eeprom24cxx_cli::Cli failedStartupCli; failedStartupCli.setup(failedStartup.platform(), failedStartup.config());
   CHECK(failedStartup.writes == 0 && failedStartup.probes == 1);
   CHECK(failedStartup.output.find("DEGRADED") != std::string::npos);
+  CHECK(failedStartup.output.find("bound=yes consec=1 ok=0 fail=1") != std::string::npos);
+  // The scan adapter must preserve a timeout instead of counting it as an
+  // ordinary absent address. Scans bypass the driver's passive health.
+  failedStartup.output.clear(); failedStartup.failProbe = true;
+  failedStartupCli.processCommand("discover"); CHECK(failedStartup.run(failedStartupCli, 8));
+  CHECK(failedStartup.output.find("Scan complete: 7 ACK, 1 other transport errors.") != std::string::npos);
+  failedStartupCli.processCommand("health");
   CHECK(failedStartup.output.find("bound=yes consec=1 ok=0 fail=1") != std::string::npos);
   f.output.clear(); cli.processCommand("help");
   CHECK(f.output.find("\033[36m=== EEPROM24Cxx CLI Help ===\033[0m") != std::string::npos);

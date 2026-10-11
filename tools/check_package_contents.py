@@ -22,6 +22,7 @@ REQUIRED = {
     "examples/01_basic_bringup_cli/main.cpp", "examples/common/BoardConfig.h",
     "examples/common/Eeprom24CxxCli.h", "examples/common/Eeprom24CxxCli.cpp",
     "examples/common/WireTransportHelpers.h", "examples/common/IdfTransportHelpers.h",
+    "examples/common/TransportDiagnostics.h",
     "examples/common/BusRecovery.h", "examples/common/Esp32WriteProtect.h",
     "examples/common/Esp32BusRecovery.h", "examples/common/WriteProtect.h",
     "examples/esp_idf/basic/CMakeLists.txt", "examples/esp_idf/basic/main/CMakeLists.txt",

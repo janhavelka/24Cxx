@@ -30,9 +30,8 @@ struct App {
 constexpr eeprom24cxx_cli::IdfResultMapper resultMapper{
     ESP_OK, ESP_ERR_TIMEOUT, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_RESPONSE, ESP_ERR_NOT_FOUND};
 TransportResult finish(esp_err_t error, size_t tx, size_t rx, bool memoryWrite) {
-  app.stats.record(error == ESP_OK);
-  auto& count = memoryWrite ? app.stats.writeAttempts : app.stats.readAttempts;
-  if (count != UINT32_MAX) ++count;
+  app.stats.record(error == ESP_OK,
+      memoryWrite ? eeprom24cxx_cli::BusTransferKind::WRITE : eeprom24cxx_cli::BusTransferKind::READ);
   return resultMapper.transaction(error, tx, rx, memoryWrite);
 }
 TransportResult writeI2c(uint8_t address, const uint8_t* data, size_t length,
@@ -54,15 +53,11 @@ TransportResult probeI2c(uint8_t address, uint32_t timeoutMs, void*) {
   if (!app.ready || !app.bus || address < 0x08 || address > 0x77 || !timeoutMs || timeoutMs > INT_MAX)
     return TransportResult::Error(TransportCode::IO_ERROR, ESP_ERR_INVALID_ARG, WriteCommit::NOT_APPLICABLE);
   const esp_err_t result = i2c_master_probe(app.bus, address, static_cast<int>(timeoutMs));
-  app.stats.record(result == ESP_OK);
-  if (app.stats.probeAttempts != UINT32_MAX) ++app.stats.probeAttempts;
+  app.stats.record(result == ESP_OK, eeprom24cxx_cli::BusTransferKind::PROBE);
   return resultMapper.probe(result);
 }
 Status probeAddress(uint8_t address, void*) {
-  const auto result = probeI2c(address, board::I2C_TIMEOUT_MS, nullptr);
-  if (result.ok()) return Status::Ok();
-  return Status::Error(result.code == TransportCode::NACK_ADDRESS ? Err::I2C_NACK_ADDR :
-      result.code == TransportCode::TIMEOUT ? Err::I2C_TIMEOUT : Err::I2C_ERROR, "IDF address probe", result.detail);
+  return eeprom24cxx_cli::probeStatus(probeI2c(address, board::I2C_TIMEOUT_MS, nullptr), "IDF address probe");
 }
 uint32_t nowMs(void*) { return static_cast<uint32_t>(esp_timer_get_time() / 1000); }
 void output(void*, const char* format, va_list args) { std::vprintf(format, args); }

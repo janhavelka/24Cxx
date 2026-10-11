@@ -13,7 +13,7 @@ struct Model {
   uint8_t pointer = 0;
   uint32_t ms = 0, readyAt = 0;
   unsigned reads = 0, writes = 0, waits = 0, calls = 0, failAt = 0;
-  uint32_t callbackTime = 0;
+  uint32_t callbackTime = 0, waitOverrun = 0;
   bool wp = false, stalled = false, advanceClockSample = false;
   static uint32_t clock(void* user) {
     auto& model = *static_cast<Model*>(user);
@@ -23,7 +23,7 @@ struct Model {
   static void wait(uint32_t milliseconds, void* user) {
     auto& model = *static_cast<Model*>(user);
     ++model.waits;
-    if (!model.stalled) model.ms += milliseconds;
+    if (!model.stalled) model.ms += milliseconds + model.waitOverrun;
   }
   static e::TransportResult read(uint8_t, const uint8_t* tx, size_t txLength,
       uint8_t* rx, size_t length, uint32_t, void* user) {
@@ -136,8 +136,14 @@ int main() {
   // Owner work cannot be consumed by a convenience call that fails admission.
   CHECK(device.requestRead(77, 0, bytes, 1).ok());
   CHECK(field.readByte(0, bytes[1]).is(e::Err::BUSY));
+  const unsigned beforeOwnerWait = model.calls;
+  const auto activeWait = field.waitUntilReady();
+  CHECK(activeWait.is(e::Err::BUSY) && activeWait.detail == static_cast<int32_t>(e::BusyDetail::TRANSFER_ACTIVE));
   CHECK(device.transferSnapshot().requestId == 77);
   CHECK(device.cancelTransfer(77).ok()); e::TransferResult result;
+  const auto pendingWait = field.waitUntilReady();
+  CHECK(pendingWait.is(e::Err::BUSY) && pendingWait.detail == static_cast<int32_t>(e::BusyDetail::RESULT_PENDING));
+  CHECK(device.transferSnapshot().requestId == 77 && model.calls == beforeOwnerWait);
   CHECK(device.takeTransferResult(77, result).ok());
 
   // Local typed buffers are released even when a write times out mid-cycle.
@@ -157,6 +163,16 @@ int main() {
   CHECK(field.waitUntilReady().is(e::Err::TIMEOUT));
   model.stalled = false;
   CHECK(field.waitUntilReady().ok());
+
+  // A scheduler delay can exceed the requested wait and the caller's deadline.
+  CHECK(field.writeByte(101, 0x66, 1).is(e::Err::TIMEOUT));
+  const unsigned beforeOverrun = model.calls;
+  const auto timedOutRequest = field.lastResult().requestId;
+  model.waitOverrun = 10;
+  CHECK(field.waitUntilReady(2).is(e::Err::TIMEOUT));
+  CHECK(model.calls == beforeOverrun && !device.settingsSnapshot().writeCyclePending);
+  CHECK(field.lastResult().requestId == timedOutRequest && field.lastResult().status.is(e::Err::TIMEOUT));
+  CHECK(field.waitUntilReady(2).ok());
   std::puts("[PASS] field codecs, typed access, CRC, update, deadlines and retained write evidence");
   return 0;
 }

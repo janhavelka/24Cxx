@@ -54,14 +54,9 @@ struct WireStub {
   int available() const { return static_cast<int>(readable - readIndex); }
   int read() { return readIndex < readable ? static_cast<int>(0x20U + readIndex++) : -1; }
 };
-unsigned observations = 0;
-unsigned failures = 0;
-unsigned writeAttempts = 0, readAttempts = 0, probeAttempts = 0;
-void record(bool ok, eeprom24cxx_cli::WireTransferKind kind) {
-  ++observations; if (!ok) ++failures;
-  if (kind == eeprom24cxx_cli::WireTransferKind::WRITE) ++writeAttempts;
-  else if (kind == eeprom24cxx_cli::WireTransferKind::READ) ++readAttempts;
-  else ++probeAttempts;
+eeprom24cxx_cli::TransferStats counters;
+void record(bool ok, eeprom24cxx_cli::BusTransferKind kind) {
+  counters.record(ok, kind);
 }
 
 struct RecoveryPins {
@@ -115,7 +110,7 @@ int main() {
   uint8_t output[4]{};
   CHECK(transport.write(0x50, data, 4, 50).writeCommit == WriteCommit::NOT_COMMITTED);
   CHECK(!transport.probe(0x50, 50).ok());
-  CHECK(wire.physical == 0 && observations == 0 && !wire.locked);
+  CHECK(wire.physical == 0 && counters.attempts == 0 && !wire.locked);
   transport.setReady(true);
   CHECK(!transport.write(0x50, data, 33, 50).ok());
   CHECK(!transport.write(0x49, data, 4, 50).ok());
@@ -125,11 +120,11 @@ int main() {
   CHECK(!transport.read(0x50, data, 1, output, 4, 65536).ok());
   CHECK(!transport.probe(0x7F, 50).ok());
   CHECK(!transport.probe(0x50, std::numeric_limits<uint32_t>::max()).ok());
-  CHECK(wire.physical == 0 && observations == 0 && wire.timeout == 700);
+  CHECK(wire.physical == 0 && counters.attempts == 0 && wire.timeout == 700);
 
   auto result = transport.write(0x50, data, 4, 50);
   CHECK(result.ok() && result.completedTxBytes == 4);
-  CHECK(wire.physical == 1 && observations == 1 && failures == 0);
+  CHECK(wire.physical == 1 && counters.attempts == 1 && counters.failures == 0);
   CHECK(wire.observedTimeout == 50 && wire.timeout == 700 && !wire.locked);
   wire.error = 2;
   result = transport.write(0x50, data, 4, 25);
@@ -178,10 +173,10 @@ int main() {
   CHECK(wire.physical == 1 && wire.payloadSent == 0 && !wire.locked && wire.timeout == 700);
   CHECK(!transport.write(0x50, data, 4, 50).ok() && wire.physical == 1);
   wire = {}; wire.buffers = false; transport.setReady(true);
-  const auto beforeMissing = observations;
+  const auto beforeMissing = counters.attempts;
   result = transport.write(0x50, data, 4, 50);
   CHECK(result.writeCommit == WriteCommit::NOT_COMMITTED && !transport.ready());
-  CHECK(wire.physical == 0 && observations == beforeMissing && !wire.locked && wire.timeout == 700);
+  CHECK(wire.physical == 0 && counters.attempts == beforeMissing && !wire.locked && wire.timeout == 700);
   wire = {}; wire.capacity = 1; transport.setReady(true);
   result = transport.read(0x50, data, 2, output, 4, 50);
   CHECK(result.writeCommit == WriteCommit::NOT_APPLICABLE && !transport.ready());
@@ -216,8 +211,8 @@ int main() {
   CHECK(receives == 1 && combinedReads == 0);
   CHECK(eeprom24cxx_cli::idfReadTransaction(42, data, 1, output, 4, 15, receive, combined) == 0);
   CHECK(receives == 1 && combinedReads == 1);
-  CHECK(observations == writeAttempts + readAttempts + probeAttempts);
-  CHECK(writeAttempts == 3 && readAttempts == 5 && probeAttempts == 3);
+  CHECK(counters.attempts == counters.writeAttempts + counters.readAttempts + counters.probeAttempts);
+  CHECK(counters.writeAttempts == 3 && counters.readAttempts == 5 && counters.probeAttempts == 3);
 
   RecoveryPins pins;
   CHECK(eeprom24cxx_cli::recoverOpenDrainBus(pins, 100).ok());

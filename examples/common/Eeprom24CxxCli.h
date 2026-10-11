@@ -5,21 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 #include "EEPROM24Cxx/EEPROM24Cxx.h"
+#include "TransportDiagnostics.h"
 
 namespace eeprom24cxx_cli {
-struct TransferStats {
-  uint32_t attempts = 0;
-  uint32_t successes = 0;
-  uint32_t failures = 0;
-  uint32_t writeAttempts = 0;
-  uint32_t readAttempts = 0;
-  uint32_t probeAttempts = 0;
-  void record(bool ok) {
-    if (attempts != UINT32_MAX) ++attempts;
-    auto& count = ok ? successes : failures;
-    if (count != UINT32_MAX) ++count;
-  }
-};
 struct HeapStats {
   uint32_t freeBytes = 0;
   uint32_t minimumFreeBytes = 0;

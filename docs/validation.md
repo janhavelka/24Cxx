@@ -1,5 +1,42 @@
 # Validation results
 
+## Maintenance audit: 2026-10-11
+
+The audit simplified private driver state, shared staged read transactions and
+write-effect validation, blocking completion, CLI aliases and adapter diagnostics.
+The public core API and snapshot fields remain unchanged. On the host x64 GCC
+build, `sizeof(EEPROM24Cxx)` decreased from 816 to 704 bytes; this is a host ABI
+measurement, not an ESP32 RAM measurement.
+
+A new regression reproduced `BlockingMemory::waitUntilReady()` returning success
+after an application wait overshot the caller's deadline. The corrected helper
+returns TIMEOUT while allowing an elapsed physical barrier to retire, preserving
+the prior transfer result and issuing no I2C. Tests also cover active/retained
+foreign requests and stalled clocks. The CLI scan fixture now
+preserves timeout classification and checks that scans do not alter driver health.
+
+Checks run after the cleanup:
+
+- Strict GCC 15.1.0 C++17 CMake/Ninja build: all four CTest suites passed.
+- Managed PlatformIO native tests: all 27 cases passed; the framework-free
+  compile/link target also passed.
+- ESP32-S2 and S3: full Arduino 3.3.11 and native ESP-IDF 5.5.5 builds passed.
+- Release/framework contracts, generated-version checks and reference checksums
+  passed. The version script also passed standalone import/bump smoke checks.
+- Exported package: 42 files validated, including the shared transport diagnostics
+  header; the extracted CMake library compiled with strict warnings.
+- Independent review checked read staging, callback budgets, timing, passive
+  health, write-effect normalization and retained physical barriers.
+
+Build artifacts and PlatformIO logs are ignored under `build-maintenance/`.
+The old syntax-only IDF checker was removed because full native builds now cover
+that path. GitHub Actions supplies the Linux sanitizer and IDF version matrix
+for each pushed revision. No board was flashed; no electrical, WP, power-cut or
+FieldCore firmware integration result is claimed. The FieldCore adapter contract
+is documented in [integration](integration.md#fieldcore-node-integration).
+
+## Previous validation: 2026-09-26
+
 Validated on 2026-09-26 after the [sibling-library audit](audit-2026-09-26.md)
 and fixes. No board was flashed and no physical EEPROM/WP result is claimed.
 

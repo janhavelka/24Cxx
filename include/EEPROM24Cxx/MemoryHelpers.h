@@ -16,16 +16,18 @@ constexpr uint32_t pageStart(const Geometry& geometry, uint32_t address) {
   return geometry.pageSizeBytes ? address - address % geometry.pageSizeBytes : address;
 }
 constexpr size_t pageRemaining(const Geometry& geometry, uint32_t address) {
-  return !geometry.pageSizeBytes || address >= geometry.capacityBytes ? 0 :
-      (geometry.pageSizeBytes - address % geometry.pageSizeBytes < geometry.capacityBytes - address ?
-       geometry.pageSizeBytes - address % geometry.pageSizeBytes : geometry.capacityBytes - address);
+  if (!geometry.pageSizeBytes || address >= geometry.capacityBytes) return 0;
+  const uint32_t inPage = geometry.pageSizeBytes - address % geometry.pageSizeBytes;
+  const uint32_t inMemory = geometry.capacityBytes - address;
+  return inPage < inMemory ? inPage : inMemory;
 }
 constexpr size_t bankRemaining(const Geometry& geometry, uint32_t address) {
   if ((geometry.wordAddressBytes != 1 && geometry.wordAddressBytes != 2) ||
       address >= geometry.capacityBytes) return 0;
-  const uint32_t size = uint32_t{1} << (8U * geometry.wordAddressBytes);
-  return size - address % size < geometry.capacityBytes - address ?
-      size - address % size : geometry.capacityBytes - address;
+  const uint32_t bankSize = uint32_t{1} << (8U * geometry.wordAddressBytes);
+  const uint32_t inBank = bankSize - address % bankSize;
+  const uint32_t inMemory = geometry.capacityBytes - address;
+  return inBank < inMemory ? inBank : inMemory;
 }
 inline void encodeUint16Le(uint16_t value, uint8_t out[2]) {
   out[0] = static_cast<uint8_t>(value); out[1] = static_cast<uint8_t>(value >> 8U);

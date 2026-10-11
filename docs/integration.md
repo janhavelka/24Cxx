@@ -190,6 +190,43 @@ power-failure recovery belong to the application.
 Optional endian/CRC codecs and WP/recovery example hooks assist that policy
 without placing pins, allocation or platform delays in the core.
 
+## FieldCore-node integration
+
+The repository is named `24Cxx`; its package, namespace and public include
+directory are `EEPROM24Cxx`. Keep the dependency exact-pinned behind the firmware's
+I2C module. Use the cooperative driver from `I2cTask`; the example CLI and
+`BlockingMemory` facade are optional and need not enter the firmware adapter.
+
+For multiplexed heads, keep one driver and stable request buffers per physical
+EEPROM. Select and validate the route before each physical callback, including
+ACK probes and verification reads. Release the bus while waiting for programming
+to finish, and reselect the route before resuming. A driver's retained result
+and write-cycle barrier belong to that head even after cancellation or removal.
+Do not recreate the instance to accept new work sooner.
+
+Use explicit request IDs with `requestRead`, `requestVerifiedWrite`,
+`pollTransfer`, `timeoutTransfer` and `takeTransferResult` to reject stale owner
+actions. The owner deadline must include queue and route time; the driver's
+relative logical timeout starts on first poll. Clip each callback's timeout to
+the remaining owner budget, and retain write-effect evidence if a callback
+finishes late. Normal production reads and fixture programming remain separate
+application policies.
+
+Convert the owner's monotonic clock to wrapping `uint32_t` milliseconds for both
+`Config::nowMs` and `poll`. To use `settingsSnapshot().writeReadyAtMs` as a wait
+hint in a wider owner clock, first compute the bounded relative delay in the
+wrapping domain. Never zero-extend that absolute timestamp into a 64-bit deadline.
+An active ACK-polling write still needs its readiness callback after the wait.
+
+Choose the strapped EEPROM address from the complete board address map; a mux
+does not isolate a downstream device from an upstream device at the same address.
+Keep calibration layout, versioning, CRC coverage, commit/election rules and
+power-loss recovery in the firmware. The library provides byte operations and
+codecs, not an atomic record store. Physical timing, WP and power-cut behavior
+still require hardware validation.
+
+## Example adapters
+
 For the default Zetta chip, WP setup/hold is at least 1.2 us at up to 400 kHz
 or 0.6 us at 1 MHz. Applications changing WP must enforce these times around
 bus activity and keep WP stable during programming. Example GPIO policy waits

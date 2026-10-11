@@ -29,6 +29,19 @@ bool knownFailure(TransportCode code) {
     default: return false;
   }
 }
+WriteCommit writeEvidence(const TransportResult& r, size_t prefix, size_t length) {
+  const size_t expectedTx = prefix + length;
+  const bool validCounts = r.completedTxBytes <= expectedTx && r.completedRxBytes == 0;
+  if (!validCounts) return WriteCommit::INDETERMINATE;
+  if (r.code == TransportCode::OK && r.completedTxBytes == expectedTx)
+    return WriteCommit::ACCEPTED;
+  if (knownFailure(r.code) && r.writeCommit == WriteCommit::NOT_COMMITTED && r.completedTxBytes <= prefix)
+    return WriteCommit::NOT_COMMITTED;
+  if (r.completedTxBytes == expectedTx && r.writeCommit == WriteCommit::ACCEPTED &&
+      (r.code == TransportCode::TIMEOUT || r.code == TransportCode::BUS_ERROR || r.code == TransportCode::IO_ERROR))
+    return WriteCommit::ACCEPTED;
+  return WriteCommit::INDETERMINATE;
+}
 bool ownerRequestId(uint32_t id) { return id != 0 && id < AUTOMATIC_REQUEST_ID_FIRST; }
 Status invalidRequestId() { return Status::Error(Err::INVALID_PARAM, "Owner request ID must be in 1..0x7FFFFFFF"); }
 Status mismatchedRequest() {
@@ -228,7 +241,15 @@ Status EEPROM24Cxx::presence(bool tracked) {
 Status EEPROM24Cxx::probe() { return presence(false); }
 Status EEPROM24Cxx::recover() { return presence(true); }
 SettingsSnapshot EEPROM24Cxx::settingsSnapshot() const {
-  SettingsSnapshot s = _health;
+  SettingsSnapshot s;
+  s.state = _health.state;
+  s.consecutiveFailures = _health.consecutiveFailures;
+  s.totalSuccess = _health.totalSuccess;
+  s.totalFailures = _health.totalFailures;
+  s.writeBusyPolls = _health.writeBusyPolls;
+  s.lastOkMs = _health.lastOkMs;
+  s.lastErrorMs = _health.lastErrorMs;
+  s.lastError = _health.lastError;
   s.initialized = s.online = s.bound = _bound;
   s.variant = _config.variant;
   s.variantName = ::EEPROM24Cxx::variantName(_config.variant);
@@ -242,10 +263,8 @@ SettingsSnapshot EEPROM24Cxx::settingsSnapshot() const {
   s.writeCycleMs = _config.writeCycleMs ? _config.writeCycleMs : _geometry.writeCycleMs;
   s.maxTxBytes = _config.maxTxBytes;
   s.maxRxBytes = _config.maxRxBytes;
-  s.maxWriteDataBytes = std::min(cmd::MAX_WRITE_DATA_BYTES,
-      _config.maxTxBytes > _geometry.wordAddressBytes ? _config.maxTxBytes - _geometry.wordAddressBytes : 0);
-  s.maxWriteDataBytes = std::min(s.maxWriteDataBytes, static_cast<size_t>(_geometry.pageSizeBytes));
-  s.maxReadDataBytes = std::min(cmd::MAX_READ_CHUNK, _config.maxRxBytes);
+  s.maxWriteDataBytes = chunkLength(0, cmd::MAX_WRITE_DATA_BYTES, true);
+  s.maxReadDataBytes = chunkLength(0, cmd::MAX_READ_CHUNK, false);
   s.offlineThreshold = _config.offlineThreshold;
   s.hasNowMsHook = _config.nowMs != nullptr;
   s.hasAckPolling = _config.i2cProbe != nullptr;
@@ -296,18 +315,20 @@ Status EEPROM24Cxx::validateCurrentRead(uint8_t* data, size_t length) const {
     return Status::Error(Err::ADDRESS_OUT_OF_RANGE, "Current read cannot cross an address bank");
   return Status::Ok();
 }
-Status EEPROM24Cxx::readChunk(uint32_t address, uint8_t* data, size_t length, bool current) {
+Status EEPROM24Cxx::readTransaction(uint32_t address, size_t length, bool current, uint32_t& nowMs) {
   uint8_t busAddress = 0;
   const size_t prefix = encode(address, busAddress);
   const TransportResult result = _config.i2cWriteRead(busAddress, current ? nullptr : _tx,
       current ? 0 : prefix, _rx, length, _config.i2cTimeoutMs, _config.i2cUser);
   const Status s = transportStatus(result, current ? 0 : prefix, length);
-  _nowMs = afterCallback(_nowMs);
-  track(s, _nowMs);
-  if (s.ok()) {
-    observeRead(address, length);
-    std::memcpy(data, _rx, length);
-  } else invalidateCurrentAddress();
+  nowMs = afterCallback(nowMs);
+  track(s, nowMs);
+  if (s.ok()) observeRead(address, length);
+  return s;
+}
+Status EEPROM24Cxx::readChunk(uint32_t address, uint8_t* data, size_t length, bool current) {
+  const Status s = readTransaction(address, length, current, _nowMs);
+  if (s.ok()) std::memcpy(data, _rx, length);
   return s;
 }
 Status EEPROM24Cxx::readByte(uint32_t address, uint8_t& value) { return readOnce(address, &value, 1); }
@@ -540,16 +561,10 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
     const bool isWrite = writing(_result.kind) && !_verifyPhase;
     size_t n = chunkLength(address, _result.bytesRequested - offset, isWrite);
     if (isWrite && updating(_result.kind)) n = std::min(n, chunkLength(address, n, false));
-    uint8_t busAddress = 0;
-    const size_t prefix = encode(address, busAddress);
     if (isWrite && updating(_result.kind) && !_updateCompared) {
-      const TransportResult r = _config.i2cWriteRead(busAddress, _tx, prefix, _rx, n,
-                                                   _config.i2cTimeoutMs, _config.i2cUser);
+      const Status s = readTransaction(address, n, false, nowMs);
       ++calls;
       if (!_config.nowMs) callbackAllowance += _config.i2cTimeoutMs;
-      nowMs = afterCallback(nowMs);
-      const Status s = transportStatus(r, prefix, n);
-      track(s, nowMs);
       _result.comparisonAttempted = true;
       _result.compareStatus = s;
       if (!s.ok()) {
@@ -558,7 +573,6 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         finish(s, TransferState::FAILED);
         break;
       }
-      observeRead(address, n);
       _result.bytesCompared += n;
       if (std::memcmp(_rx, _sourceBuffer + offset, n) == 0) {
         _result.bytesSkipped += n;
@@ -567,6 +581,8 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
       continue;
     }
     if (isWrite) {
+      uint8_t busAddress = 0;
+      const size_t prefix = encode(address, busAddress);
       if (filling(_result.kind)) std::memset(_tx + prefix, _fillValue, n);
       else std::memcpy(_tx + prefix, _sourceBuffer + offset, n);
       invalidateCurrentAddress();
@@ -577,15 +593,7 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
       const Status s = transportStatus(r, prefix + n, 0);
       track(s, nowMs);
       _updateCompared = false;
-      WriteCommit commit = WriteCommit::INDETERMINATE;
-      const bool validCounts = r.completedTxBytes <= prefix + n && r.completedRxBytes == 0;
-      if (s.ok()) commit = WriteCommit::ACCEPTED;
-      else if (knownFailure(r.code) && validCounts &&
-               r.writeCommit == WriteCommit::NOT_COMMITTED && r.completedTxBytes <= prefix)
-        commit = WriteCommit::NOT_COMMITTED;
-      else if (validCounts && r.completedTxBytes == prefix + n && r.writeCommit == WriteCommit::ACCEPTED &&
-               (r.code == TransportCode::TIMEOUT || r.code == TransportCode::BUS_ERROR || r.code == TransportCode::IO_ERROR))
-        commit = WriteCommit::ACCEPTED;
+      const WriteCommit commit = writeEvidence(r, prefix, n);
       _result.lastChunkCommit = commit;
       _result.writeCommit = commit == WriteCommit::NOT_COMMITTED && _result.bytesAccepted > 0
           ? WriteCommit::ACCEPTED : commit;
@@ -619,13 +627,9 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         finish(Status::Error(Err::INVALID_PARAM, "Current pointer invalidated during transfer"), TransferState::FAILED);
         break;
       }
-      const TransportResult r = _config.i2cWriteRead(busAddress, current ? nullptr : _tx, current ? 0 : prefix, _rx, n,
-                                                   _config.i2cTimeoutMs, _config.i2cUser);
+      const Status s = readTransaction(address, n, current, nowMs);
       ++calls;
       if (!_config.nowMs) callbackAllowance += _config.i2cTimeoutMs;
-      nowMs = afterCallback(nowMs);
-      const Status s = transportStatus(r, current ? 0 : prefix, n);
-      track(s, nowMs);
       if (_verifyPhase) {
         _result.verificationAttempted = true;
         _result.verifyStatus = s;
@@ -636,7 +640,6 @@ Status EEPROM24Cxx::poll(uint32_t nowMs, size_t maxTransactions) {
         finish(s, TransferState::FAILED);
         break;
       }
-      observeRead(address, n);
       if (_verifyPhase) {
         for (size_t i = 0; i < n; ++i) {
           const uint8_t expected = filling(_result.kind) ? _fillValue : _sourceBuffer[offset + i];

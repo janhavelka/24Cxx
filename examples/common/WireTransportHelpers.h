@@ -5,10 +5,9 @@
 // its documented generic Wire error comments are not evidence of NACK phase.
 #include <cstddef>
 #include <cstdint>
-#include "EEPROM24Cxx/Types.h"
+#include "TransportDiagnostics.h"
 
 namespace eeprom24cxx_cli {
-enum class WireTransferKind : uint8_t { WRITE, READ, PROBE };
 inline EEPROM24Cxx::TransportResult wireResult(uint8_t code, size_t tx = 0,
                                                size_t rx = 0, bool addressOnly = false,
                                                bool memoryWriteMayCommit = true) {
@@ -47,7 +46,7 @@ template <class WireType>
 class WireTransport {
  public:
   static constexpr size_t MAX_BYTES = 32;
-  explicit WireTransport(WireType& wire, void (*record)(bool, WireTransferKind) = nullptr)
+  explicit WireTransport(WireType& wire, void (*record)(bool, BusTransferKind) = nullptr)
       : _wire(wire), _record(record) {}
   void setReady(bool ready) { _ready = ready; }
   bool ready() const { return _ready; }
@@ -65,7 +64,7 @@ class WireTransport {
       discard(address, buffered);
       return TransportResult::Error(TransportCode::IO_ERROR, -2, WriteCommit::NOT_COMMITTED);
     }
-    return finish(wireResult(_wire.endTransmission(true), length), WireTransferKind::WRITE);
+    return finish(wireResult(_wire.endTransmission(true), length), BusTransferKind::WRITE);
   }
 
   EEPROM24Cxx::TransportResult read(uint8_t address, const uint8_t* tx,
@@ -97,15 +96,15 @@ class WireTransport {
     if (received != rxLength) {
       while (_wire.available() > 0) (void)_wire.read();
       return finish(TransportResult::Error(TransportCode::IO_ERROR,
-          static_cast<int32_t>(received), WriteCommit::NOT_APPLICABLE, 0, received), WireTransferKind::READ);
+          static_cast<int32_t>(received), WriteCommit::NOT_APPLICABLE, 0, received), BusTransferKind::READ);
     }
     for (size_t index = 0; index < rxLength; ++index) {
       const int value = _wire.read();
       if (value < 0) return finish(TransportResult::Error(TransportCode::IO_ERROR,
-          static_cast<int32_t>(index), WriteCommit::NOT_APPLICABLE, 0, index), WireTransferKind::READ);
+          static_cast<int32_t>(index), WriteCommit::NOT_APPLICABLE, 0, index), BusTransferKind::READ);
       rx[index] = static_cast<uint8_t>(value);
     }
-    return finish(TransportResult::Ok(txLength, rxLength), WireTransferKind::READ);
+    return finish(TransportResult::Ok(txLength, rxLength), BusTransferKind::READ);
   }
 
   EEPROM24Cxx::TransportResult probe(uint8_t address, uint32_t timeoutMs) {
@@ -114,7 +113,7 @@ class WireTransport {
       return TransportResult::Error(TransportCode::IO_ERROR, -1, WriteCommit::NOT_APPLICABLE);
     Timeout timeout(_wire, static_cast<uint16_t>(timeoutMs));
     _wire.beginTransmission(address);
-    return finish(wireResult(_wire.endTransmission(true), 0, 0, true), WireTransferKind::PROBE);
+    return finish(wireResult(_wire.endTransmission(true), 0, 0, true), BusTransferKind::PROBE);
   }
 
  private:
@@ -132,17 +131,17 @@ class WireTransport {
   };
   static bool validTimeout(uint32_t value) { return value > 0 && value <= UINT16_MAX; }
   static bool memoryAddress(uint8_t value) { return value >= 0x50 && value <= 0x57; }
-  EEPROM24Cxx::TransportResult finish(EEPROM24Cxx::TransportResult result, WireTransferKind kind) {
+  EEPROM24Cxx::TransportResult finish(EEPROM24Cxx::TransportResult result, BusTransferKind kind) {
     if (_record) _record(result.ok(), kind);
     return result;
   }
   void discard(uint8_t address, size_t buffered) {
     const auto result = discardWireTx(_wire, address, buffered);
-    if (result.physicalAttempt) (void)finish(wireResult(result.code, 0, 0, true), WireTransferKind::PROBE);
+    if (result.physicalAttempt) (void)finish(wireResult(result.code, 0, 0, true), BusTransferKind::PROBE);
     _ready = false; // A violated buffer invariant needs explicit owner reinitialization.
   }
   WireType& _wire;
-  void (*_record)(bool, WireTransferKind);
+  void (*_record)(bool, BusTransferKind);
   bool _ready = false;
 };
 } // namespace eeprom24cxx_cli

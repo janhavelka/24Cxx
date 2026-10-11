@@ -2,7 +2,6 @@
 #include "EEPROM24Cxx/MemoryHelpers.h"
 
 #include <cerrno>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -10,6 +9,24 @@ namespace eeprom24cxx_cli {
 namespace {
 using namespace EEPROM24Cxx;
 bool equals(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
+const char* canonicalCommand(const char* command) {
+  static constexpr struct { const char* alias; const char* command; } aliases[] = {
+    {"?", "help"}, {"ver", "version"},
+    {"drv", "health"}, {"state", "health"}, {"online", "health"},
+    {"cfg", "settings"}, {"snapshot", "settings"}, {"timing", "geometry"},
+    {"status", "progress"}, {"job", "progress"}, {"result", "progress"},
+    {"cancel", "stop"}, {"unbind", "end"}, {"init", "begin"},
+    {"dump", "read"}, {"hexdump", "read"}, {"cur", "current"},
+    {"selfcheck", "selftest"}
+  };
+  for (const auto& alias : aliases) if (equals(command, alias.alias)) return alias.command;
+  return command;
+}
+bool writesMemory(TransferKind kind) {
+  return kind == TransferKind::WRITE || kind == TransferKind::FILL ||
+      kind == TransferKind::VERIFIED_WRITE || kind == TransferKind::VERIFIED_FILL ||
+      kind == TransferKind::UPDATE || kind == TransferKind::VERIFIED_UPDATE;
+}
 bool integer(const char* text, uint32_t low, uint32_t high, uint32_t& out) {
   if (!text || !*text || *text == '-' || *text == '+') return false;
   errno = 0;
@@ -411,9 +428,7 @@ void Cli::printProgress(const EEPROM24Cxx::TransferResult& result) {
         static_cast<unsigned long>(result.bytesVerified), EEPROM24Cxx::writeCommitName(result.writeCommit),
         EEPROM24Cxx::writeCommitName(result.lastChunkCommit), EEPROM24Cxx::errorName(result.status.code),
         static_cast<long>(result.status.detail), static_cast<unsigned long>(result.requestId));
-  if (result.kind == EEPROM24Cxx::TransferKind::WRITE || result.kind == EEPROM24Cxx::TransferKind::FILL ||
-      result.kind == EEPROM24Cxx::TransferKind::VERIFIED_WRITE || result.kind == EEPROM24Cxx::TransferKind::VERIFIED_FILL ||
-      result.kind == EEPROM24Cxx::TransferKind::UPDATE || result.kind == EEPROM24Cxx::TransferKind::VERIFIED_UPDATE)
+  if (writesMemory(result.kind))
     print("Write: status=%s detail=%ld\n", EEPROM24Cxx::errorName(result.writeStatus.code),
           static_cast<long>(result.writeStatus.detail));
   if (result.comparisonAttempted)
@@ -447,7 +462,7 @@ EEPROM24Cxx::Status Cli::startReadView(ReadView view, uint32_t address, uint32_t
   using namespace EEPROM24Cxx;
   if (!_device.isBound()) return Status::Error(Err::NOT_INITIALIZED, "bind driver first");
   const auto capacity = _device.settingsSnapshot().capacityBytes;
-  if (!length || address >= capacity || length > capacity - address)
+  if (!length || !memory::fitsRange(capacity, address, length))
     return Status::Error(Err::ADDRESS_OUT_OF_RANGE, "read range exceeds configured capacity");
   const auto result = _device.startRead(address, _data, length < sizeof(_data) ? length : sizeof(_data));
   if (!result.ok()) return result;
@@ -561,9 +576,7 @@ void Cli::stop() {
     const auto cancelled = _device.cancel();
     if (!cancelled.ok()) status(cancelled);
     complete();
-    if (kind == EEPROM24Cxx::TransferKind::WRITE || kind == EEPROM24Cxx::TransferKind::FILL ||
-        kind == EEPROM24Cxx::TransferKind::VERIFIED_WRITE || kind == EEPROM24Cxx::TransferKind::VERIFIED_FILL ||
-        kind == EEPROM24Cxx::TransferKind::UPDATE || kind == EEPROM24Cxx::TransferKind::VERIFIED_UPDATE)
+    if (writesMemory(kind))
       print("Scheduling stopped; already-issued EEPROM programming cannot be undone.\n");
   } else if (_readView != ReadView::NONE) {
     EEPROM24Cxx::TransferResult cancelled{};
@@ -620,9 +633,9 @@ void Cli::processCommand(const char* text) {
     if (*cursor) *cursor++ = '\0';
   }
   if (!count) return;
-  const char* command = args[0];
-  if ((equals(command, "help") || equals(command, "?")) && count == 1) { printHelp(); return; }
-  if ((equals(command, "version") || equals(command, "ver")) && count == 1) { printVersion(); return; }
+  const char* command = canonicalCommand(args[0]);
+  if (equals(command, "help") && count == 1) { printHelp(); return; }
+  if (equals(command, "version") && count == 1) { printVersion(); return; }
   if (equals(command, "color") || equals(command, "verbose")) {
     if (count > 2) { invalid(); return; }
     bool& setting = equals(command, "color") ? _color : _verbose;
@@ -633,10 +646,10 @@ void Cli::processCommand(const char* text) {
     }
     print("%s: %s\n", equals(command, "color") ? "Color" : "Verbose", setting ? "on" : "off"); return;
   }
-  if ((equals(command, "stop") || equals(command, "cancel")) && count == 1) { stop(); return; }
-  if ((equals(command, "drv") || equals(command, "health") || equals(command, "state") || equals(command, "online")) && count == 1) { printHealth(); return; }
-  if ((equals(command, "cfg") || equals(command, "settings") || equals(command, "snapshot")) && count == 1) { printSettings(); return; }
-  if ((equals(command, "geometry") || equals(command, "timing")) && count == 1) { printSettings(); printHealth(); return; }
+  if (equals(command, "stop") && count == 1) { stop(); return; }
+  if (equals(command, "health") && count == 1) { printHealth(); return; }
+  if (equals(command, "settings") && count == 1) { printSettings(); return; }
+  if (equals(command, "geometry") && count == 1) { printSettings(); printHealth(); return; }
   if (equals(command, "scratch") && count == 1) { printScratch(); return; }
   if (equals(command, "page")) {
     uint32_t address = 0;
@@ -694,7 +707,7 @@ void Cli::processCommand(const char* text) {
     if (equals(command, "model")) printModels();
     return;
   }
-  if ((equals(command, "progress") || equals(command, "status") || equals(command, "job") || equals(command, "result")) && count == 1) {
+  if (equals(command, "progress") && count == 1) {
     auto result = !_operation && (_hasResult || _readView != ReadView::NONE) ? _lastResult : _device.transferSnapshot();
     if (_readView != ReadView::NONE && _operation) {
       result.requestId = _readRequestId;
@@ -706,7 +719,7 @@ void Cli::processCommand(const char* text) {
     printProgress(result); if (_scratchStage != ScratchStage::NONE || _backupValid) printScratch(); return;
   }
   if (equals(command, "diag") && count == 1) { printVersion(); printSettings(); printHealth(); return; }
-  if ((equals(command, "end") || equals(command, "unbind")) && count == 1) {
+  if (equals(command, "end") && count == 1) {
     stop(); _device.end(); print("Driver released; bus unchanged.\n"); return;
   }
   if (_operation || _scan || _stress || _readView != ReadView::NONE || _scratchStage != ScratchStage::NONE || _interfaceWait) { status(Status::Error(Err::BUSY, "work active or bus recovery settling")); return; }
@@ -716,7 +729,7 @@ void Cli::processCommand(const char* text) {
     _scan = true; _scanNext = equals(command, "scan") ? 0x08 : 0x50;
     _scanLast = equals(command, "scan") ? 0x77 : 0x57; _scanFound = 0; _scanErrors = 0; return;
   }
-  if (equals(command, "init") || equals(command, "begin")) {
+  if (equals(command, "begin")) {
     uint32_t address = _config.i2cAddress;
     if (count > 2 || (count == 2 && !integer(args[1], 0x50, 0x57, address))) { invalid(); return; }
     if (_backupValid && address != _config.i2cAddress) { status(Status::Error(Err::BUSY, "restore backup before changing target")); return; }
@@ -813,7 +826,7 @@ void Cli::processCommand(const char* text) {
     print("Read-only %s: %lu rounds, %lu ms interval; stop cancels.\n", watch ? "watch" : "stress",
           static_cast<unsigned long>(rounds), static_cast<unsigned long>(interval)); return;
   }
-  if ((equals(command, "selftest") || equals(command, "selfcheck")) && count == 1) {
+  if (equals(command, "selftest") && count == 1) {
     const auto capacity = _device.settingsSnapshot().capacityBytes;
     const auto result = startReadView(ReadView::SELFTEST, 0, capacity);
     status(result);
@@ -830,7 +843,7 @@ void Cli::processCommand(const char* text) {
     if (result.ok()) { _operation = true; _hasResult = false; print("Queued read-only strings scan; one transaction maximum per tick.\n"); }
     return;
   }
-  if (equals(command, "current") || equals(command, "cur")) {
+  if (equals(command, "current")) {
     uint32_t n = 1;
     if (count > 2 || (count == 2 && !integer(args[1], 1, sizeof(_data), n))) { invalid(); return; }
     const auto result = _device.startCurrentRead(_data, n);
@@ -845,7 +858,7 @@ void Cli::processCommand(const char* text) {
     status(Status::Error(Err::INVALID_CONFIG, "CLI writes require a clock callback for the write-cycle barrier")); return;
   }
   Status result = Status::Error(Err::INVALID_PARAM, "invalid command/arguments; see help");
-  if (equals(command, "read") || equals(command, "dump") || equals(command, "hexdump") ||
+  if (equals(command, "read") ||
       equals(command, "readbyte") || equals(command, "text") || equals(command, "crc")) {
     const bool byte = equals(command, "readbyte");
     uint32_t n = byte ? 1 : equals(command, "text") ? 64 : 16;
