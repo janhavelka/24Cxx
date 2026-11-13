@@ -1,6 +1,8 @@
 version: "1.0.0"
 description: "Framework-neutral 24Cxx EEPROM driver including Zetta ZD24C02B."
 license: "MIT"
+url: "https://github.com/janhavelka/24Cxx"
+repository: "https://github.com/janhavelka/24Cxx.git"
 maintainers:
   - "Jan Havelka (THYMOS Solution s.r.o.) <info@thymos.cz>"
 dependencies:
