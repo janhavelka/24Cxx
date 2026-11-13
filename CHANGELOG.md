@@ -35,6 +35,7 @@
 
 ### Changed
 
+- Unified author, copyright and contact metadata: THYMOS Solution s.r.o., Jan Havelka, info@thymos.cz.
 - Store only passive health telemetry in each driver, keeping the public settings
   snapshot unchanged; share staged read handling and isolate write-effect validation.
 - Consolidate blocking result consumption, CLI command aliases, adapter counters

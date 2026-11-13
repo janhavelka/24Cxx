@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Thymos Solution s.r.o. SPDX-License-Identifier: MIT
+// Copyright (c) 2026 THYMOS Solution s.r.o., Jan Havelka. SPDX-License-Identifier: MIT
 #include "EEPROM24Cxx/EEPROM24Cxx.h"
 #include <algorithm>
 #include <cstring>

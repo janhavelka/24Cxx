@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Thymos Solution s.r.o. SPDX-License-Identifier: MIT
+// Copyright (c) 2026 THYMOS Solution s.r.o., Jan Havelka. SPDX-License-Identifier: MIT
 /// Status and transport conventions follow the sibling MB85RC library.
 #pragma once
 #include <cstdint>
