@@ -20,7 +20,7 @@ CLI review; the other inspected revisions are recorded in its table.
 | --- | --- |
 | TMP1x2 `parse_firmware` / preflight; INA228 `version_contract_errors` | Parse firmware identity and compare optional version, commit, target, framework and clean-tree requirements before device procedures |
 | BME280 `write_manifest` / `write_transcript_header`; TCA9548A `write_report`; SCD41 `environment_metadata` / `write_markdown` | Effective options, exact arguments, host commit/tree and source hashes, separate firmware declarations, readable Markdown plus authoritative JSON |
-| LDC1614 and LSM6DS3TR argument guards; MB85RC memory evidence | Read-only parser/range rejection matrix with unchanged state/counters; strict memory transfer and restoration evidence |
+| LDC161x and LSM6DS3TR argument guards; MB85RC memory evidence | Read-only parser/range rejection matrix with unchanged state/counters; strict memory transfer and restoration evidence |
 | SHT3x-main `append_progress`; RV3032-C7 `run_soak` | Finite-step progress/checkpoints and bounded periodic soak progress with slowest-command attribution |
 | MCP45HVX1 benchmark/soak timing; SSD1315 `build_metadata` / `verdicts_for` | Fixed per-command timing aggregates, explicit requested-duration completion and qualification requirements |
 | OPT4001, ADS1115, PCA9555 and INA3221 collectors | Retain structured results and unsupported telemetry handling; add optional heap thresholds and explicit skipped/manual scope |
@@ -50,7 +50,7 @@ collectors and console implementations. Applicable patterns and their limits:
 
 | Reference | Useful pattern | Applied here |
 | --- | --- | --- |
-| LDC1614 | Topic/per-command help with explicit command contracts | One help catalogue, canonical aliases, filtered topics, quickstart and group ownership/effect notes |
+| LDC161x | Topic/per-command help with explicit command contracts | One help catalogue, canonical aliases, filtered topics, quickstart and group ownership/effect notes |
 | TCA9548A and OPT4001 | Per-address scan errors and discovery independent of driver binding | EEPROM-range `detect`, explicit address probes, legal base/bank coverage, absent/error distinction; no fabricated chip identity |
 | INA3221 | Timed host soak with health/latency reporting | Saved-baseline reads and CRC, fixed aggregate metrics and bounded rotating logs; no duration-sized sample lists |
 | MB85RC | Memory stress and HIL operation coverage | Paired rotating read stress plus independently checked whole-array pre/post images; EEPROM soak excludes repeated programming/recovery |
@@ -85,7 +85,7 @@ sibling repositories were read-only references.
 | PCA9555 | 3.0.3 | `386fcd5` |
 | TCA9548A | 1.1.0 | `07acf36` |
 | RV3032-C7 | 3.1.0 | `4dd51d1` |
-| LDC1614 | 3.2.0 | `6ec9043` |
+| LDC161x | 3.2.0 | `6ec9043` |
 | MCP45HVX1 | 2.0.0 | `9573f5e` |
 | LSM6DS3TR | 2.1.0 | `9edafd3` |
 | SSD1315 | 4.0.3 | `9c4d2a6` |
@@ -130,7 +130,7 @@ not apply. The EEPROM core API remains independent of all CLI/HIL additions.
 | BME280 | Temperature/humidity/pressure | Separation of health from configuration/operation state |
 | INA228 | Power monitor | Bounded cooperative jobs and passive health |
 | INA3221 | Triple power monitor | Typed transport and configuration provenance |
-| LDC1614 | Inductance converter | Explicit device variants and owner scheduling |
+| LDC161x | Inductance converter | Explicit device variants and owner scheduling |
 | LSM6DS3TR | IMU | Fixed-memory operation state and framework boundary |
 | MCP45HVX1 | Digital potentiometer | Typed operations and bounded jobs |
 | PCA9555 | GPIO expander | Transport result versus physical write effect |
