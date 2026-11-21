@@ -73,3 +73,9 @@
   mocks, syntax checks and CI configuration are not physical hardware evidence.
 - Vendor reference artifacts retain original licenses. Preserve source URLs,
   revisions and SHA-256 checksums. Reference source is excluded from builds.
+
+## Commit and pull request attribution
+
+Credit human contributors for their work. Omit AI co-author trailers, AI-generated
+signatures or sign-offs, generated-by footers, session links, and other AI
+attribution from commit messages and pull request titles and descriptions.
