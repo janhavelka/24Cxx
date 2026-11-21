@@ -142,7 +142,7 @@ not apply. The EEPROM core API remains independent of all CLI/HIL additions.
 AT21CS11 is also an EEPROM library, but uses a timed single-wire protocol. Its
 write-cycle and irreversible-effect documentation is useful comparison material;
 its bit timing, discovery, security and ROM commands do not apply to 24Cxx.
-ADS1261_ESP32/MAX31865 use SPI; AsyncSD uses SD; the other standalone libraries
+ADS1261/MAX31865 use SPI; AsyncSD uses SD; the other standalone libraries
 use serial, LED or time services. They are not I2C EEPROM implementations.
 
 ## Chosen contracts
